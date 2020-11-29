@@ -1,0 +1,19 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: Passport
+Upstream-Contact: hello@foundationdevices.com
+Source: https://git.example.com/FoundationDevices/passport
+
+Files: ACKNOWLEDGEMENTS *.md docs/* drivers/* examples/* extmod/* lib/* py/* tests/* tools/* .gitattributes .gitignore .gitmodules .travis.yml logo/* mpy-cross/*
+Copyright: Copyright (c) 2016-2020 Damien P. George (http://micropython.org/)
+License: MIT
+
+Files: ports/bare-arm/* ports/cc3200/* ports/esp32/* ports/esp8266/* ports/javascript/* ports/minimal/* ports/nrf/* ports/pic16bit/* ports/powerpc/* ports/qemu/* ports/qemu-arm/* ports/samd/* ports/teensy/* ports/unix/* ports/windows/* ports/zephyr/*
+Copyright: Copyright (c) 2016-2020 Damien P. George (http://micropython.org/)
+License: MIT
+
+Files: ports/stm32/*
+Copyright: Copyright (c) 2016-2020 Damien P. George (http://micropython.org/)
+License: MIT
+Copyright: 020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+License: GPL-3.0-or-later
+

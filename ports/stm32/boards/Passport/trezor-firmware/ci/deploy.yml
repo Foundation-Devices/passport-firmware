@@ -1,0 +1,218 @@
+image: registry.gitlab.com/satoshilabs/trezor/trezor-firmware/trezor-firmware-env.nix
+
+# Releases
+
+release core fw regular deploy:
+  stage: deploy
+  variables:
+    DEPLOY_DIRECTORY: "releases/firmwares"
+  before_script: []  # no pipenv
+  needs: ["core fw regular build"]
+  script:
+    - export NAME="trezor-fw-regular-$CORE_VERSION-$CI_COMMIT_SHORT_SHA.bin"
+    - echo "Deploying to ${DEPLOY_DIRECTORY}/$NAME"
+    - mkdir -p "${DEPLOY_BASE_DIR}/${DEPLOY_DIRECTORY}"
+    - rsync --delete -va $NAME "${DEPLOY_BASE_DIR}/${DEPLOY_DIRECTORY}/$NAME"
+  only:
+    - /^core\//
+  except:
+    - branches  # run for tags only
+  tags:
+    - deploy
+
+release core fw btconly deploy:
+  stage: deploy
+  variables:
+    DEPLOY_DIRECTORY: "releases/firmwares"
+  before_script: []  # no pipenv
+  needs: ["core fw btconly build"]
+  script:
+    - export NAME="trezor-fw-btconly-$CORE_VERSION-$CI_COMMIT_SHORT_SHA.bin"
+    - echo "Deploying to ${DEPLOY_DIRECTORY}/$NAME"
+    - mkdir -p "${DEPLOY_BASE_DIR}/${DEPLOY_DIRECTORY}"
+    - rsync --delete -va $NAME "${DEPLOY_BASE_DIR}/${DEPLOY_DIRECTORY}/$NAME"
+  only:
+    - /^core\//
+  except:
+    - branches  # run for tags only
+  tags:
+    - deploy
+
+release core fw regular debug deploy:
+  stage: deploy
+  variables:
+    DEPLOY_DIRECTORY: "releases/firmwares"
+  before_script: []  # no pipenv
+  needs: ["core fw regular debug build"]
+  script:
+    - export NAME="trezor-fw-regular-debug-$CORE_VERSION-$CI_COMMIT_SHORT_SHA.bin"
+    - echo "Deploying to ${DEPLOY_DIRECTORY}/$NAME"
+    - mkdir -p "${DEPLOY_BASE_DIR}/${DEPLOY_DIRECTORY}"
+    - rsync --delete -va $NAME "${DEPLOY_BASE_DIR}/${DEPLOY_DIRECTORY}/$NAME"
+  only:
+    - /^core\//
+  except:
+    - branches  # run for tags only
+  tags:
+    - deploy
+
+release core fw btconly debug deploy:
+  stage: deploy
+  variables:
+    DEPLOY_DIRECTORY: "releases/firmwares"
+  before_script: []  # no pipenv
+  needs: ["core fw btconly debug build"]
+  script:
+    - export NAME="trezor-fw-btconly-debug-$CORE_VERSION-$CI_COMMIT_SHORT_SHA.bin"
+    - echo "Deploying to ${DEPLOY_DIRECTORY}/$NAME"
+    - mkdir -p "${DEPLOY_BASE_DIR}/${DEPLOY_DIRECTORY}"
+    - rsync --delete -va $NAME "${DEPLOY_BASE_DIR}/${DEPLOY_DIRECTORY}/$NAME"
+  only:
+    - /^core\//
+  except:
+    - branches  # run for tags only
+  tags:
+    - deploy
+
+# Legacy
+
+release legacy fw regular deploy:
+  stage: deploy
+  variables:
+    DEPLOY_DIRECTORY: "releases/firmwares"
+  before_script: []  # no pipenv
+  needs: ["legacy fw regular build"]
+  script:
+    - export NAME="trezor-fw-regular-$LEGACY_VERSION-$CI_COMMIT_SHORT_SHA.bin"
+    - echo "Deploying to ${DEPLOY_DIRECTORY}/$NAME"
+    - mkdir -p "${DEPLOY_BASE_DIR}/${DEPLOY_DIRECTORY}"
+    - rsync --delete -va $NAME "${DEPLOY_BASE_DIR}/${DEPLOY_DIRECTORY}/$NAME"
+  only:
+    - /^legacy\//
+  except:
+    - branches  # run for tags only
+  tags:
+    - deploy
+
+release legacy fw btconly deploy:
+  stage: deploy
+  variables:
+    DEPLOY_DIRECTORY: "releases/firmwares"
+  before_script: []  # no pipenv
+  needs: ["legacy fw btconly build"]
+  script:
+    - export NAME="trezor-fw-btconly-$LEGACY_VERSION-$CI_COMMIT_SHORT_SHA.bin"
+    - echo "Deploying to ${DEPLOY_DIRECTORY}/$NAME"
+    - mkdir -p "${DEPLOY_BASE_DIR}/${DEPLOY_DIRECTORY}"
+    - rsync --delete -va $NAME "${DEPLOY_BASE_DIR}/${DEPLOY_DIRECTORY}/$NAME"
+  only:
+    - /^legacy\//
+  except:
+    - branches  # run for tags only
+  tags:
+    - deploy
+
+release legacy fw regular debug deploy:
+  stage: deploy
+  variables:
+    DEPLOY_DIRECTORY: "releases/firmwares"
+  before_script: []  # no pipenv
+  needs: ["legacy fw regular debug build"]
+  script:
+    - export NAME="trezor-fw-regular-debug-$LEGACY_VERSION-$CI_COMMIT_SHORT_SHA.bin"
+    - echo "Deploying to ${DEPLOY_DIRECTORY}/$NAME"
+    - mkdir -p "${DEPLOY_BASE_DIR}/${DEPLOY_DIRECTORY}"
+    - rsync --delete -va $NAME "${DEPLOY_BASE_DIR}/${DEPLOY_DIRECTORY}/$NAME"
+  only:
+    - /^legacy\//
+  except:
+    - branches  # run for tags only
+  tags:
+    - deploy
+
+release legacy fw btconly debug deploy:
+  stage: deploy
+  variables:
+    DEPLOY_DIRECTORY: "releases/firmwares"
+  before_script: []  # no pipenv
+  needs: ["legacy fw btconly debug build"]
+  script:
+    - export NAME="trezor-fw-btconly-debug-$LEGACY_VERSION-$CI_COMMIT_SHORT_SHA.bin"
+    - echo "Deploying to ${DEPLOY_DIRECTORY}/$NAME"
+    - mkdir -p "${DEPLOY_BASE_DIR}/${DEPLOY_DIRECTORY}"
+    - rsync --delete -va $NAME "${DEPLOY_BASE_DIR}/${DEPLOY_DIRECTORY}/$NAME"
+  only:
+    - /^legacy\//
+  except:
+    - branches  # run for tags only
+  tags:
+    - deploy
+
+# Emulators, used also for upgrade tests
+
+release core unix debug deploy:
+  stage: deploy
+  variables:
+    DEPLOY_PATH: "${DEPLOY_BASE_DIR}/releases/emulators"
+  before_script: []  # no pipenv
+  needs: ["core unix frozen debug build"]
+  script:
+    - DEST="$DEPLOY_PATH/trezor-emu-core-$CORE_VERSION-$CI_COMMIT_SHORT_SHA"
+    - echo "Deploying to $DEST"
+    - nix-shell -p patchelf --run "patchelf --set-interpreter /lib64/ld-linux-x86-64.so.2 core/build/unix/trezor-emu-core"
+    - rsync --delete -va core/build/unix/trezor-emu-core "$DEST"
+  only:
+    - /^core\//
+  except:
+    - branches  # run for tags only
+  tags:
+    - deploy
+
+release legacy unix debug deploy:
+  stage: deploy
+  variables:
+    DEPLOY_PATH: "${DEPLOY_BASE_DIR}/releases/emulators"
+  before_script: []  # no pipenv
+  needs: ["legacy emu regular debug build"]
+  script:
+    - DEST="$DEPLOY_PATH/trezor-emu-legacy-$LEGACY_VERSION-$CI_COMMIT_SHORT_SHA"
+    - echo "Deploying to $DEST"
+    - nix-shell -p patchelf --run "patchelf --set-interpreter /lib64/ld-linux-x86-64.so.2 legacy/firmware/trezor.elf"
+    - rsync --delete -va legacy/firmware/trezor.elf "$DEST"
+  only:
+    - /^legacy\//
+  except:
+    - branches  # run for tags only
+  tags:
+    - deploy
+
+release core macos debug deploy:
+  stage: deploy
+  variables:
+    DEPLOY_PATH: "${DEPLOY_BASE_DIR}/releases/emulators/macos"
+  before_script: []  # no pipenv
+  needs: ["core unix frozen debug build"]
+  script:
+    - DEST="$DEPLOY_PATH/trezor-emu-macos-$CORE_VERSION-$CI_COMMIT_SHORT_SHA"
+    - echo "Deploying to $DEST"
+    - rsync --delete -va core/build/unix/trezor-emu-core "$DEST"
+  only:
+    - /^core\//
+  except:
+    - branches  # run for tags only
+  tags:
+    - deploy
+
+# UI tests
+
+ui tests core fixtures deploy:
+  stage: deploy
+  variables:
+    DEPLOY_PATH: "${DEPLOY_BASE_DIR}/ui_tests/"
+  before_script: []  # no pipenv
+  needs: ["core device ui test"]
+  script:
+    - echo "Deploying to $DEPLOY_PATH"
+    - rsync --delete -va ci/ui_test_records/* "$DEPLOY_PATH"
+  tags:
+    - deploy
