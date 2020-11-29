@@ -90,7 +90,7 @@ You can also dump the contents of the firmware header with the following command
 #### Building the Bootloader
 To build the bootloader do the following:
 
-    cd ports/stm32/boards/Passport/finalbootloader folder
+    cd ports/stm32/boards/Passport/bootloader folder
     make
 
 ### OpenOCD Server Window
@@ -124,10 +124,10 @@ We use `telnet` to connect to the OpenOCD Server.  Open a third shell and run th
 
 From here can connect over JTAG and run a range of commands (see the help for OpenOCD for details):
 
-Whenever you change any code in the `finalbootlaoder` folder or in the `common` folder, you will need to rebuild the bootloader (see above), and then flash it to the device with the following sequence in OpenOCD:
+Whenever you change any code in the `bootlaoder` folder or in the `common` folder, you will need to rebuild the bootloader (see above), and then flash it to the device with the following sequence in OpenOCD:
 
     reset halt
-    flash write_image erase boards/Passport/finalbootloader/bootloader.bin 0x8000000
+    flash write_image erase boards/Passport/bootloader/bootloader.bin 0x8000000
     reset
 
 The following command sequence is one you will run repeatedly (i.e., after each build):
