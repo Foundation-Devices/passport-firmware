@@ -6,17 +6,17 @@ This document describes how to develop for Passport.
 
 ### Get the Source Code
 The instructions below assume you are installing into your home folder at `~/`.  You can choose
-to install to a different folder, and just update the `cd` commands appropriately.
+to install to a different folder, and just update command paths appropriately.
 
     cd ~/
-    git clone git@github.com:Foundation-Devices/passport-ng.git
+    git clone git@github.com:Foundation-Devices/passport.git
 
 ### Install Dependencies
 Several tools are required for building and debugging Passport.
 
 #### Cross-Compiler Toolchain
     sudo apt install gcc-arm-none-eabi
-    cd ~/passport-ng
+    cd ~/passport
     make -C mpy-cross
 
 #### Autotools and USB
@@ -48,7 +48,7 @@ You will need several shell windows or tabs open to interact with the various to
 ### Build Window
 
 #### Building the Main Firmare
-In one shell, make sure that you `cd` to the root `stm32` source folder, e.g., `cd ~/passport-ng/ports/stm32`:
+In one shell, make sure that you `cd` to the root `stm32` source folder, e.g., `cd ~/passport/ports/stm32`:
 
     make BOARD=Passport
     
@@ -79,7 +79,7 @@ First, you need to build the `cosign` tool and copy it somewhere in your `PATH`:
 Next you want to sign the firmware twice.  The `cosign` tool appends `-signed` to the end of the main filename each time it signs.
 Assuming you are still in the `ports/stm32` folder run the following:
 
-    # TODO: Update once actual signing is implemented
+    # TODO: Update once final signing flow is in place
     cosign -f build-Passport/firmware.bin -k 1 -v 0.9 
     cosign -f build-Passport/firmware-signed.bin -k 2
 
@@ -158,6 +158,3 @@ This gives us an interactive shell where we can do things like inspect the flash
 import my_math
 my_math.add(1, 2)
 ```
-
-
-
