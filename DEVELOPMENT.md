@@ -5,7 +5,7 @@ This document describes how to develop for Passport.
 ## Installation
 
 ### Get the Source Code
-The instructions below assume you are installing into your home folder at `~/`.  You can choose
+The instructions below assume you are installing into your home folder at `~/passport`.  You can choose
 to install to a different folder, and just update command paths appropriately.
 
     cd ~/
@@ -76,10 +76,10 @@ First, you need to build the `cosign` tool and copy it somewhere in your `PATH`:
     cp x86/release/cosign ~/.local/bin   # You can run `echo $PATH` to see the list of possible places you can put this file
 
 
-Next you want to sign the firmware twice.  The `cosign` tool appends `-signed` to the end of the main filename each time it signs.
+Next you need to sign the firmware twice.  The `cosign` tool appends `-signed` to the end of the main filename each time it signs.
 Assuming you are still in the `ports/stm32` folder run the following:
 
-    # TODO: Update once final signing flow is in place
+    # TODO: Update command arguments once final signing flow is in place
     cosign -f build-Passport/firmware.bin -k 1 -v 0.9 
     cosign -f build-Passport/firmware-signed.bin -k 2
 
@@ -139,8 +139,7 @@ The following command sequence is one you will run repeatedly (i.e., after each 
 These commands do the following:
 
 - Stop execution of code on the MCU
-- Write part 0 of the firmware to flash at address 0x8000000
-- Write part 1 of the firmware to flash at address 0x8040000
+- Write the firmware to flash at address 0x8000000
 - Reset the MCU and start executing code at address 0x8000000
 
 ### RShell Window
@@ -158,3 +157,28 @@ This gives us an interactive shell where we can do things like inspect the flash
 import my_math
 my_math.add(1, 2)
 ```
+
+### Debugging with DDD
+To debug the firmware, open a new shell window or tab and run the following command from the `passport/ports/stm32` folder:
+
+    ddd --debugger gdb-multiarch build-Passport/firmware.elf &
+
+To debug the bootloader, open a new shell window or tab and run the following command from the `passport/ports/stm32/boards/Passport/bootloader` folder:
+
+    ddd --debugger gdb-multiarch bootloader.elf &
+
+Go to the `telnet` session with OpenOCD and run the following to prepare to connect DDD:
+
+    reset halt
+
+Next, connect DDD to the OpenOCD GDB server with:
+
+    target remote localhost:3333
+
+From here you can run normal GDB commands like:
+
+    b stm32_main          # Stop at stm32_main, which is MicroPython's entry point
+    list main.c           # Show the main.c file at line 1
+    c                     # continue
+    n                     # step over
+    s                     # step into
