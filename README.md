@@ -25,15 +25,15 @@ The source is, broadly speaking, split into two parts:
 
 Code specific to Passport is included in the following folders:
 
--   `ports/stm32` Low-level platform configuration for MicroPython.
--   `ports/stm32/boards/Passport` C files that implement some device drivers and code that was 5-10 times faster in C than in Python.
--   `bootloader` C-based code that handles secure element initialization, firmware validation and updates, and system startup
--   `common` Common C code shared between the bootloader and the main firmware.
--   `graphics` Images and a build script that converts the images to Python data for easier loading.
--   `modules` The MicroPython code that implements the user interface and menu actions.
--   `trezor-firmware` Contains a copy of the Trezor source code in order to use Trezor's crypto library. We will likely make this into a git submodule soon to make it even easier to keep the library up to date.
--   `tools/cosign` - A C-based utility that provides the code signing that keeps Passport's firmware safe.
--   `utils` Some CLI utilities used to generate BIP39 data for seed word lookup.
+-   [`ports/stm32`](ports/stm32) Low-level platform configuration for MicroPython.
+-   [`ports/stm32/boards/Passport`](ports/stm32/boards/Passport) C files that implement some device drivers and code that was 5-10 times faster in C than in Python.
+-   [`bootloader`](ports/stm32/boards/Passport/bootloader) C-based code that handles secure element initialization, firmware validation and updates, and system startup
+-   [`common`](ports/stm32/boards/Passport/common) Common C code shared between the bootloader and the main firmware.
+-   [`graphics`](ports/stm32/boards/Passport/graphics) Images and a build script that converts the images to Python data for easier loading.
+-   [`modules`](ports/stm32/boards/Passport/modules) The MicroPython code that implements the user interface and menu actions.
+-   [`trezor-firmware`](ports/stm32/boards/Passport/trezor-firmware) Contains a copy of the Trezor source code in order to use Trezor's crypto library. We will likely make this into a git submodule soon to make it even easier to keep the library up to date.
+-   [`tools/cosign`](ports/stm32/boards/Passport/tools/cosign) - A C-based utility that provides the code signing that keeps Passport's firmware safe.
+-   [`utils`](ports/stm32/boards/Passport/utils) Some CLI utilities used to generate BIP39 data for seed word lookup.
 
 ## Development
 
