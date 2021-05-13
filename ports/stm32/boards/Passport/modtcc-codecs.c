@@ -1,7 +1,7 @@
-// SPDX-FileCopyrightText: 2020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+// SPDX-FileCopyrightText: 2020 Foundation Devices, Inc. <hello@foundationdevices.com>
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// SPDX-FileCopyrightText: 2018 Coinkite, Inc.  <coldcardwallet.com>
+// SPDX-FileCopyrightText: 2018 Coinkite, Inc. <coldcardwallet.com>
 // SPDX-License-Identifier: GPL-3.0-only
 //
 /*
@@ -9,8 +9,8 @@
  *
  * Licensed under GNU License
  * see LICENSE file for details
- * 
- * 
+ *
+ *
  * Various encodes/decoders/serializers: base58, base32, bech32, etc.
  *
  */
@@ -62,7 +62,7 @@ STATIC mp_obj_t modtcc_b58_encode(mp_obj_t data)
     }
 
     vstr.len = rl-1;        // strip NUL
-    
+
     return mp_obj_new_str_from_vstr(&mp_type_str, &vstr);
 }
 STATIC MP_DEFINE_CONST_FUN_OBJ_1(modtcc_b58_encode_obj, modtcc_b58_encode);
@@ -73,13 +73,13 @@ STATIC mp_obj_t modtcc_b58_decode(mp_obj_t enc)
 
     uint8_t tmp[128];
 
-    int rl = base58_decode_check(s, HASHER_SHA2, tmp, sizeof(tmp));
+    int rl = base58_decode_check(s, HASHER_SHA2D, tmp, sizeof(tmp));
 
     if(rl <= 0) {
         // transcription error from user is very likely
         mp_raise_ValueError("corrupt base58");
     }
-    
+
     return mp_obj_new_bytes(tmp, rl);
 }
 STATIC MP_DEFINE_CONST_FUN_OBJ_1(modtcc_b58_decode_obj, modtcc_b58_decode);
@@ -107,7 +107,7 @@ STATIC mp_obj_t modtcc_b32_encode(mp_obj_t data)
     }
 
     vstr.len = last - vstr.buf;        // strips NUL
-    
+
     return mp_obj_new_str_from_vstr(&mp_type_str, &vstr);
 }
 STATIC MP_DEFINE_CONST_FUN_OBJ_1(modtcc_b32_encode_obj, modtcc_b32_encode);
@@ -124,13 +124,13 @@ STATIC mp_obj_t modtcc_b32_decode(mp_obj_t enc)
         // transcription error from user is very likely
         mp_raise_ValueError("corrupt base32");
     }
-    
+
     return mp_obj_new_bytes(tmp, last-tmp);
 }
 STATIC MP_DEFINE_CONST_FUN_OBJ_1(modtcc_b32_decode_obj, modtcc_b32_decode);
 
 //
-// 
+//
 // Bech32 aka. Segwit addresses, but hopefylly not specific to segwit addresses only.
 //
 //
@@ -210,6 +210,7 @@ STATIC mp_obj_t modtcc_bech32_encode(mp_obj_t hrp_obj, mp_obj_t segwit_version_o
             const uint8_t *data,
             size_t data_len);
      */
+    // printf("hrp=%s, data_len=%d\n", hrp, data_len);
     int rv = bech32_encode(vstr.buf, hrp, data, data_len);
 
     if(rv != 1) {
@@ -217,7 +218,7 @@ STATIC mp_obj_t modtcc_bech32_encode(mp_obj_t hrp_obj, mp_obj_t segwit_version_o
     }
 
     vstr.len = strlen(vstr.buf);
-    
+
     return mp_obj_new_str_from_vstr(&mp_type_str, &vstr);
 }
 STATIC MP_DEFINE_CONST_FUN_OBJ_3(modtcc_bech32_encode_obj, modtcc_bech32_encode);
@@ -262,14 +263,7 @@ int bech32_decode(
     }
 
     // re-pack 5-bit data into 8-bit bytes (after version)
-#ifndef __APPLE__
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wvla-larger-than="
-#endif
     uint8_t packed[tmp_len];
-#ifndef __APPLE__
-#pragma GCC diagnostic pop
-#endif
     size_t packed_len = 0;
 
     int cv_ok = sw_convert_bits(packed, &packed_len, 8, tmp + 1, tmp_len - 1, 5, false);
@@ -317,7 +311,7 @@ const mp_obj_module_t mp_module_tcc = {
     .base = { &mp_type_module },
     .globals = (mp_obj_dict_t*)&mp_module_tcc_globals,
 };
- 
+
 MP_REGISTER_MODULE(MP_QSTR_tcc, mp_module_tcc, 1);
 
 // EOF

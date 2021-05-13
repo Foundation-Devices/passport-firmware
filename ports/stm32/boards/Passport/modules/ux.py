@@ -1,7 +1,7 @@
-# SPDX-FileCopyrightText: 2020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+# SPDX-FileCopyrightText: 2020 Foundation Devices, Inc. <hello@foundationdevices.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# SPDX-FileCopyrightText: 2018 Coinkite, Inc.  <coldcardwallet.com>
+# SPDX-FileCopyrightText: 2018 Coinkite, Inc. <coldcardwallet.com>
 # SPDX-License-Identifier: GPL-3.0-only
 #
 # (c) Copyright 2018 by Coinkite Inc. This file is part of Coldcard <coldcardwallet.com>
@@ -11,20 +11,18 @@
 #
 # NOTE: do not import from main at top.
 
-from ur.ur_encoder import UREncoder
-from ur.cbor_lite import CBOREncoder
-from ur.ur import UR
-from ur1.encode_ur import encode_ur
 import gc
 
 import utime
-from display import Display, FontSmall
+from display import Display, FontSmall, FontTiny
 from uasyncio import sleep_ms
 from uasyncio.queues import QueueEmpty
-# from bip39_utils import get_words_matching_prefix
+from common import system, dis
+from data_codecs.qr_type import QRType
+from data_codecs.qr_factory import get_qr_decoder_for_data, make_qr_encoder
+from utils import is_alphanumeric_qr
 
-DEFAULT_IDLE_TIMEOUT = const(5*60)      # (seconds) 4 hours
-LEFT_MARGIN = 6
+LEFT_MARGIN = 8
 RIGHT_MARGIN = 6
 TOP_MARGIN = 12
 VERT_SPACING = 10
@@ -35,9 +33,6 @@ TEXTBOX_MARGIN = 6
 # menu (or whatever) to show something new. The
 # stack has already been updated, but the old
 # top-of-stack code was waiting for a key event.
-#
-
-
 class AbortInteraction(Exception):
     pass
 
@@ -51,6 +46,10 @@ class UserInteraction:
 
     def top_of_stack(self):
         return self.stack[-1] if self.stack else None
+
+    def reset_to_root(self):
+        root = self.stack[0]
+        self.reset(root)
 
     def reset(self, new_ux):
         self.stack.clear()
@@ -90,15 +89,15 @@ def time_now_ms():
     import utime
     return utime.ticks_ms()
 
-
-# TODO: Move this to it's own file
 class KeyInputHandler:
-    def __init__(self, down="", up="", long="", repeat=None, long_duration=2000):
+    def __init__(self, down="", up="", long="", repeat_delay=None, repeat_speed=None, long_duration=2000):
         self.time_pressed = {}
         self.down = down
         self.up = up
         self.long = long
-        self.repeat = repeat
+        self.repeat_delay = repeat_delay  # How long until repeat mode starts
+        self.repeat_speed = repeat_speed  # How many ms between each repeat
+        self.repeat_active = False
         self.long_duration = long_duration
         self.kcode_state = 0
         self.kcode_last_time_pressed = 0
@@ -113,7 +112,7 @@ class KeyInputHandler:
         return pressed
 
     def __update_kcode_state(self, expected_keys, actual_key):
-        # print('kcode: state={} expected={} actual={}'.format(self.kcode_state, expected_key, actual_key))        
+        # print('kcode: state={} expected={} actual={}'.format(self.kcode_state, expected_key, actual_key))
         if actual_key in expected_keys:
             self.kcode_state += 1
             self.kcode_last_time_pressed = time_now_ms()
@@ -165,6 +164,10 @@ class KeyInputHandler:
     def is_pressed(self, key):
         return key in self.time_pressed
 
+    def clear(self):
+        from common import keypad
+        keypad.clear_keys()
+
     # New input function to be used in place of PressRelease and ux_press_release, ux_all_up and ux_poll_once.
     async def get_event(self):
         from common import keypad
@@ -176,21 +179,27 @@ class KeyInputHandler:
         # See if we have a character in the queue and if so process it
         # Poll for an event
         key, is_down = keypad.get_event()
-    
+
         # if key != None:
         #     print('key={} is_down={}'.format(key, is_down))
-    
+
         if key == None:
             # There was nothing in the queue, so handle the time-dependent events
             now = time_now_ms()
             for k in self.time_pressed:
                 # print('k={}  self.down={}  self.repeat={}  self.time_pressed={}'.format(k, self.down, self.repeat, self.time_pressed))
                 # Handle repeats
-                if self.repeat != None and k in self.down:
+                if self.repeat_delay != None and k in self.down:
                     elapsed = now - self.time_pressed[k]
-                    if elapsed >= self.repeat:
-                        self.time_pressed[k] = now
-                        return (k, 'repeat')
+                    if self.repeat_active == False:
+                        if elapsed >= self.repeat_delay:
+                            self.repeat_active = True
+                            self.time_pressed[k] = now
+                            return (k, 'repeat')
+                    else:
+                        if elapsed >= self.repeat_speed:
+                            self.time_pressed[k] = now
+                            return (k, 'repeat')
 
                 # Handle long press expiration
                 if k in self.long:
@@ -222,6 +231,7 @@ class KeyInputHandler:
         else:  # up
             # Removing this will cancel long presses of the key as well
             if key in self.time_pressed:
+                self.repeat_active = False
                 del self.time_pressed[key]
 
             # Check to see if we are interested in this key event
@@ -271,19 +281,25 @@ key_to_char_map_numbers = {
 # Takes KeyInputHandler events as state change events, along with elapsed time.
 
 IDLE_KEY_TIMEOUT = 500
-PLACEHOLDER_CHAR = '^'
 
-# TODO: Move this to its own file
 class TextInputHandler:
-    def __init__(self, text=""):
+    def __init__(self, text="", num_only=False, max_length=None):
         self.text = [ch for ch in text]
-        self.cursor_pos = 0
+        self.cursor_pos = len(self.text)  # Put cursor at the end if there is any initial text
         self.last_key_down_time = 0
         self.last_key = None
         self.next_map_index = 0
-        self.curr_key_map = key_to_char_map_lower
+        self.curr_key_map = key_to_char_map_numbers if num_only else key_to_char_map_lower
+        self.num_only = num_only
+        self.max_length = max_length
+        if self.max_length:
+            # Make sure user-passed value doesn't exceed the max, if given
+            self.text = self.text[0:self.max_length]
 
     def _next_key_map(self):
+        if self.num_only:
+            return
+
         if self.curr_key_map == key_to_char_map_lower:
             self.curr_key_map = key_to_char_map_upper
         elif self.curr_key_map == key_to_char_map_upper:
@@ -303,7 +319,11 @@ class TextInputHandler:
         now = time_now_ms()
         key, event_type = event
         if event_type == 'down':
-            print("key={}".format(key))
+            # Outer code handles these
+            if key in 'xy':
+                return
+
+            # print("key={}".format(key))
             if key in '*#rl':
                 if key == '#':
                     self._next_key_map()
@@ -327,25 +347,31 @@ class TextInputHandler:
 
             # Check for symbols pop-up
             if key == '1' and self.curr_key_map != key_to_char_map_numbers:
-                # Show the symbols pop-up, otherwise fall through and handle '1' as a normal key press
-                symbol = await ux_show_symbols_popup('!')
-                if symbol == None:
-                    return
+                if self.max_length and len(self.text) >= self.max_length:
+                    pass
+                else:
+                    # Show the symbols pop-up, otherwise fall through and handle '1' as a normal key press
+                    symbol = await ux_show_symbols_popup('!')
+                    if symbol == None:
+                        return
 
-                # Insert the symbol
-                self.text.insert(self.cursor_pos, symbol)
-                self.cursor_pos += 1
+                    # Insert the symbol
+                    self.text.insert(self.cursor_pos, symbol)
+                    self.cursor_pos += 1
                 return
 
             if self.last_key == None:
-                print("first press of {}".format(key))
-                # A new keypress, so insert the first character mapped to this key
-                self.text.insert(
-                    self.cursor_pos, self.curr_key_map[key][self.next_map_index])
-                self.cursor_pos += 1
-                if len(self.curr_key_map[key]) == 1:
-                    # Just immediate commit this key since there are no other possible choices to wait for
-                    return
+                # print("first press of {}".format(key))
+                # A new keypress, so insert the first character mapped to this key, unless max reached
+                if self.max_length and len(self.text) >= self.max_length:
+                    pass
+                else:
+                    self.text.insert(
+                        self.cursor_pos, self.curr_key_map[key][self.next_map_index])
+                    self.cursor_pos += 1
+                    if len(self.curr_key_map[key]) == 1:
+                        # Just immediate commit this key since there are no other possible choices to wait for
+                        return
 
             elif self.last_key == key:
                 # User is pressing the same key within the idle timeout, so cycle to the next key
@@ -357,14 +383,17 @@ class TextInputHandler:
                           1] = self.curr_key_map[key][self.next_map_index]
 
             else:
-                # User pressed a different key, but before the idle timeout, so we finalize the last
-                # character and start the next character as tentative.
-                self.cursor_pos += 1  # Finalize the last character
-                self.next_map_index = 0  # Reset the map index
+                if self.max_length and len(self.text) >= self.max_length:
+                    pass
+                else:
+                    # User pressed a different key, but before the idle timeout, so we finalize the last
+                    # character and start the next character as tentative.
+                    self.cursor_pos += 1  # Finalize the last character
+                    self.next_map_index = 0  # Reset the map index
 
-                # Append the new key
-                self.text.insert(
-                    self.cursor_pos, self.curr_key_map[key][self.next_map_index])
+                    # Append the new key
+                    self.text.insert(
+                        self.cursor_pos, self.curr_key_map[key][self.next_map_index])
 
             # Insert or overwrite the character
             # print('cursor_pos={} next_map_index={} key={} text={}'.format(
@@ -380,7 +409,7 @@ class TextInputHandler:
         now = time_now_ms()
 
         if self.last_key_down_time != 0 and now - self.last_key_down_time >= IDLE_KEY_TIMEOUT:
-            print("timeout!")
+            # print("timeout!")
             # Reset for next key
             self.last_key_down_time = 0
             self.last_key = None
@@ -391,28 +420,32 @@ class TextInputHandler:
         return False
 
     def get_text(self):
-        # TODO: Remove PLACEHOLDER_CHAR from end, if present
         return "".join(self.text)
 
+    def get_num(self):
+        return int("".join(self.text))
 
-async def ux_enter_text(title="Enter Text", label="Text"):
+
+async def ux_enter_text(title="Enter Text", label="Text", initial_text='', left_btn='BACK', right_btn='CONTINUE',
+    num_only=False, max_length=None):
     from common import dis
     from display import FontSmall
 
     font = FontSmall
 
-    input = KeyInputHandler(down='1234567890*#rl', up='xy')
-    text_handler = TextInputHandler()
+    input = KeyInputHandler(down='1234567890*#rlxy', up='xy')
+    text_handler = TextInputHandler(text=initial_text, num_only=num_only, max_length=max_length)
 
     while 1:
         # redraw
+        system.turbo(True)
         dis.clear()
 
         dis.draw_header(title, left_text=text_handler.get_mode_description())
 
         # Draw the title
         y = Display.HEADER_HEIGHT + TEXTBOX_MARGIN
-        dis.text(LEFT_MARGIN, y, label)
+        dis.text(None, y+2, label)
 
         # Draw a bounding box around the text area
         y += font.leading + TEXTBOX_MARGIN
@@ -422,12 +455,13 @@ async def ux_enter_text(title="Enter Text", label="Text"):
         # Draw the text and any other stuff
         y += 4
         dis.text_input(None, y, text_handler.get_text(),
-                       cursor_pos=text_handler.cursor_pos, font=font, max_chars_per_line=12)
+                       cursor_pos=text_handler.cursor_pos, font=font, max_chars_per_line=14)
 
-        dis.draw_footer('BACK', 'CONTINUE', input.is_pressed(
+        dis.draw_footer(left_btn, right_btn, input.is_pressed(
             'x'), input.is_pressed('y'))
 
         dis.show()
+        system.turbo(False)
 
         # Wait for key inputs
         event = None
@@ -452,7 +486,7 @@ async def ux_enter_text(title="Enter Text", label="Text"):
                 if key == 'x':
                     return None
                 if key == 'y':
-                    return text_handler.get_text()
+                    return text_handler.get_num() if num_only else text_handler.get_text()
 
 
 symbol_rows = [
@@ -466,7 +500,7 @@ symbol_rows = [
 async def ux_show_symbols_popup(title="Enter Passphrase"):
     from common import dis
     from display import FontSmall
-    print('ux_show_symbols_popup()')
+    # print('ux_show_symbols_popup()')
     font = FontSmall
 
     input = KeyInputHandler(down='rlduxy', up='xy')
@@ -484,6 +518,8 @@ async def ux_show_symbols_popup(title="Enter Passphrase"):
     height = num_rows * font.leading + (2 * v_margin)
 
     while 1:
+        system.turbo(True)
+
         # redraw
         x = Display.WIDTH // 2 - width // 2
         y = Display.HEIGHT - Display.FOOTER_HEIGHT - height - 14
@@ -509,6 +545,8 @@ async def ux_show_symbols_popup(title="Enter Passphrase"):
             'x'), input.is_pressed('y'))
 
         dis.show()
+
+        system.turbo(False)
 
         # Wait for key inputs
         event = None
@@ -544,6 +582,8 @@ async def ux_show_symbols_popup(title="Enter Passphrase"):
                     return symbol_rows[cursor_row][cursor_col]
 
 
+# NOTE: This function factors in the scrollbar width even if the scrollbar might not end up being shown,
+#       because the line breaking code uses it BEFORE knowing if scrolling is required.
 def chars_per_line(font):
     return (Display.WIDTH - LEFT_MARGIN - Display.SCROLLBAR_WIDTH) // font.advance
 
@@ -584,19 +624,22 @@ def word_wrap(ln, font):
         yield line
 
 
-async def ux_show_story(msg, title='Passport', sensitive=False, font=FontSmall, left_btn='BACK', right_btn='CONTINUE', scroll_label=None, left_btn_enabled=True, right_btn_enabled=True, center_vertically=False, center=False):
-    # show a big long string, and wait for XY to continue
-    # - returns character used to get out (X or Y)
-    # - accepts a stream or string
-    from common import dis
+async def ux_show_story(msg, title='Passport', sensitive=False, font=FontSmall, escape='', left_btn='BACK',
+                        right_btn='CONTINUE', scroll_label=None, left_btn_enabled=True, right_btn_enabled=True,
+                        center_vertically=False, center=False, overlay=None, clear_keys=False):
+    from common import dis, keypad
+
+    system.turbo(True)
+
+    # Clear the keys before starting
+    if clear_keys:
+        keypad.clear_keys()
 
     ch_per_line = chars_per_line(font)
 
     lines = []
-    # if title:
-    #     # kinda weak rendering but it works.
-    #     lines.append('\x01' + title)
 
+    # First case is used with StringIO objects
     if hasattr(msg, 'readline'):
         msg.seek(0)
         for ln in msg:
@@ -630,8 +673,12 @@ async def ux_show_story(msg, title='Passport', sensitive=False, font=FontSmall, 
          Display.FOOTER_HEIGHT) // font.leading
     max_visible_lines = (Display.HEIGHT - Display.HEADER_HEIGHT - Display.FOOTER_HEIGHT) // font.leading
 
-    input = KeyInputHandler(down='rldu0xy', up='xy', repeat=250)
+    input = KeyInputHandler(down='rldu0xy', up='xy' + escape, repeat_delay=250, repeat_speed=10)
 
+    system.turbo(False)
+
+    allow_right_btn_action = True
+    turbo = None  # We rely on this being 3 states: None, False, True
     while 1:
         # redraw
         dis.clear()
@@ -647,14 +694,19 @@ async def ux_show_story(msg, title='Passport', sensitive=False, font=FontSmall, 
             text_height = len(lines) * font.leading - font.descent
             y += avail_height // 2 - text_height // 2
 
+
+        content_to_height_ratio = H / len(lines)
+        show_scrollbar= True if content_to_height_ratio < 1 else False
+
         last_to_show = min(top+H+1, len(lines))
         for ln in lines[top:last_to_show]:
             x = LEFT_MARGIN if not center else None
-            dis.text(x, y, ln, font=font)
+            dis.text(x, y, ln, font=font, scrollbar_visible=show_scrollbar)
 
             y += font.leading
 
-        dis.scrollbar(top / len(lines), H / len(lines))
+        if show_scrollbar:
+            dis.scrollbar(top / len(lines), content_to_height_ratio)
 
         # Show the scroll_label if given and if we have not reached the bottom yet
         scroll_enable_right_btn = True
@@ -667,60 +719,102 @@ async def ux_show_story(msg, title='Passport', sensitive=False, font=FontSmall, 
         dis.draw_footer(left_btn, right_btn_label,
                         input.is_pressed('x'), input.is_pressed('y'))
 
+        # Draw overlay image, if any
+        if overlay:
+            (x, y, image) = overlay
+            dis.icon(x, y, image)
+
         dis.show()
+
+        # We only want to turn it off once rather than whenever it's False, so we
+        # set to None to avoid turning turbo off again.
+        if turbo == False:
+            system.turbo(False)
+            turbo = None
 
         # Wait for key inputs
         event = None
         while True:
-            event = await input.get_event()
+            while True:
+                event = await input.get_event()
 
-            if event != None:
-                break
+                if event != None:
+                    break
 
-        key, event_type = event
-        # print('key={} event_type={}'.format(key, event_type))
+            key, event_type = event
+            # print('key={} event_type={}'.format(key, event_type))
 
-        if event_type == 'down' or event_type == 'repeat':
-            if key == 'u':
-                top = max(0, top-1)
-            elif key == 'd':
-                if len(lines) > H:
-                    top = min(len(lines) - H, top+1)
+            if event_type == 'down' or event_type == 'repeat':
+                system.turbo(True)
+                turbo = True
 
-        if event_type == 'down':
-            if key == '0':
-                top = 0
-
-        if event_type == 'up':
-            # No left_btn means don't exit on the 'x' key
-            if left_btn_enabled and (key == 'x'):
-                return key
-
-            if key == 'y':
-                if scroll_enable_right_btn:
-                    if right_btn_enabled:
-                        return key
-                else:
+                if key == 'u':
+                    top = max(0, top-1)
+                    break
+                elif key == 'd':
                     if len(lines) > H:
                         top = min(len(lines) - H, top+1)
+                    break
+                elif key == 'y':
+                    if event_type == 'repeat':
+                        allow_right_btn_action = False
+                    elif event_type == 'down':
+                        allow_right_btn_action = True
 
+                    if not scroll_enable_right_btn:
+                        if len(lines) > H:
+                            top = min(len(lines) - H, top+1)
+                        else:
+                            continue
+                    break
+                elif key in 'xy':
+                    # allow buttons to redraw for pressed state
+                    break
+                else:
+                    continue
 
+            if event_type == 'down':
+                if key == '0':
+                    top = 0
+                    break
+                else:
+                    continue
 
-async def ux_confirm(msg, negative_btn='NO', positive_btn='YES', center=True, center_vertically=True):
-    resp = await ux_show_story(msg, center=center, center_vertically=center_vertically, left_btn=negative_btn, right_btn=positive_btn)
+            if event_type == 'up':
+                turbo = False  # We set to False here, but actually turn off after rendering
+                if key in escape:
+                    return key
+
+                # No left_btn means don't exit on the 'x' key
+                if left_btn_enabled and (key == 'x'):
+                    return key
+
+                if key == 'y':
+                    if scroll_enable_right_btn:
+                        if right_btn_enabled and allow_right_btn_action:
+                            return key
+                        break
+                    else:
+                        if len(lines) > H:
+                            top = min(len(lines) - H, top+1)
+                            break
+                        else:
+                            continue
+
+async def ux_confirm(msg, title='Passport', negative_btn='NO', positive_btn='YES', center=True, center_vertically=True, scroll_label=None):
+    resp = await ux_show_story(msg, title=title, center=center, center_vertically=center_vertically, left_btn=negative_btn, right_btn=positive_btn, scroll_label=scroll_label)
     return resp == 'y'
 
 
-async def ux_dramatic_pause(msg, seconds):
-    from common import dis
-
-    # show a full-screen msg, with a dramatic pause + progress bar
-    n = seconds * 8
-    dis.fullscreen(msg)
-    for i in range(n):
-        dis.progress_bar_show(i/n)
-        await sleep_ms(125)
-
+# async def ux_dramatic_pause(msg, seconds):
+#     from common import dis, system
+#
+#     # show a full-screen msg, with a dramatic pause + progress bar
+#     n = seconds * 8
+#     dis.fullscreen(msg)
+#     for i in range(n):
+#         system.progress_bar((i*100)//n)
+#         await sleep_ms(125)
 
 def blocking_sleep(ms):
     start = utime.ticks_ms()
@@ -782,6 +876,8 @@ def ux_show_fatal(msg):
     filename = 'error.log'
     wrote_to_sd, lines[0] = save_error_log(msg, filename)
     while (1):
+        system.turbo(True)
+
         # Draw
         dis.clear()
         dis.draw_header('Error')
@@ -793,6 +889,7 @@ def ux_show_fatal(msg):
             y += font.leading
 
         dis.show()
+        system.turbo(False)
 
         blocking_sleep(delay)
 
@@ -823,9 +920,6 @@ def show_fatal_error(msg):
     # Remove lines we don't want to shorten
     lines = all_lines[1:-2]
 
-    # Shorten file path to only file name
-    # TODO: FIX THIS: lines = [line[line.index('passport-mp')+19:] for line in lines]
-
     # Insert lines we want to add for readability or keep from the original msg
     lines.insert(0, "")
     lines.insert(1, "")
@@ -836,7 +930,7 @@ def show_fatal_error(msg):
 
 
 def restore_menu():
-    # redraw screen contents after distrupting it w/ non-ux things (usb upload)
+    # redraw screen contents after disrupting it w/ non-ux things (usb upload)
     m = the_ux.top_of_stack()
 
     if hasattr(m, 'update_contents'):
@@ -847,172 +941,177 @@ def restore_menu():
 
 
 def abort_and_goto(m):
-    # TODO: Clear out keypad buffer
+    import common
+    common.keypad.clear_keys()
     the_ux.reset(m)
 
 
 def abort_and_push(m):
-    # TODO: Clear out keypad buffer
+    common.keypad.clear_keys()
     the_ux.push(m)
 
 
-async def show_qr_codes(addrs, is_alnum, start_n):
-    o = QRDisplay(addrs, is_alnum, start_n, sidebar=None)
-    await o.interact_bare()
+# async def show_qr_codes(addrs, is_alnum, start_n):
+#     o = QRDisplay(addrs, is_alnum, start_n)
+#     await o.interact_bare()
 
 
-class QRDisplay(UserInteraction):
-    # Show a QR code for (typically) a list of addresses. Can only work on Mk3
+# class QRDisplay(UserInteraction):
+#     # Show a QR code for (typically) a list of addresses. Can only work on Mk3
+#
+#     def __init__(self, addrs, is_alnum, start_n=0,path='', account=0, change=0):
+#         self.is_alnum = is_alnum
+#         self.idx = 0             # start with first address
+#         self.invert = False      # looks better, but neither mode is ideal
+#         self.addrs = addrs
+#         self.start_n = start_n
+#         self.qr_data = None
+#         self.left_down = False
+#         self.right_down = False
+#         self.input = KeyInputHandler(down='xyudlr', up='xy')
+#
+#     def render_qr(self, msg):
+#         # Version 2 would be nice, but can't hold what we need, even at min error correction,
+#         # so we are forced into version 3 = 29x29 pixels
+#         # - see <https://www.qrcode.com/en/about/version.html>
+#         # - to display 29x29 pixels, we have to double them up: 58x58
+#         # - not really providing enough space around it
+#         # - inverted QR (black/white swap) still readable by scanners, altho wrong
+#
+#         from utils import imported
+#
+#         with imported('uQR') as uqr:
+#             if self.is_alnum:
+#                 # targeting 'alpha numeric' mode, typical len is 42
+#                 ec = uqr.ERROR_CORRECT_Q
+#                 assert len(msg) <= 47
+#             else:
+#                 # has to be 'binary' mode, altho shorter msg, typical 34-36
+#                 ec = uqr.ERROR_CORRECT_M
+#                 assert len(msg) <= 42
+#
+#             q = uqr.QRCode(version=3, box_size=1, border=0,
+#                            mask_pattern=3, error_correction=ec)
+#             if self.is_alnum:
+#                 here = uqr.QRData(msg.upper().encode('ascii'),
+#                                   mode=uqr.MODE_ALPHA_NUM, check_data=False)
+#             else:
+#                 here = uqr.QRData(msg.encode('ascii'),
+#                                   mode=uqr.MODE_8BIT_BYTE, check_data=False)
+#             q.add_data(here)
+#             q.make(fit=False)
+#
+#             self.qr_data = q.get_matrix()
+#
+#     def redraw(self):
+#         # Redraw screen.
+#         from common import dis, system
+#         from display import FontTiny
+#
+#         system.turbo(True)
+#         font = FontTiny
+#         inv = self.invert
+#
+#         # what we are showing inside the QR
+#         msg, path = self.addrs[self.idx]
+#
+#         # make the QR, if needed.
+#         if not self.qr_data:
+#             # dis.busy_bar(True)
+#             self.render_qr(msg)
+#
+#         # Draw display
+#         if inv:
+#             dis.dis.fill_rect(0, 0, Display.WIDTH,
+#                               Display.HEIGHT - Display.FOOTER_HEIGHT + 1, 1)
+#         else:
+#             dis.clear()
+#
+#         y = TOP_MARGIN
+#
+#         # Draw the derivation path
+#         if len(self.addrs) > 1:
+#             dis.text(None, y, path, font, invert=inv)
+#             y += font.leading + VERT_SPACING
+#
+#         w = 29          # because version=3
+#         module_size = 5  # Each "dot" in a QR code is called a module
+#         pixel_width = w * module_size
+#         frame_width = pixel_width + (module_size * 2)
+#
+#         # QR code offsets
+#         XO = (Display.WIDTH - pixel_width) // 2
+#         YO = y
+#         dis.dis.fill_rect(XO - module_size, YO -
+#                           module_size, frame_width, frame_width, 0 if inv else 1)
+#
+#         # Draw the actual QR code
+#         data = self.qr_data
+#         for qx in range(w):
+#             for qy in range(w):
+#                 px = data[qx][qy]
+#                 X = (qx*module_size) + XO
+#                 Y = (qy*module_size) + YO
+#                 dis.dis.fill_rect(X, Y, module_size,
+#                                   module_size, px if inv else (not px))
+#
+#         # Show the data encoded by the QR code
+#         y += w*module_size + VERT_SPACING + 3
+#
+#         MAX_ADDR_CHARS_PER_LINE = 16
+#         for i in range(0, len(msg), MAX_ADDR_CHARS_PER_LINE):
+#             dis.text(None, y, msg[i:i+MAX_ADDR_CHARS_PER_LINE], font, inv)
+#             y += font.leading
+#
+#         dis.draw_footer('BACK', 'INVERT', self.input.is_pressed(
+#             'x'), self.input.is_pressed('y'))
+#         dis.show()
+#         system.turbo(False)
+#
+#     async def interact_bare(self):
+#
+#         self.redraw()
+#         while 1:
+#             event = await self.input.get_event()
+#
+#             if event != None:
+#                 key, event_type = event
+#                 if event_type == 'down':
+#                     if key == 'u' or key == 'l':
+#                         if self.idx > 0:
+#                             self.idx -= 1
+#                             self.qr_data = None
+#                     elif key == 'd' or key == 'r':
+#                         if self.idx != len(self.addrs)-1:
+#                             self.idx += 1
+#                             self.qr_data = None
+#                     elif key in 'xy':
+#                         # Allow buttons to redraw in pressed state
+#                         pass
+#                     else:
+#                         continue
+#                 elif event_type == 'up':
+#                     if key == 'x':
+#                         self.redraw()
+#                         break
+#                     elif key == 'y':
+#                         self.invert = not self.invert
+#             else:
+#                 continue
+#
+#             self.redraw()
+#
+#     async def interact(self):
+#         await self.interact_bare()
+#         the_ux.pop()
 
-    def __init__(self, addrs, is_alnum, start_n=0, sidebar=None):
-        self.is_alnum = is_alnum
-        self.idx = 0             # start with first address
-        self.invert = False      # looks better, but neither mode is ideal
-        self.addrs = addrs
-        self.sidebar = sidebar
-        self.start_n = start_n
-        self.qr_data = None
-        self.left_down = False
-        self.right_down = False
-        self.input = KeyInputHandler(down='xyudlr', up='xy')
 
-    def render_qr(self, msg):
-        # Version 2 would be nice, but can't hold what we need, even at min error correction,
-        # so we are forced into version 3 = 29x29 pixels
-        # - see <https://www.qrcode.com/en/about/version.html>
-        # - to display 29x29 pixels, we have to double them up: 58x58
-        # - not really providing enough space around it
-        # - inverted QR (black/white swap) still readable by scanners, altho wrong
-
-        from utils import imported
-
-        with imported('uQR') as uqr:
-            if self.is_alnum:
-                # targeting 'alpha numeric' mode, typical len is 42
-                ec = uqr.ERROR_CORRECT_Q
-                assert len(msg) <= 47
-            else:
-                # has to be 'binary' mode, altho shorter msg, typical 34-36
-                ec = uqr.ERROR_CORRECT_M
-                assert len(msg) <= 42
-
-            q = uqr.QRCode(version=3, box_size=1, border=0,
-                           mask_pattern=3, error_correction=ec)
-            if self.is_alnum:
-                here = uqr.QRData(msg.upper().encode('ascii'),
-                                  mode=uqr.MODE_ALPHA_NUM, check_data=False)
-            else:
-                here = uqr.QRData(msg.encode('ascii'),
-                                  mode=uqr.MODE_8BIT_BYTE, check_data=False)
-            q.add_data(here)
-            q.make(fit=False)
-
-            self.qr_data = q.get_matrix()
-
-    def redraw(self):
-        # Redraw screen.
-        from common import dis
-        from display import FontTiny
-
-        font = FontTiny
-        inv = self.invert
-
-        # what we are showing inside the QR
-        msg = self.addrs[self.idx]
-
-        # make the QR, if needed.
-        if not self.qr_data:
-            # dis.busy_bar(True)
-            self.render_qr(msg)
-
-        # Draw display
-        if inv:
-            dis.dis.fill_rect(0, 0, Display.WIDTH,
-                              Display.HEIGHT - Display.FOOTER_HEIGHT + 1, 1)
-        else:
-            dis.clear()
-
-        y = TOP_MARGIN
-
-        # Draw the derivation path
-        if len(self.addrs) > 1:
-            path = "Path: {}".format(self.start_n + self.idx)
-            dis.text(None, y, path, font, invert=inv)
-            y += font.leading + VERT_SPACING
-
-        w = 29          # because version=3
-        module_size = 6  # Each "dot" in a QR code is called a module
-        pixel_width = w * module_size
-        frame_width = pixel_width + (module_size * 2)
-
-        # QR code offsets
-        XO = (Display.WIDTH - pixel_width) // 2
-        YO = y
-        dis.dis.fill_rect(XO - module_size, YO -
-                          module_size, frame_width, frame_width, 0 if inv else 1)
-
-        # Draw the actual QR code
-        data = self.qr_data
-        for qx in range(w):
-            for qy in range(w):
-                px = data[qx][qy]
-                X = (qx*module_size) + XO
-                Y = (qy*module_size) + YO
-                dis.dis.fill_rect(X, Y, module_size,
-                                  module_size, px if inv else (not px))
-
-        # Show the data encoded by the QR code
-        y += w*module_size + VERT_SPACING + 3
-
-        sidebar, ll = self.sidebar or (msg, 20)
-        for i in range(0, len(sidebar), ll):
-            dis.text(None, y, sidebar[i:i+ll], font, inv)
-
-            y += font.leading
-
-        dis.draw_footer('BACK', 'INVERT', self.input.is_pressed(
-            'x'), self.input.is_pressed('y'))
-        dis.show()
-
-    async def interact_bare(self):
-
-        self.redraw()
-        while 1:
-            event = await self.input.get_event()
-
-            if event != None:
-                key, event_type = event
-                if event_type == 'down':
-                    if key == 'u' or key == 'l':
-                        if self.idx > 0:
-                            self.idx -= 1
-                            self.qr_data = None
-                    elif key == 'd' or key == 'r':
-                        if self.idx != len(self.addrs)-1:
-                            self.idx += 1
-                            self.qr_data = None
-                    else:
-                        continue
-                elif event_type == 'up':
-                    if key == 'x':
-                        self.redraw()
-                        break
-                    elif key == 'y':
-                        self.invert = not self.invert
-            else:
-                continue
-
-            self.redraw()
-
-    async def interact(self):
-        await self.interact_bare()
-        the_ux.pop()
-
-
-async def ux_show_text_as_ur(title='QR Code', msg='', qr_text=''):
-    o = DisplayURCode(title, msg, qr_text)
-    await o.interact_bare()
+async def ux_show_text_as_ur(title='QR Code', qr_text='', qr_type=QRType.UR2, qr_args=None, msg=None, left_btn='BACK', right_btn='RESIZE'):
+    # print('ux_show_text_as_ur: qr_type: {}'.format(qr_type))
+    o = DisplayURCode(title, qr_text, qr_type, qr_args=qr_args, msg=msg, left_btn=left_btn, right_btn=right_btn)
+    result = await o.interact_bare()
     gc.collect()
+    return result
 
 def qr_get_module_size_for_version(version):
     # 1 -> 21
@@ -1026,68 +1125,58 @@ def qr_buffer_size_for_version(version):
 
 
 class DisplayURCode(UserInteraction):
-    
+
     # Show a QR code or a series of codes in Blockchain Commons' UR format
     # Purpose is to allow a QR code to be scanned, so we make it as big as possible
     # given our screen size, but if it's too big, we display a series of images
     # instead.
-    def __init__(self, title, msg, qr_text):
+    def __init__(self, title, qr_text, qr_type, qr_args=None, msg=None, left_btn='DONE', right_btn='RESIZE', is_binary=False):
         self.title = title
-        self.msg = msg
         self.qr_text = qr_text
-        # self.qr = None
         self.input = KeyInputHandler(down='xy', up='xy')
-        self.ur_version = 1
+        self.last_version = 0
+        self.msg = msg
+        self.left_btn = left_btn
+        self.right_btn = right_btn
+
+        self.num_supported_sizes = 0
         self.qr_version_idx = 0 # "version" for QR codes essentially maps to the size
-        self.qr_versions = [22, 12, 8]
         self.render_id = 0
         self.last_render_id = -1;
+        self.qr_type = qr_type
+        # print('DisplayURCode: qr_type: {}'.format(qr_type))
+        self.qr_args = qr_args
+        self.is_binary = is_binary
 
+        system.turbo(True)
         self.generate_qr_data()
-
         self.qr_data = None
-        self.curr_part = 0
+        system.turbo(False)
 
     def generate_qr_data(self):
+        dis.fullscreen('Generating QR')
+        system.show_busy_bar()
+        # Instantiate the right type of QR encoder - always make a new one
+        self.qr_encoder = make_qr_encoder(self.qr_type, self.qr_args)
+        self.num_supported_sizes = self.qr_encoder.get_num_supported_sizes()
+
         # We collect before and after to ensure the most available memory
-        self.parts = None
         gc.collect()
 
-        # Generate the parts
-        if self.ur_version == 1:
-            # UR 1.0
-            self.parts = encode_ur(self.qr_text, fragment_capacity=self.get_ur_max_len())
-        elif self.ur_version == 2:
-            # UR 2.0
-            encoder = CBOREncoder()
-            encoder.encodeBytes(self.qr_text)
-            ur_obj = UR("bytes", encoder.get_bytes())
-            self.ur_encoder = UREncoder(ur_obj, 30)
-
-            self.parts = []
-            while not self.ur_encoder.is_complete():
-                part = self.ur_encoder.next_part()
-                print('part={}'.format(part))
-                self.parts.append(part)
-        else:
-            raise ValueError('Invalid UR version')
+        max_len = self.qr_encoder.get_max_len(self.qr_version_idx)
+        self.qr_encoder.encode(self.qr_text, is_binary=self.is_binary, max_fragment_len=max_len)
 
         gc.collect()
+        system.hide_busy_bar()
 
     def set_next_density(self):
-        self.qr_version_idx = (self.qr_version_idx + 1) % len(self.qr_versions)
-
-    # TODO: Determine best values for version, and max len
-    def get_ur_max_len(self):
-        if self.qr_version_idx == 0:
-            return 500
-        elif self.qr_version_idx == 1:
-            return 200
-        else:
-            return 60
+        self.last_version = 0;
+        self.qr_version_idx = (self.qr_version_idx + 1) % self.num_supported_sizes
 
     def render_qr(self, data):
         from utils import imported
+
+        # print('data: {}'.format(data))
 
         if self.last_render_id != self.render_id:
             self.last_render_id = self.render_id
@@ -1097,14 +1186,25 @@ class DisplayURCode(UserInteraction):
             gc.collect()
 
             # Render QR data to buffer
-            print('qr={}'.format(data.upper()))
-            encoded_data = data.upper().encode('ascii')
+            # print('qr={}'.format(data.upper()))
+            encoded_data = data.encode('ascii')
+            if self.qr_type != QRType.QR:
+                encoded_data = encoded_data.upper()
             ll = len(encoded_data)
 
             from foundation import QRCode
             qrcode = QRCode()
 
-            version = qrcode.fit_to_version(ll)
+
+            version = qrcode.fit_to_version(ll, is_alphanumeric_qr(encoded_data))
+
+            # Don't go to a smaller QR code, even if it means repeated data since it looks weird
+            # to change the QR code size
+            if self.last_version > version:
+                version = self.last_version
+            else:
+                self.last_version = version
+
             buf_size = qr_buffer_size_for_version(version)
             self.modules_count = qr_get_module_size_for_version(version)
             # print('fit_to_version({}) = {}  buffer size = {}'.format(ll, version,buf_size))
@@ -1116,30 +1216,32 @@ class DisplayURCode(UserInteraction):
             self.qr_data = out_buf
 
     def redraw(self):
-        # Redraw screen.
+        # Redraw screen
         from common import dis
         from display import FontTiny
 
-        TOP_MARGIN = 9
-        VERT_SPACING = 10
+        system.turbo(True)
+        TOP_MARGIN = 7
         font = FontTiny
 
-        # Make the QR, if needed
-        #if not self.qr_data[self.curr_part]:
-        # print('rendering QR code for entry {}: "{}" len={}'.format(self.curr_part, self.parts[self.curr_part], len(self.parts[self.curr_part])))
-
-        self.render_qr(self.parts[self.curr_part])
+        data = self.qr_encoder.next_part()
+        # print('data={}'.format(data))
+        self.render_qr(data)
 
         # Draw QR display
         dis.clear()
-
-        dis.draw_header(self.title, left_text='{}/{}'.format(self.curr_part + 1, len(self.parts)))
+        dis.draw_header(self.title)
+        # dis.draw_header(self.title, left_text='{}/{}'.format(self.curr_part + 1, len(self.parts)))
         y = Display.HEADER_HEIGHT + TOP_MARGIN
 
         w = self.modules_count
         # print('modules_count={}'.format(w))
 
-        module_pixel_width = (Display.WIDTH - 20) // w
+        if self.msg:
+            module_pixel_width = (Display.WIDTH - 60) // w
+        else:
+            module_pixel_width = (Display.WIDTH - 20) // w
+
         # print('module_pixel_width={}'.format(module_pixel_width))
 
         total_pixel_width = w * module_pixel_width
@@ -1148,10 +1250,10 @@ class DisplayURCode(UserInteraction):
         # QR code offsets
         XO = (Display.WIDTH - total_pixel_width) // 2
 
-        # Center vertically now that we have no label underneath        
+        # Center vertically now that we have no label underneath
         YO = ((Display.HEIGHT - Display.HEADER_HEIGHT - Display.FOOTER_HEIGHT) - total_pixel_width ) // 2 + Display.HEADER_HEIGHT
         dis.dis.fill_rect(XO - module_pixel_width, YO -
-                          module_pixel_width, frame_width, frame_width, 1)
+                          module_pixel_width, frame_width, frame_width, 0)
 
         # Draw the actual QR code
         # print('qr_data = {}'.format(self.qr_data))
@@ -1163,45 +1265,51 @@ class DisplayURCode(UserInteraction):
 
                     X = (qx*module_pixel_width) + XO
                     Y = (qy*module_pixel_width) + YO
-                    dis.dis.fill_rect(X, Y, module_pixel_width, module_pixel_width, not px)
+                    dis.dis.fill_rect(X, Y, module_pixel_width, module_pixel_width, px)
+
+        # Draw message
+        if self.msg != None:
+            dis.text(None, Display.HEIGHT - Display.FOOTER_HEIGHT - 20, self.msg, font=FontTiny)
 
         dis.draw_footer(
-            'BACK',
-            'RESIZE',
+            self.left_btn,
+            self.right_btn,
             self.input.is_pressed('x'),
             self.input.is_pressed('y')
         )
         dis.show()
-        self.last_frame_render_time = time_now_ms()
+        system.turbo(False)
 
     async def interact_bare(self):
         self.redraw()
 
         while 1:
             event = await self.input.get_event()
-
             if event != None:
+                # print('event={}'.format(event))
                 key, event_type = event
                 if event_type == 'up':
                     if key == 'x':
                         self.redraw()
-                        break
+                        return 'x'
                     elif key == 'y':
-                        self.set_next_density()
-                        self.generate_qr_data()
-                        self.curr_part = 0
-                        self.render_id += 1
+                        if self.right_btn == 'RESIZE':
+                            system.turbo(True)
+                            self.set_next_density()
+                            self.generate_qr_data()
+                            self.render_id += 1
+                            system.turbo(False)
+                        else:
+                            # User has something else in mind
+                            self.redraw()
+                            return 'y'
             else:
                 # Only need to check timer and advance part number if we have more than one part
-                if len(self.parts) > 1:
-                    now = time_now_ms()
-                    elapsed_time = now - self.last_frame_render_time
-                    # print('elapsed_time={}'.format(elapsed_time))
-                    if elapsed_time > 1:
-                        # Show the next part
-                        self.curr_part = (self.curr_part + 1) % len(self.parts)
-                        self.redraw()
-                        self.render_id += 1
+                # if len(self.parts) > 1:
+                # Show the next part after a short delay to control speed
+                await sleep_ms(200)
+                self.render_id += 1
+                self.redraw()
                 continue
 
             self.redraw()
@@ -1211,98 +1319,75 @@ class DisplayURCode(UserInteraction):
         the_ux.pop()
 
 
-async def ux_enter_number(prompt, max_value):
-    # return the decimal number which the user has entered
-    # - default/blank value assumed to be zero
-    # - clamps large values to the max
-    from common import dis
-    from display import FontTiny, FontSmall
-    from math import log
-
-    # allow key repeat on X only
-    press = PressRelease('1234567890y')
-
-    footer = "X to DELETE, or OK when DONE."
-    y = 26
-    value = ''
-    max_w = int(log(max_value, 10) + 1)
-
-    while 1:
-        dis.clear()
-        dis.text(0, 0, prompt)
-
-        # text centered
-        if value:
-            bx = dis.text(None, y, value)
-            dis.icon(bx+1, y+11, 'space')
-        else:
-            dis.icon(64-7, y+11, 'space')
-
-        dis.text(None, -1, footer, FontTiny)
-        dis.show()
-
-        # ========================================
-        # ========================================
-        # ========================================
-        # ========================================
-        # TODO: Replace with KeyInputHandler
-        # ========================================
-        # ========================================
-        # ========================================
-        # ========================================
-
-        ch = await press.wait()
-        if ch == 'y':
-
-            if not value:
-                return 0
-            return min(max_value, int(value))
-
-        elif ch == 'x':
-            if value:
-                value = value[0:-1]
-            else:
-                # quit if they press X on empty screen
-                return 0
-        else:
-            if len(value) == max_w:
-                value = value[0:-1] + ch
-            else:
-                value += ch
-
-            # cleanup leading zeros and such
-            value = str(int(value))
-
-
-THRESHOLD = 128
-
-
-def convert_to_bw(img, w, h):
-    dest_bytes_per_line = ((w + 7) // 8)
-    dest_len = dest_bytes_per_line * h
-    dest = bytearray(dest_len)
-
-    for y in range(h):
-        for x in range(w):
-            src_offset = (y*w) + x
-            color = img[src_offset]
-
-            dest_offset = (y*dest_bytes_per_line) + (x // 8)
-            # print('dest_offset=' + str(dest_offset))
-            mask = 0x80 >> x % 8
-
-            if color < THRESHOLD:
-                dest[dest_offset] = dest[dest_offset] | mask
-
-    return dest
-
+# async def ux_enter_number(prompt, max_value):
+#     # return the decimal number which the user has entered
+#     # - default/blank value assumed to be zero
+#     # - clamps large values to the max
+#     from common import dis
+#     from display import FontTiny, FontSmall
+#     from math import log
+#
+#     # allow key repeat on X only
+#     press = PressRelease('1234567890y')
+#
+#     footer = "X to DELETE, or OK when DONE."
+#     y = 26
+#     value = ''
+#     max_w = int(log(max_value, 10) + 1)
+#
+#     while 1:
+#         dis.clear()
+#         dis.text(0, 0, prompt)
+#
+#         # text centered
+#         if value:
+#             bx = dis.text(None, y, value)
+#             dis.icon(bx+1, y+11, 'space')
+#         else:
+#             dis.icon(64-7, y+11, 'space')
+#
+#         dis.text(None, -1, footer, FontTiny)
+#         dis.show()
+#
+#         # ========================================
+#         # ========================================
+#         # ========================================
+#         # ========================================
+#         # TODO: Replace with KeyInputHandler
+#         # ========================================
+#         # ========================================
+#         # ========================================
+#         # ========================================
+#
+#         ch = await press.wait()
+#         if ch == 'y':
+#
+#             if not value:
+#                 return 0
+#             return min(max_value, int(value))
+#
+#         elif ch == 'x':
+#             if value:
+#                 value = value[0:-1]
+#             else:
+#                 # quit if they press X on empty screen
+#                 return 0
+#         else:
+#             if len(value) == max_w:
+#                 value = value[0:-1] + ch
+#             else:
+#                 value += ch
+#
+#             # cleanup leading zeros and such
+#             value = str(int(value))
 
 
 async def ux_scan_qr_code(title):
+    import common
     from common import dis, qr_buf, viewfinder_buf
-    from display import FontLarge, FontSmall
-    from ur.ur_decoder import URDecoder
-    from ur1.decode_ur import decode_ur, extract_single_workload, Workloads
+    from display import FontSmall
+    from utils import save_qr_code_image
+
     import utime
     from constants import VIEWFINDER_WIDTH, VIEWFINDER_HEIGHT, CAMERA_WIDTH, CAMERA_HEIGHT
 
@@ -1318,22 +1403,15 @@ async def ux_scan_qr_code(title):
     qr = QR(CAMERA_WIDTH, CAMERA_HEIGHT, qr_buf)
     qr_code = None
     data = None
-
-    # Premptively create a URDecoder too - we don't know if we need it yet
-    ur_decoder = URDecoder()
-    percent_complete = 0
+    error = None
 
     input = KeyInputHandler(up='xy', down='xy')
 
     fps_start = utime.ticks_us()
     frame_count = 0
 
-    ur_version = 1
-    workloads = Workloads()
-
-    parts_received = 0
-    total_parts = 0
-
+    qr_decoder = None
+    progress = None
 
     while True:
         frame_start = utime.ticks_us()
@@ -1343,8 +1421,8 @@ async def ux_scan_qr_code(title):
         snapshot_end = utime.ticks_us()
 
         if not result:
-            print("ERROR: cam.copy_capture() returned False!")
-            # TODO: Show some error to the user!!!
+            # print("ERROR: cam.copy_capture() returned False!")
+            await ux_show_story('Unable to capture image with camera.', title='Error')
             return None
 
         draw_start = utime.ticks_us();
@@ -1362,21 +1440,7 @@ async def ux_scan_qr_code(title):
         RIGHT_X = Display.WIDTH - OFFSET * 2
         Y = Display.HEADER_HEIGHT + OFFSET
 
-        # # Upper left
-        # dis.draw_rect(LEFT_X, Y, SIZE, THICKNESS, 0, fill_color=1)
-        # dis.draw_rect(LEFT_X, Y + THICKNESS, SIZE, THICKNESS, 0, fill_color=0)
-
-        # dis.draw_rect(LEFT_X, Y, THICKNESS, SIZE, 0, fill_color=1)
-        # dis.draw_rect(LEFT_X + THICKNESS, Y + THICKNESS, THICKNESS, SIZE - THICKNESS, 0, fill_color=0)
-
-        # # Upper right
-        # dis.draw_rect(RIGHT_X - SIZE, Y, SIZE, THICKNESS, 0, fill_color=1)
-        # dis.draw_rect(RIGHT_X - SIZE, Y + THICKNESS, SIZE, THICKNESS, 0, fill_color=0)
-
-        # dis.draw_rect(RIGHT_X, Y, THICKNESS, SIZE, 0, fill_color=1)
-        # dis.draw_rect(RIGHT_X - THICKNESS, Y + THICKNESS, THICKNESS, SIZE - THICKNESS, 0, fill_color=0)
-
-        right_label = '{} OF {}'.format(parts_received, total_parts) if total_parts > 0 else 'SCANNING...'
+        right_label = progress if progress != None else 'SCANNING...'
         dis.draw_footer('BACK', right_label,
                         left_down=input.is_pressed('x'), right_down=input.is_pressed('y'))
         draw_end = utime.ticks_us();
@@ -1385,63 +1449,57 @@ async def ux_scan_qr_code(title):
         dis.show()
         show_end = utime.ticks_us();
 
-        # Try to decode the data
+        # Look for QR codes in the image
         decode_start = utime.ticks_us()
-        qr_code = qr.find_qr_codes()
+        data = qr.find_qr_codes()
         # print('find_qr_codes() out')
         decode_end = utime.ticks_us()
 
-        if qr_code != None:
-            data = qr_code
-            print('qr_code={}'.format(qr_code))
+        # Don't try decoding if we are in Snapshot mode...user is probably using this as a viewfinder
+        if not common.snapshot_mode_enabled and data != None:
+            # print('data={}'.format(data))
 
             # See if this looks like a ur code
             ur_start = utime.ticks_us()
-            ur_end = 0
             try:
-                if ur_version == 1:
-                    workloads.add(data)
-                    parts_received, total_parts = workloads.get_progress()
+                if qr_decoder == None:
+                    # We need to find out what type of QR this is and have the factory make a decoder for us
+                    qr_decoder = get_qr_decoder_for_data(data)
 
-                    if workloads.is_complete():
-                        data = decode_ur(workloads.workloads)
-                        break
+                # We should be guaranteed to have a qr_decoder here since basic QR accepts any data format
+                qr_decoder.add_data(data)
 
-                elif ur_version == 2:
-                    import math
-                    if ur_decoder.receive_part(qr_code) == True:
-                        print('Part was accepted')
-                    else:
-                        print('Part was NOT accepted')
-                    ur_end = utime.ticks_us()
-                    if ur_decoder.is_success():
-                        result = ur_decoder.result_message()
-                        print('Success! len={} result={}'.format(
-                            len(result.cbor), result))
-                        data = result.cbor
-                        break
+                # See if there was any error
+                error = qr_decoder.get_error()
+                if error != None:
+                    # print('ERROR: error={}'.format(error))
+                    data = None
+                    break
 
-                    percent_complete = math.floor(
-                        ur_decoder.estimated_percent_complete() * 100)
+                if qr_decoder.is_complete():
+                    data = qr_decoder.decode()
+                    # print('data: |{}|'.format(data))
+
+                    # Set the last QRType so that signed transactions know what to encode as
+                    common.last_scanned_qr_type = qr_decoder.get_data_format()
+                    # print('common.last_scanned_qr_type={}'.format(common.last_scanned_qr_type))
+                    break
+
+                progress = '{} OF {}'.format(qr_decoder.received_parts(), qr_decoder.total_parts())
 
             except Exception as e:
-                ur_end = utime.ticks_us()
-
-                print('Failed to parse UR!')
+                # print('Failed to parse UR!')
                 import sys
-                print('Exception: {}'.format(e))
+                # print('Exception: {}'.format(e))
                 sys.print_exception(e)
-                # Doesn't look like it's a UR code, so interpret as a normal QR code and return the data
-                data = qr_code
                 break
 
-            print('ur decode: {}ms'.format(ur_end - ur_start))
-        else:
-            pass
-            # print("******* NO QR CODE FOUND!")
+            ur_end = utime.ticks_us()
 
-        key_start = utime.ticks_us()
+            # print('ur decode: {}us'.format(ur_end - ur_start))
+
         # Check for key input to see if we should back out
+        key_start = utime.ticks_us()
         event = await input.get_event()
         if event != None:
             key, event_type = event
@@ -1451,9 +1509,6 @@ async def ux_scan_qr_code(title):
                     break
         key_end = utime.ticks_us()
 
-        # An extra sleep to avoid redrawing so much
-        # TODO: See if this is necessary on actual hardware - may be able to reduce the duration of the sleep
-        # TODO: Balance between screen refresh rate and battery drain.
         frame_count += 1
         now = utime.ticks_us()
 
@@ -1465,8 +1520,9 @@ async def ux_scan_qr_code(title):
         total_ms = snapshot_ms + draw_ms + show_ms + decode_ms + key_ms
         measured_frame_ms = (now - frame_start) / 1000
         fps = frame_count / ((now - fps_start) / 1000000)
-        
-        if frame_count % 10 == 0:
+
+        print_stats = False
+        if print_stats and frame_count % 10 == 0:
             print_start = utime.ticks_us()
             print('Frame Stats:')
             print('  {:>3.2f}ms  Snapshot'.format(snapshot_ms))
@@ -1485,120 +1541,11 @@ async def ux_scan_qr_code(title):
 
             print('  {:03.1f}ms  Print time'.format(print_ms))
 
-        # await sleep_ms(10)
-
-
     # Turn off camera after capturing is done!
-    print('cam.disable() starting')
     cam.disable()
-    print('cam.disable() done')
-    # Test sha256 from trezor
+
+
     return data
-
-# Keeping this for a bit as an example of HOLD TO SIGN
-# async def ux_scan_qr_code(title):
-#     # show a big long string, and wait for XY to continue
-#     # - returns character used to get out (X or Y)
-#     # - accepts a stream or string
-#     from common import dis
-#     from display import FontLarge, FontSmall
-
-#     from camera import Camera, CAMERA_WIDTH, CAMERA_HEIGHT
-#     from foundation import QR
-
-#     font = FontSmall
-
-#     # Create the Camera connection
-#     cam = Camera()
-#     cam.enable()
-
-#     # Create QR decoder
-#     qr = QR(CAMERA_WIDTH, CAMERA_HEIGHT, cam.get_image_buffer())
-#     qr_code = None
-
-#     is_signed = False
-#     is_signing = False
-#     signing_progress = 0
-#     SIGNING_DURATION = 2000
-
-#     input = KeyInputHandler(up='xy', down='y', long='y',
-#                             long_duration=SIGNING_DURATION)
-
-#     while True:
-#         dis.clear()
-
-#         dis.draw_header(title)
-
-#         if not is_signing:
-#             img = cam.capture()
-#             if img == None:
-#                 print("No image received!")
-#                 # TODO: Show some error!!!
-#                 return None
-
-#             preview = convert_to_bw(img, CAMERA_WIDTH, CAMERA_HEIGHT)
-#             dis.image(Display.WIDTH // 2 - 120, 31, 240, 320, preview)
-
-#             qr_code = qr.find_qr_codes(img)
-
-#             if qr_code != None:
-#                 break
-#                 # print("qr_code=" + qr_code)
-#                 # lines = []
-#                 # lines.extend(word_wrap(qr_code, font))
-#                 # y = Display.HEIGHT - (len(lines) * font.leading)
-#                 # # print("Display.HEIGHT=" + str(Display.HEIGHT) + " len(lines)=" + str(len(lines)) + "  font.height=" + str(font.height))
-#                 # for ln in lines:
-#                 #     dis.clear_rect(0, y, Display.WIDTH, font.leading)
-#                 #     dis.text(None, y, ln)
-#                 #     y += font.leading
-#         else:
-#             # Draw Signing UI
-#             if is_signed:
-#                 dis.text(None, 100, "Signing Successful!")
-#             else:
-#                 dis.text(None, 100, "Signing Transaction...")
-
-#             dis.draw_rect(10, 140, Display.WIDTH - 20, 40, 2, 0, 1)
-#             dis.draw_rect(14, 144, int((Display.WIDTH - 28)
-#                                        * signing_progress), 32, 0, 1, 0)
-#         dis.show()
-
-#         event = await input.get_event()
-#         if event != None:
-#             key, event_type = event
-#             if event_type == 'up':
-#                 if key == 'x':
-#                     break
-#                 if key == 'y':
-#                     if not is_signed:
-#                         is_signing = False
-#                         signing_progress = 0
-
-#             if event_type == 'down':
-#                 if key == 'y':
-#                     is_signing = True
-
-#             if event_type == 'long_press':
-#                 if key == 'y':
-#                     is_signed = True
-#                     signing_progress = 1
-
-#         if is_signing and not is_signed:
-#             all_pressed = input.get_all_pressed()
-#             if 'y' in all_pressed:
-#                 elapsed = all_pressed['y']
-#                 # Handle the elapsed time calc
-#                 signing_progress = elapsed / SIGNING_DURATION
-#                 # print("elapsed={} signing_progress={}".format(
-#                 #     elapsed, signing_progress))
-
-#             # An extra sleep to avoid redrawing so much
-#             await sleep_ms(100)
-
-#     # Turn off camera after capturing is done!
-#     cam.disable()
-#     return qr_code
 
 
 async def ux_show_story_sequence(stories):
@@ -1615,7 +1562,8 @@ async def ux_show_story_sequence(stories):
             right_btn=s.get('right_btn', 'CONTINUE'),
             center=s.get('center', False),
             center_vertically=s.get('center_vertically', False),
-            scroll_label=s.get('`scroll_label`', None))
+            scroll_label=s.get('scroll_label', None),
+            clear_keys=s.get('clear_keys', False))
 
         if key == 'x':
             if story_idx == 0:
@@ -1644,9 +1592,10 @@ async def ux_show_word_list(title, words, heading1='', heading2=None, left_align
             px_width = dis.width(word, font)
             if px_width > longest_word_width:
                 longest_word_width = px_width
-        x = Display.HALF_WIDTH - (longest_word_width // 2)    
+        x = Display.HALF_WIDTH - (longest_word_width // 2)
 
     while True:
+        system.turbo(True)
         dis.clear()
 
         dis.draw_header(title)
@@ -1673,6 +1622,7 @@ async def ux_show_word_list(title, words, heading1='', heading2=None, left_align
                         right_down=input.is_pressed('y'))
 
         dis.show()
+        system.turbo(False)
 
         while 1:
             event = await input.get_event()
@@ -1685,56 +1635,148 @@ async def ux_show_word_list(title, words, heading1='', heading2=None, left_align
             if key in 'xy':
                 return key
 
-async def ux_enter_pin(title, heading='Enter PIN', message=None):
-    from common import dis
+async def ux_enter_pin(title, heading='Enter PIN', left_btn='BACK', right_btn='ENTER', left_btn_function=None,
+        hide_attempt_counter=False, is_new_pin=False):
+    from common import dis, pa
+    import pincodes
 
-    MAX_PIN_PART_LEN = 6
-    MIN_PIN_PART_LEN = 2
+    SHOW_SECURITY_WORDS_AT_LEN = 4
+    MIN_PIN_LEN = 6
+    MAX_PIN_LEN = 12
+    LARGE_BOX_LIMIT = 6
 
-    PIN_BOX_W, PIN_BOX_H = dis.icon_size('box')
-    PIN_BOX_SPACING = (dis.WIDTH - PIN_BOX_W *
-                    MAX_PIN_PART_LEN) // (MAX_PIN_PART_LEN + 1)
-    PIN_BOX_ADVANCE = PIN_BOX_W + PIN_BOX_SPACING
+    POPUP_WIDTH = Display.WIDTH - 40
 
     font = FontSmall
     input = KeyInputHandler(up='xy0123456789', down='xy0123456789*')
 
+    show_security_words = False
+    security_words_confirmed = False
+    show_short_pin_message = False
     pin = ''
     pressed = False
+    security_label = 'NEXT' if is_new_pin else 'CONFIRM'
+
+    def draw_popup(title, lines, y):
+        POPUP_HEIGHT = FontSmall.leading * 4
+        popup_x = Display.HALF_WIDTH - POPUP_WIDTH // 2
+
+        dis.draw_rect(popup_x, y, POPUP_WIDTH, FontSmall.leading + 2, border_w=0, fill_color=1)
+        dis.draw_rect(popup_x, y+FontSmall.leading, POPUP_WIDTH, POPUP_HEIGHT - FontSmall.leading, border_w=2)
+
+        dis.text(None, y+3, title, font=FontSmall, invert=True)
+        y += int(FontSmall.leading * 1.5)
+
+        for line in lines:
+            dis.text(None, y, line, font=FontSmall)
+            y += FontSmall.leading
+
+        return y
+
+    def draw_security_words_popup(title1, title2, words, y):
+        POPUP_HEIGHT = FontSmall.leading * 2
+        popup_x = Display.HALF_WIDTH - POPUP_WIDTH // 2
+
+        dis.draw_rect(popup_x, y, POPUP_WIDTH, FontSmall.leading * 2 + 2, border_w=0, fill_color=1)
+        dis.draw_rect(popup_x, y+FontSmall.leading*2, POPUP_WIDTH, POPUP_HEIGHT, border_w=2)
+
+        dis.text(None, y+3, title1, font=FontSmall, invert=True)
+        y += int(FontSmall.leading)-1
+        dis.text(None, y+3, title2, font=FontSmall, invert=True)
+        y += int(FontSmall.leading * 1.5) + 2
+
+        dis.text(None, y, words, font=FontSmall)
+
+        return y
 
     while True:
+        system.turbo(True)
+
         dis.clear()
         dis.draw_header(title)
 
-        filled = len(pin)
-        if pressed:
-            filled -= 1
-
-        y = dis.HEADER_HEIGHT + 20
+        y = dis.HEADER_HEIGHT + 8
         dis.text(None, y, heading, font=FontSmall)
-        y += FontSmall.leading + 20
+        y += FontSmall.leading - 2
 
-        num_boxes = filled
-        total_width = (filled * PIN_BOX_W) + ((num_boxes - 1) * PIN_BOX_SPACING)
-        x = Display.HALF_WIDTH - (total_width // 2) - (PIN_BOX_W // 2) - 4
-        for _idx in range(filled):
-            dis.icon(x, y, 'xbox')
+        num_filled = len(pin)
+        # print('num_filled={} pressed={}'.format(num_filled, pressed))
+        if (num_filled < LARGE_BOX_LIMIT) or (num_filled == LARGE_BOX_LIMIT and not pressed):
+            empty_box = 'pw_empty_box_lg'
+            pressed_box = 'pw_pressed_box_lg'
+            filled_box = 'pw_filled_box_lg'
+            MAX_PIN_BOXES_TO_DISPLAY = LARGE_BOX_LIMIT
+            y += 3
+        else:
+            empty_box = 'pw_empty_box_sm'
+            pressed_box = 'pw_pressed_box_sm'
+            filled_box = 'pw_filled_box_sm'
+            MAX_PIN_BOXES_TO_DISPLAY = MAX_PIN_LEN
+            y += 14
+
+        PIN_BOX_W, PIN_BOX_H = dis.icon_size(empty_box)
+        PIN_BOX_SPACING = (dis.WIDTH - PIN_BOX_W *
+                           MAX_PIN_BOXES_TO_DISPLAY) // (MAX_PIN_BOXES_TO_DISPLAY + 1)
+        PIN_BOX_ADVANCE = PIN_BOX_W + PIN_BOX_SPACING
+
+        if num_filled >= 1:
+            total_width = (num_filled * PIN_BOX_W) + ((num_filled - 1) * PIN_BOX_SPACING)
+        else:
+            total_width = 0
+        # print('total_width =  {}'.format(total_width))
+
+        if pressed and num_filled > 0:
+            total_width += PIN_BOX_SPACING + PIN_BOX_W
+            # print('total_width increased to = {}'.format(total_width))
+
+        # Have a width when PIN is empty and nothing pressed
+        if total_width == 0:
+            total_width = PIN_BOX_W
+
+        x = Display.HALF_WIDTH - (total_width // 2)
+        for _idx in range(num_filled):
+            dis.icon(x, y, filled_box)
             x += PIN_BOX_ADVANCE
 
         if pressed:
-            dis.icon(x, y, 'tbox')
+            # print('pressed case')
+            dis.icon(x, y, pressed_box)
+        elif len(pin) == 0:
+            # print('draw empty box')
+            dis.icon(x, y, empty_box)
+
+        # Show remaining attempts if not hidden and if there was at least one failure
+        if not hide_attempt_counter and pa.attempts_left < pa.max_attempts:
+            dis.text(None, Display.HEIGHT - Display.HEADER_HEIGHT - FontTiny.leading + 3, '{} attempts remaining'.format(pa.attempts_left), font=FontTiny)
+
+        # Since box size can vary, we advance a constant here and center the box in that space based on height above
+        y = 128
+
+        if show_short_pin_message:
+            y = draw_popup('Info', ['PIN must be at','least 6 digits'], y)
+
+        # Show the security word list if key is held down
+        elif show_security_words:
+            if not security_words:
+                try:
+                    security_words = pincodes.PinAttempt.anti_phishing_words(pin[0:SHOW_SECURITY_WORDS_AT_LEN].encode())
+                except Exception as e:
+                    security_words = ['Unable to','retrieve']
+                    # print("Exception getting anti-phishing words: {}".format(e))
+
+            if is_new_pin:
+                y = draw_security_words_popup('Remember these', 'Security Words', '  '.join(security_words), y)
+            else:
+                y = draw_security_words_popup('Recognize these', 'Security Words?', '  '.join(security_words), y)
         else:
-            if len(pin) != MAX_PIN_PART_LEN:
-                dis.icon(x, y, 'box')
+            # Clear them so we reload next time (numbers may have changed)
+            security_words = None
 
-        if message:
-            dis.text(None, Display.HEIGHT - Display.FOOTER_HEIGHT -
-                     FontTiny.leading, message, FontTiny)
 
-        dis.draw_footer("BACK", "ENTER", input.is_pressed('x'),
-                        input.is_pressed('y'))
+        dis.draw_footer(left_btn, security_label if show_security_words else right_btn, input.is_pressed('x'), input.is_pressed('y'))
 
         dis.show()
+        system.turbo(False)
 
         # Interaction
         while True:
@@ -1746,39 +1788,234 @@ async def ux_enter_pin(title, heading='Enter PIN', message=None):
         key, event_type = event
 
         if event_type == 'down':
+            # Hide the short pin message as soon as any other key is pressed
+            show_short_pin_message = False
+
             if key == '*':
-                # Delete one digit from the PIN
-                if pin:
+                if pin and len(pin) > 0:
                     pin = pin[:-1]
 
-            elif key in '0123456789':
-                pressed = True
+                if len(pin) <= SHOW_SECURITY_WORDS_AT_LEN:
+                    security_words_confirmed = False
 
-                # Add the number to the PIN or replace the last digit
-                if len(pin) == MAX_PIN_PART_LEN:
-                    pin = pin[:-1] + key
-                else:
-                    pin += key
+            elif key in '0123456789':
+                if not show_security_words:
+                    if len(pin) < MAX_PIN_LEN:
+                        pressed = True
 
         elif event_type == 'up':
             if key == 'x':
                 return None
 
             elif key == 'y':
-                if len(pin) < MIN_PIN_PART_LEN:
+                if show_security_words:
+                    show_security_words = False
+                    security_words_confirmed = True
+                    continue
+
+                elif len(pin) < MIN_PIN_LEN:
                     # they haven't given enough yet
+                    show_short_pin_message = True
                     continue
                 else:
-                    print('RETURNING PIN = {}'.format(pin))
+                    # print('RETURNING PIN = {}'.format(pin))
                     return pin
+
             elif key in '0123456789':
-                pressed = False
+                if not show_security_words:
+                    pressed = False
+
+                    # Add the number to the PIN or replace the last digit
+                    if len(pin) == MAX_PIN_LEN:
+                        pass
+                    else:
+                        pin += key
+
+        # Decide whether to show the security words
+        if not security_words_confirmed:
+            show_security_words = len(pin) == SHOW_SECURITY_WORDS_AT_LEN
+
 
 async def ux_shutdown():
     from common import system
     confirm = await ux_confirm("Are you sure you want to shutdown?", center=True, center_vertically=True)
     if confirm:
-        print('SHUTTING DOWN!')
-        # TODO: CLEAR THE SCREEN BEFORE POWERING DOWN!
+        # print('SHUTTING DOWN!')
         system.shutdown()
         return
+
+Keypad = [
+    ['1', '2', '3'],
+    ['4', '5', '6'],
+    ['7', '8', '9'],
+    ['*', '0', '#'],
+]
+
+KeyState = {
+    '1': {'pressed': False, 'released': False},
+    '2': {'pressed': False, 'released': False},
+    '3': {'pressed': False, 'released': False},
+    '4': {'pressed': False, 'released': False},
+    '5': {'pressed': False, 'released': False},
+    '6': {'pressed': False, 'released': False},
+    '7': {'pressed': False, 'released': False},
+    '8': {'pressed': False, 'released': False},
+    '9': {'pressed': False, 'released': False},
+    '0': {'pressed': False, 'released': False},
+    '*': {'pressed': False, 'released': False},
+    '#': {'pressed': False, 'released': False},
+    'l': {'pressed': False, 'released': False},
+    'r': {'pressed': False, 'released': False},
+    'u': {'pressed': False, 'released': False},
+    'd': {'pressed': False, 'released': False},
+    'x': {'pressed': False, 'released': False},
+    'y': {'pressed': False, 'released': False},
+}
+
+async def ux_keypad_test(*a):
+    from common import dis
+    from display import FontSmall
+
+    SIDE_MARGIN = 20
+    NUMKEY_HGAP = 10
+    NUMKEY_VGAP = 5
+    KEY_WIDTH = ((Display.WIDTH - (SIDE_MARGIN*2) - (2 * NUMKEY_HGAP)) // 3)
+    KEY_HEIGHT = 24
+
+    font = FontSmall
+
+    # Hold x or y for one second to exit keypad test
+    input = KeyInputHandler(down='1234567890*#rludxy', up='1234567890*#rludxy', long='xy',
+        long_duration=1000)
+
+    def draw_key(key, key_x, key_y, small=False, vertical=False):
+        state = KeyState.get(key)
+        pressed = state.get('pressed')
+        released = state.get('released')
+        w = KEY_WIDTH if not small else KEY_WIDTH // 2
+        dis.draw_rect(key_x, key_y,
+            w, KEY_HEIGHT, 4 if pressed else 2,
+            fill_color=1 if released else 0 , border_color=1)
+        if not small:
+            dis.text(key_x + 22, key_y + 1, key, invert=1 if released else 0)
+        else:
+            dis.text(key_x + 9, key_y + 1, key, invert=1 if released else 0)
+
+    while True:
+        # Redraw
+        system.turbo(True)
+        dis.clear()
+
+        dis.draw_header('Keypad Test')
+
+        # Draw the title
+        y = Display.HEADER_HEIGHT + TEXTBOX_MARGIN
+        dis.text(None, y, 'Press Each Key')
+        y += font.leading
+
+        # Draw the select and back buttons
+        draw_key('u', Display.HALF_WIDTH - KEY_WIDTH // 4, y, small=True)
+        draw_key('d', Display.HALF_WIDTH - KEY_WIDTH // 4, y + NUMKEY_VGAP + KEY_HEIGHT, small=True)
+        draw_key('l', Display.HALF_WIDTH - KEY_WIDTH // 4 - NUMKEY_HGAP - KEY_WIDTH//2, y + (NUMKEY_VGAP + KEY_HEIGHT)//2, small=True)
+        draw_key('r', Display.HALF_WIDTH - KEY_WIDTH // 4 + NUMKEY_HGAP + KEY_WIDTH//2, y + (NUMKEY_VGAP + KEY_HEIGHT)//2, small=True)
+        draw_key('x', SIDE_MARGIN, y + (NUMKEY_VGAP + KEY_HEIGHT)//2, small=True)
+        draw_key('y', Display.WIDTH - SIDE_MARGIN - KEY_WIDTH//2, y + (NUMKEY_VGAP + KEY_HEIGHT)//2, small=True)
+
+        y += 80
+
+        # Draw the Numeric keypad grid
+        for row in range(len(Keypad)):
+            for col in range(len(Keypad[row])):
+                key = Keypad[row][col]
+                key_x = SIDE_MARGIN + (col *(KEY_WIDTH + NUMKEY_HGAP))
+                key_y = y + row * (KEY_HEIGHT + NUMKEY_VGAP)
+                draw_key(key, key_x, key_y)
+
+        dis.draw_footer('BACK', 'NEXT', input.is_pressed('x'), input.is_pressed('y'))
+
+        dis.show()
+        system.turbo(False)
+
+        # Wait for key inputs
+        event = None
+        while True:
+            event = await input.get_event()
+            if event != None:
+                break
+
+        if event != None:
+            key, event_type = event
+            state = KeyState.get(key)
+
+            # Check for footer button actions first
+            if event_type == 'down':
+                state['pressed'] = True
+
+            if event_type == 'up':
+                state['released'] = True
+
+            if event_type == 'long_press':
+                return key
+
+
+async def ux_draw_alignment_grid(title='Align Screen'):
+    from common import dis
+    from display import FontSmall
+
+    NUM_VERTICAL_LINES = 7
+    NUM_HORIZONTAL_LINES = 14
+    GRID_WIDTH =  Display.WIDTH // (NUM_VERTICAL_LINES + 1)
+    GRID_HEIGHT = Display.HEIGHT // (NUM_HORIZONTAL_LINES + 1)
+    # print('GRID_WIDTH={}'.format(GRID_WIDTH))
+    # print('GRID_HEIGHT={}'.format(GRID_HEIGHT))
+
+    font = FontSmall
+
+    input = KeyInputHandler(down='xy', up='xy')
+    pressed = {}
+
+    while True:
+        # Redraw
+        system.turbo(True)
+        dis.clear()
+
+        # dis.draw_header(title)
+        # dis.draw_footer('BACK', 'NEXT', input.is_pressed('x'), input.is_pressed('y'))
+
+        # Draw an inset rectangle around the outside
+        dis.draw_rect(2, 2, Display.WIDTH-4, Display.HEIGHT-4, 1, fill_color=0, border_color=1)
+
+        # Draw vertical lines
+        for col in range(NUM_VERTICAL_LINES):
+            x = (col + 1) * GRID_WIDTH
+            dis.vline(x)
+
+        # Draw Horizontal lines
+        for row in range(NUM_HORIZONTAL_LINES):
+            y = (row + 1) * GRID_HEIGHT
+            dis.hline(y)
+
+        dis.show()
+        system.turbo(False)
+
+        # Wait for key inputs
+        event = None
+        while True:
+            event = await input.get_event()
+            if event != None:
+                break
+
+        if event != None:
+            key, event_type = event
+            state = KeyState.get(key)
+
+            # Exit if key pressed
+            if event_type == 'down':
+                pressed[key] = True
+
+            if event_type == 'up':
+                # We may have come to this screen from a longpress on the keypad test screen
+                # in which case an up will come that we DON'T want to act on. The local input
+                # won't have transitioned the key to pressed state yet, so use this to differentiate.
+                if key in pressed:
+                    return key

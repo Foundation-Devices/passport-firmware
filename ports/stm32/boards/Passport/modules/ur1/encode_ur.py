@@ -1,10 +1,11 @@
-# SPDX-FileCopyrightText: 2020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+# SPDX-FileCopyrightText: 2020 Foundation Devices, Inc. <hello@foundationdevices.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 from .mini_cbor import encode_simple_cbor
 from .bc32 import encode_bc32_data
-from .utils import sha256_hash, compose3
-from binascii import hexlify
+from .utils import compose3
+from ubinascii import hexlify
+from common import system
 
 def compose_ur(payload, type='bytes'):
     return 'ur:{}/{}'.format(type, payload)
@@ -33,7 +34,8 @@ def compose_headers_to_fragments(fragments, digest, type='bytes'):
 def encode_ur(payload, fragment_capacity=1000):
     cbor_payload = encode_simple_cbor(payload)
     bc32_payload = encode_bc32_data(cbor_payload)
-    digest = sha256_hash(cbor_payload)
+    digest = bytearray(32)
+    system.sha256(cbor_payload, digest)
     bc32_digest = encode_bc32_data(digest)
     fragments = [bc32_payload[i:i+fragment_capacity] for i in range(0, len(bc32_payload), fragment_capacity)]
     if not fragments:

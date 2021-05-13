@@ -1,7 +1,7 @@
-# SPDX-FileCopyrightText: 2020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+# SPDX-FileCopyrightText: 2020 Foundation Devices, Inc. <hello@foundationdevices.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# SPDX-FileCopyrightText: 2018 Coinkite, Inc.  <coldcardwallet.com>
+# SPDX-FileCopyrightText: 2018 Coinkite, Inc. <coldcardwallet.com>
 # SPDX-License-Identifier: GPL-3.0-only
 #
 # (c) Copyright 2018 by Coinkite Inc. This file is part of Coldcard <coldcardwallet.com>
@@ -13,7 +13,7 @@
 import trezorcrypto
 import ustruct
 import version
-from callgate import enter_dfu, get_anti_phishing_words,get_supply_chain_validation_words
+from callgate import get_anti_phishing_words,get_supply_chain_validation_words
 from ubinascii import hexlify as b2a_hex
 from se_commands import *
 from common import system
@@ -23,10 +23,7 @@ from common import system
 MAX_PIN_LEN = const(32)
 
 # how many bytes per secret (you don't have to use them all)
-AE_SECRET_LEN = const(72)
-
-# on mark3 (608a) we can also store a longer secret
-AE_LONG_SECRET_LEN = const(416)
+SE_SECRET_LEN = const(72)
 
 # magic number for struct
 PA_MAGIC_V1 = const(0xc50b61a7)
@@ -119,6 +116,7 @@ class PinAttempt:
         self.delay_required = 0         # how much will be needed?
         self.num_fails = 0              # for UI: number of fails PINs
         self.attempts_left = 0          # ignore in mk1/2 case, only valid for mk3
+        self.max_attempts = 21          # Numbger of attempts allowed
         self.state_flags = 0            # useful readback
         self.private_state = 0          # opaque data, but preserve
         self.cached_main_pin = bytearray(32)
@@ -133,8 +131,8 @@ class PinAttempt:
         import callgate
         if callgate.get_is_bricked():
             # die right away if it's not going to work
-            print('AM I BRICKED FOR REALZ!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-            # callgate.enter_dfu(3)
+            # print('I AM I BRICKED!!!')
+            pass
 
     def __repr__(self):
         return '<PinAttempt: num_fails={} delay={}/{} attempts_left={} state=0x{} hmac={}>'.format(
@@ -148,9 +146,9 @@ class PinAttempt:
 
         if new_secret is not None:
             change_flags |= CHANGE_SECRET
-            assert len(new_secret) in (32, AE_SECRET_LEN)
+            assert len(new_secret) in (32, SE_SECRET_LEN)
         else:
-            new_secret = bytes(AE_SECRET_LEN)
+            new_secret = bytes(SE_SECRET_LEN)
 
         # NOTE: pins should be bytes here.
 
@@ -234,11 +232,14 @@ class PinAttempt:
         if err <= -100:
             #print("[%d] req: %s" % (err, b2a_hex(self.buf)))
             if err == EPIN_I_AM_BRICK:
-                # don't try to continue!
-                pass
-                # enter_dfu(3)
+                raise RuntimeError(err)
 
-            print('ERROR: {} ({})'.format(PA_ERROR_CODES[err], err))
+            # Unpack the updated attempts_left and num_fails if the pin was wrong so the UI updates correctly
+            if err == EPIN_AUTH_FAIL:
+                self.unmarshal(self.buf)
+                # print('Unmarshalled: {}'.format(self.attempts_left))
+
+            # print('ERROR: {} ({})'.format(PA_ERROR_CODES[err], err))
             raise BootloaderError(PA_ERROR_CODES[err], err)
         elif err:
             raise RuntimeError(err)
@@ -262,25 +263,25 @@ class PinAttempt:
         if err:
             raise RuntimeError(err)
 
-        print('pin buf={}'.format(buf))
-
         # Get a mnemonic from the 32 bytes in the buffer
         s = trezorcrypto.bip39.from_data(buf)
         rv = s.split()
-        print('anti-phishing words = {}'.format(rv[0:2]))
 
         return rv[0:2]  # Only keep 2 words for anti-phishing prefix
 
-    # TODO: Add unit tests for the supply chain validation
     @staticmethod
-    def supply_chain_validation_words(validation_str):
+    def supply_chain_validation_words(challenge_str):
         # Take the validation string and turn it into 4
         # bip39 words for supply chain tampering detection.
 
-        buf = bytearray(validation_str)
+        # print('challenge_str={}'.format(challenge_str))
+        buf = bytearray(challenge_str)
+
+        # This actually gets the HMAC bytes, not the words
         err = get_supply_chain_validation_words(buf)
         if err:
             raise RuntimeError(err)
+        # print('hmac buf = {}'.format(buf))
 
         # Get a mnemonic from the 32 bytes in the buffer
         buf = buf[:32]
@@ -290,7 +291,7 @@ class PinAttempt:
 
         s = trezorcrypto.bip39.from_data(buf)
         rv = s.split()
-        print('supply chain validation words = {}'.format(rv[0:4]))
+        # print('supply chain validation words = {}'.format(rv[0:4]))
 
         return rv[0:4]  # Only keep 4 words for supply chain validation
 
@@ -316,7 +317,7 @@ class PinAttempt:
 
     # Prepare the class for a PIN operation (first pin, login, change)
     def setup(self, pin, secondary=False):
-        print('Setting up SE hmac')
+        # print('Setting up SE hmac')
         self.pin = pin
         self.hmac = bytes(32)
 
@@ -351,45 +352,9 @@ class PinAttempt:
         secret = self.pin_control(PIN_GET_SECRET)
         return secret
 
-    def ls_fetch(self):
-        # get the "long secret"
-        #assert (13 * 32) == 416 == AE_LONG_SECRET_LEN
-
-        secret = b''
-        for n in range(13):
-            secret += self.pin_control(PIN_LONG_SECRET, ls_offset=n)[0:32]
-
-        return secret
-
-    def ls_change(self, new_long_secret):
-        # set the "long secret"
-        assert len(new_long_secret) == AE_LONG_SECRET_LEN
-
-        for n in range(13):
-            self.pin_control(
-                PIN_LONG_SECRET, ls_offset=n, new_secret=new_long_secret[n*32:(n*32)+32])
-
-    def greenlight_firmware(self):
-        # hash all of flash and commit value to 508a/608a
-        self.pin_control(PIN_GREENLIGHT_FIRMWARE)
-
-    def new_main_secret(self, raw_secret, chain=None):
-        # Main secret has changed: reset the settings+their key,
-        # and capture xfp/xpub
-        from common import settings
+    async def new_main_secret(self, raw_secret, chain=None):
+        from common import settings, flash_cache
         import stash
-
-        # capture values we have already
-        old_values = dict(settings.curr_dict)
-
-        print('old_values = {}'.format(old_values))
-        settings.set_key(raw_secret)
-        settings.load()
-        print('after load = {}'.format(settings.curr_dict))
-
-        # merge in settings, including what chain to use, timeout, etc.
-        settings.merge(old_values)
-        print('after merge = {}'.format(settings.curr_dict))
 
         # Recalculate xfp/xpub values (depends both on secret and chain)
         with stash.SensitiveValues(raw_secret) as sv:
@@ -397,10 +362,13 @@ class PinAttempt:
                 sv.chain = chain
             sv.capture_xpub()
 
-        print('before save = {}'.format(settings.curr_dict))
+        # We shouldn't need to save this anymore since we are dynamically managing xfp and xpub
+        # await settings.save()
 
-        # Need to save values with new AES key
-        settings.save()
-        print('after save = {}'.format(settings.curr_dict))
+        # Set the key for the flash cache (cache was inaccessible prior to user logging in)
+        flash_cache.set_key(new_secret=raw_secret)
+
+        # Need to save out flash cache with the new secret or else we won't be able to read it back later
+        flash_cache.save()
 
 # EOF

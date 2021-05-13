@@ -1,7 +1,7 @@
-// SPDX-FileCopyrightText: 2020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+// SPDX-FileCopyrightText: 2020 Foundation Devices, Inc. <hello@foundationdevices.com>
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// SPDX-FileCopyrightText: 2018 Coinkite, Inc.  <coldcardwallet.com>
+// SPDX-FileCopyrightText: 2018 Coinkite, Inc. <coldcardwallet.com>
 // SPDX-License-Identifier: GPL-3.0-only
 //
 /*
@@ -25,9 +25,6 @@
 // ATECC608A limitation/feature caps this at weird 72 byte value.
 #define SE_SECRET_LEN           72
 
-// .. but on 608a, we can use this one weird data slot with more space
-#define AE_LONG_SECRET_LEN      416
-
 // For change_flags field: choose one secret and/or one PIN only.
 #define CHANGE_WALLET_PIN           0x001
 #define CHANGE_SECRET               0x008
@@ -42,6 +39,8 @@
 #define PA_SUCCESSFUL         0x01
 #define PA_IS_BLANK           0x02
 #define PA_ZERO_SECRET        0x10
+
+extern uint8_t g_cached_main_pin[32];
 
 typedef struct {
     uint32_t    magic_value;            // = PA_MAGIC_V1
@@ -106,7 +105,6 @@ int anti_phishing_words(const char *pin_prefix, int prefix_len, uint32_t *result
 
 int supply_chain_validation_words(const char *data, int data_len, uint32_t *result);
 
-// Read/write the long secret. 32 bytes at a time.
-int pin_long_secret(pinAttempt_t *args);
+int pin_cache_restore(pinAttempt_t *args, uint8_t digest[32]);
 
 // EOF

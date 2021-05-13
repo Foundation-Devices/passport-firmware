@@ -51,7 +51,7 @@ You will need several shell windows or tabs open to interact with the various to
 In one shell, make sure that you `cd` to the root `stm32` source folder, e.g., `cd ~/passport/ports/stm32`:
 
     make BOARD=Passport
-    
+
 To include debug symbols for use in `ddd`, run the following:
 
     make BOARD=Passport DEBUG=1
@@ -71,6 +71,7 @@ private keys.
 
 First, you need to build the `cosign` tool and copy it somewhere in your `PATH`:
 
+    sudo apt-get install libssl-dev
     cd ports/stm32/boards/Passport/tools/cosign
     make
     cp x86/release/cosign ~/.local/bin   # You can run `echo $PATH` to see the list of possible places you can put this file
@@ -80,7 +81,7 @@ Next you need to sign the firmware twice.  The `cosign` tool appends `-signed` t
 Assuming you are still in the `ports/stm32` folder run the following:
 
     # TODO: Update command arguments once final signing flow is in place
-    cosign -f build-Passport/firmware.bin -k 1 -v 0.9 
+    cosign -f build-Passport/firmware.bin -k 1 -v 0.9
     cosign -f build-Passport/firmware-signed.bin -k 2
 
 You can also dump the contents of the firmware header with the following command:
@@ -124,16 +125,18 @@ We use `telnet` to connect to the OpenOCD Server.  Open a third shell and run th
 
 From here can connect over JTAG and run a range of commands (see the help for OpenOCD for details):
 
-Whenever you change any code in the `bootlaoder` folder or in the `common` folder, you will need to rebuild the bootloader (see above), and then flash it to the device with the following sequence in OpenOCD:
+Whenever you change any code in the `bootloader` folder or in the `common` folder, you will need to rebuild the bootloader (see above), and then flash it to the device with the following sequence in OpenOCD:
 
     reset halt
-    flash write_image erase boards/Passport/bootloader/bootloader.bin 0x8000000
+    flash write_image erase boards/Passport/bootloader/arm/release/bootloader.bin 0x8000000
     reset
+
+### TBD: Add docs on appending secrets to the end of the bootloader.bin file during development.
 
 The following command sequence is one you will run repeatedly (i.e., after each build):
 
     reset halt
-    flash write_image erase build-Passport/firmware-signed-signed.bin 0x8020000 
+    flash write_image erase build-Passport/firmware-signed-signed.bin 0x8020000
     reset
 
 These commands do the following:

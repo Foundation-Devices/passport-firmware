@@ -37,7 +37,7 @@ const char *quirc_version(void);
 struct quirc *quirc_new(void);
 
 /* Alternate constructor function that accepts buffer pointers so that
- * no malloc() or free() calls are necessary.  Useful on embedded systems
+ * no malloc() or free() calls are necessary. Useful on embedded systems
  * to help avoid allocating more buffer space than might be available, or
  * to use a memory buffer that is statically allocated or allocated with
  * something other than malloc().

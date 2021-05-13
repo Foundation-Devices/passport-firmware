@@ -1,7 +1,7 @@
-// SPDX-FileCopyrightText: 2020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+// SPDX-FileCopyrightText: 2020 Foundation Devices, Inc. <hello@foundationdevices.com>
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// SPDX-FileCopyrightText: 2018 Coinkite, Inc.  <coldcardwallet.com>
+// SPDX-FileCopyrightText: 2018 Coinkite, Inc. <coldcardwallet.com>
 // SPDX-License-Identifier: GPL-3.0-only
 //
 /*
@@ -26,13 +26,13 @@
 #include "debug-utils.h"
 
 // Number of iterations for KDF
-#define KDF_ITER_WORDS      12
+#define KDF_ITER_WORDS      2
 #define KDF_ITER_PIN        8          // about ? seconds (measured in-system)
 
 // We try to keep at least this many PIN attempts available to legit users
 // - challenge: comparitor resolution is only 32 units (5 LSB not implemented)
 // - solution: adjust both the target and counter (upwards)
-#define MAX_TARGET_ATTEMPTS     13
+#define MAX_TARGET_ATTEMPTS     21
 
 // Pretty sure it doesn't matter, but adding some salt into our PIN->bytes[32] code
 // based on the purpose of the PIN code.
@@ -40,6 +40,9 @@
 #define PIN_PURPOSE_NORMAL               0x334d1858
 #define PIN_PURPOSE_ANTI_PHISH_WORDS     0x2e6d6773
 #define PIN_PURPOSE_SUPPLY_CHAIN_WORDS   0xb6c9f792
+
+// Keep this around after the user logs in successfully
+uint8_t g_cached_main_pin[32];
 
 // Hash up a PIN for indicated purpose.
 static void pin_hash(const char *pin, int pin_len, uint8_t result[32], uint32_t purpose);
@@ -71,7 +74,7 @@ static bool pin_is_blank(uint8_t keynum)
 //
 static bool is_main_pin(const uint8_t digest[32], int *pin_kn)
 {
-    int kn = KEYNUM_main_pin;
+    int kn = KEYNUM_pin_hash;
 
     se_reset_chip();
     se_pair_unlock();
@@ -125,7 +128,7 @@ static void pin_hash(const char *pin, int pin_len, uint8_t result[32], uint32_t 
 //
 static int pin_hash_attempt(uint8_t target_kn, const char *pin, int pin_len, uint8_t result[32])
 {
-    uint8_t tmp[32]; 
+    uint8_t tmp[32];
 
     if (pin_len == 0) {
         // zero len PIN is the "blank" value: all zeros, no hashing
@@ -149,7 +152,7 @@ static int pin_hash_attempt(uint8_t target_kn, const char *pin, int pin_len, uin
     }
 
     memcpy(tmp, result, 32);
-    if (target_kn == KEYNUM_main_pin) {
+    if (target_kn == KEYNUM_pin_hash) {
         se_mixin_key(KEYNUM_pin_attempt, tmp, result);
     } else {
         se_mixin_key(0, tmp, result);
@@ -173,10 +176,10 @@ void pin_cache_get_key(uint8_t key[32])
 
 // pin_cache_save()
 //
-static void pin_cache_save(pinAttempt_t *args, uint8_t *digest)
+static int pin_cache_save(pinAttempt_t *args, uint8_t *digest)
 {
     // encrypt w/ rom secret + SRAM seed value
-    uint8_t     value[32];
+    uint8_t value[32];
 
     if (!check_all_zeros(digest, 32)) {
         pin_cache_get_key(value);
@@ -185,20 +188,26 @@ static void pin_cache_save(pinAttempt_t *args, uint8_t *digest)
         memset(value, 0, 32);
     }
 
-#ifdef FIXME
-    ASSERT(args->magic_value == PA_MAGIC_V1);
-#endif /* FIXME */
+    if (args->magic_value != PA_MAGIC_V1) {
+        return EPIN_BAD_MAGIC;
+    }
+
     memcpy(args->cached_main_pin, value, 32);
+
+    // Keep a copy around so we can do other auth'd actions later like set a user firmware pubkey
+    memcpy(g_cached_main_pin, value, 32);
+    return 0;
 }
 
 // pin_cache_restore()
 //
-static void pin_cache_restore(pinAttempt_t *args, uint8_t digest[32])
+int pin_cache_restore(pinAttempt_t *args, uint8_t digest[32])
 {
     // decrypt w/ rom secret + SRAM seed value
-#ifdef FIXME
-    ASSERT(args->magic_value == PA_MAGIC_V1);
-#endif /* FIXME */
+    if (args->magic_value != PA_MAGIC_V1) {
+        return EPIN_BAD_MAGIC;
+    }
+
     memcpy(digest, args->cached_main_pin, 32);
 
     if (!check_all_zeros(digest, 32)) {
@@ -206,13 +215,15 @@ static void pin_cache_restore(pinAttempt_t *args, uint8_t digest[32])
         pin_cache_get_key(key);
         xor_mixin(digest, key, 32);
     }
+
+    return 0;
 }
 
 // anti_phishing_words()
 //
-// Look up some bits... do HMAC(words secret) and return some LSB's
+// Do HMAC(words secret) and return digest
 //
-// CAUTIONS: 
+// CAUTIONS:
 // - rate-limited by the chip, since it takes many iterations of HMAC(key we dont have)
 // - hash generated is shown on bus (but further hashing happens after that)
 //
@@ -225,8 +236,6 @@ int anti_phishing_words(const char *pin_prefix, int prefix_len, uint32_t *result
     pin_hash(pin_prefix, prefix_len, tmp, PIN_PURPOSE_ANTI_PHISH_WORDS);
 
     // Using 608a, we can do key stretching to get good built-in delays
-    se_setup();
-
     int rv = se_stretch_iter(tmp, digest, KDF_ITER_WORDS);
 
     se_reset_chip();
@@ -242,25 +251,19 @@ int anti_phishing_words(const char *pin_prefix, int prefix_len, uint32_t *result
 
 // supply_chain_validation_words()
 //
-// TODO: Validate message is signed by us using pub key stored in ROM secrets
+// Perform HMAC_SHA256 using SE and supply chain slot. This hashes the given
+// data with the secret value in the SE and returns the result.
 //
-// TODO: Hash given data with private key from the SE
+// Caller will use these 32 bytes to generate words.
 //
 int supply_chain_validation_words(const char *data, int data_len, uint32_t *result)
 {
-	SHA256_CTX ctx;
+    se_pair_unlock();
 
-    sha256_init(&ctx);
-    sha256_update(&ctx, (uint8_t*)data, data_len);
-    // TODO: Change this to hash with a private key from the SE
-    // sha256_update(&ctx, ???, 32));
-    sha256_final(&ctx, (uint8_t*)result);
-
-    // Double SHA
-    sha256_init(&ctx);
-    sha256_update(&ctx, (uint8_t*)result, 32);
-    sha256_final(&ctx, (uint8_t*)result);
-
+    int rc = se_hmac32(KEYNUM_supply_chain, (uint8_t*)data, (uint8_t*)result);
+    if (rc < 0) {
+        return -1;
+    }
     return 0;
 }
 
@@ -296,8 +299,8 @@ static int _validate_attempt(pinAttempt_t *args, bool first_time)
 
         _hmac_attempt(args, actual);
 
-        printf("args->hmac=%02x %02x %02x %02x\n", args->hmac[0], args->hmac[1], args->hmac[2], args->hmac[3] );
-        printf("actual    =%02x %02x %02x %02x\n", actual[0], actual[1], actual[2], actual[3]);
+        // printf("args->hmac=%02x %02x %02x %02x\n", args->hmac[0], args->hmac[1], args->hmac[2], args->hmac[3] );
+        // printf("actual    =%02x %02x %02x %02x\n", actual[0], actual[1], actual[2], actual[3]);
         if (!check_equal(actual, args->hmac, 32)) {
             // hmac is wrong?
             return EPIN_HMAC_FAIL;
@@ -316,7 +319,7 @@ static int _validate_attempt(pinAttempt_t *args, bool first_time)
     if (args->old_pin_len > MAX_PIN_LEN) return EPIN_RANGE_ERR;
     if (args->new_pin_len > MAX_PIN_LEN) return EPIN_RANGE_ERR;
     if ((args->change_flags & CHANGE__MASK) != args->change_flags) return EPIN_RANGE_ERR;
-        
+
     return 0;
 }
 
@@ -348,7 +351,7 @@ static int _read_slot_as_counter(uint8_t slot, uint32_t *dest)
     if (se_gendig_slot(slot, (const uint8_t *)padded, tempkey)) return -1;
 
     if (!se_is_correct_tempkey(tempkey)) {
-        fatal_mitm();
+        return -1;
     }
 
     *dest = padded[0];
@@ -379,16 +382,16 @@ static int __attribute__ ((noinline)) get_last_success(pinAttempt_t *args)
     if (se_gendig_slot(slot, (const uint8_t *)padded, tempkey)) return -2;
 
     if (!se_is_correct_tempkey(tempkey)) {
-        fatal_mitm();
+        return -3;
     }
 
     // Read two values from data slots
     uint32_t lastgood=0, match_count=0, counter=0;
-    if (_read_slot_as_counter(KEYNUM_lastgood, &lastgood)) return -3;
-    if (_read_slot_as_counter(KEYNUM_match_count, &match_count)) return -4;
+    if (_read_slot_as_counter(KEYNUM_lastgood, &lastgood)) return -4;
+    if (_read_slot_as_counter(KEYNUM_match_count, &match_count)) return -5;
 
     // Read the monotonically-increasing counter
-    if (se_get_counter(&counter, 0)) return -5;
+    if (se_get_counter(&counter, 0)) return -6;
 
     if(lastgood > counter) {
         // monkey business, but impossible, right?!
@@ -414,14 +417,11 @@ static int __attribute__ ((noinline)) get_last_success(pinAttempt_t *args)
 //
 static int warmup_se(void)
 {
-    // se_setup();
-
     for (int retry=0; retry<5; retry++) {
         if (se_probe() == true) {
             // Success
             break;
         }
-        printf("retrying...\n");
     }
 
     if (se_pair_unlock()) return -1;
@@ -437,12 +437,12 @@ static int warmup_se(void)
 // Get number of failed attempts on a PIN, since last success. Calculate
 // required delay, and setup initial struct for later attempts.
 //
-    int
+int
 pin_setup_attempt(pinAttempt_t *args)
 {
-#ifdef FIXME
-    STATIC_ASSERT(sizeof(pinAttempt_t) == PIN_ATTEMPT_SIZE_V1);
-#endif /* FIXME */
+    if (sizeof(pinAttempt_t) != PIN_ATTEMPT_SIZE_V1) {
+        return EPIN_BAD_REQUEST;
+    }
 
     int rv = _validate_attempt(args, true);
     if (rv) return rv;
@@ -461,7 +461,6 @@ pin_setup_attempt(pinAttempt_t *args)
     args->pin_len = pin_len;
     memcpy(args->pin, pin_copy, pin_len);
 
-    // TODO: WTF does "warming up" the SE mean?
     // unlock the AE chip
     int result = warmup_se();
     if (result) {
@@ -469,11 +468,7 @@ pin_setup_attempt(pinAttempt_t *args)
         return EPIN_I_AM_BRICK;
     }
 
-    // read counters, and calc number of PIN attempts lef
-
-    // TODO: For the case where we are setting the initial PIN, this is expected
-    //       to fail, isn't it?  We won't have "last success", etc.
-
+    // Read counters, and calc number of PIN attempts left
     result = get_last_success(args);
     if (result) {
         printf("pin_setup_attempt() ERROR: 2  result = %d\n", result);
@@ -487,16 +482,19 @@ pin_setup_attempt(pinAttempt_t *args)
     args->delay_achieved = 0;
 
     // need to know if we are blank/unused device
-    result = pin_is_blank(KEYNUM_main_pin);
+    result = pin_is_blank(KEYNUM_pin_hash);
     if (result) {
 
         printf("pin_setup_attempt() ERROR: 3 (BLANK PIN!): result = %d\n", result);
         args->state_flags |= PA_SUCCESSFUL | PA_IS_BLANK;
 
-        // We need to save this 'zero' value because it's encrypted, and/or might be 
-        // un-initialized memory. 
+        // We need to save this 'zero' value because it's encrypted, and/or might be
+        // un-initialized memory.
         uint8_t zeros[32] = {0};
-        pin_cache_save(args, zeros);
+        result = pin_cache_save(args, zeros);
+        if (result) {
+            return result;
+        }
 
         // need legit value in here
         args->private_state = (rng_sample() & ~1) ^ rom_secrets->hash_cache_secret[0];
@@ -518,45 +516,39 @@ static int updates_for_good_login(uint8_t digest[32])
     int rv = se_get_counter(&count, 0);
     if (rv) goto fail;
 
-    // Challenge: Have to update both the counter, and the target match value because
-    // no other way to have exact value.
-
+    // The weird math here is because the match count slot in the SE ignores the least
+    // significant 5 bits, so the match count must be a multiple of 32. When a good
+    // login occurs, we need to update both the match count and the monotonic counter.
+    //
+    // For example, if the monotonic counter was 19 and the match count was 32, and the
+    // user just provided the correct PIN, you would normally just bump the match count
+    // to 33, but since that is not a multiple of 32, we have to bump it to 64. That
+    // would then give 64-19 = 45 login attempts remaining though, so further down,
+    // in se_add_counter(), we bump the monotonic counter in a loop until there are
+    // MAX_TARGET_ATTEMPTS left (match count - counter0 = MAX_TARGET_ATTEMPTS_LEFT).
     uint32_t mc = (count + MAX_TARGET_ATTEMPTS + 32) & ~31;
-#ifdef FIXME
-    ASSERT(mc >= count);
-#endif /* FIXME */
 
     int bump = (mc - MAX_TARGET_ATTEMPTS) - count;
-#ifdef FIXME
-    ASSERT(bump >= 1);
-    ASSERT(bump <= 32);     // assuming MAX_TARGET_ATTEMPTS < 30
-#endif /* FIXME */
 
-    // Would rather update the counter first, so that a hostile interruption can't increase
-    // attempts (altho the attacker knows the pin at that point?!) .. but chip won't
-    // let the counter go past the match value, so that has to be first.
+    // The SE won't let the counter go past the match count, so we have to update the
+    // match count first.
 
-    // set the new "match count"
+    // Set the new "match count"
     {
         uint32_t    tmp[32/4] = {mc, mc} ;
-        rv = se_encrypted_write(KEYNUM_match_count, KEYNUM_main_pin, digest, (void *)tmp, 32);
+        rv = se_encrypted_write(KEYNUM_match_count, KEYNUM_pin_hash, digest, (void *)tmp, 32);
         if (rv) goto fail;
     }
 
-    // incr the counter a bunch to get to that-13
+    // Increment the counter a bunch to get to that-13
     uint32_t new_count = 0;
     rv = se_add_counter(&new_count, 0, bump);
     if (rv) goto fail;
 
-#ifdef FIXME
-    ASSERT(new_count == count + bump);
-    ASSERT(mc > new_count);
-#endif /* FIXME */
-
     // Update the "last good" counter
     {
         uint32_t    tmp[32/4] = {new_count, 0 };
-        rv = se_encrypted_write(KEYNUM_lastgood, KEYNUM_main_pin, digest, (void *)tmp, 32);
+        rv = se_encrypted_write(KEYNUM_lastgood, KEYNUM_pin_hash, digest, (void *)tmp, 32);
         if(rv) goto fail;
     }
 
@@ -584,9 +576,6 @@ int pin_login_attempt(pinAttempt_t *args)
         printf("pin_login_attempt 1: rv=%d\n", rv);
         return rv;
     }
-
-    // OBSOLETE: did they wait long enough?
-    // if(args->delay_achieved < args->delay_required) return EPIN_MUST_WAIT;
 
     if (args->state_flags & PA_SUCCESSFUL) {
         printf("pin_login_attempt 2\n");
@@ -626,23 +615,31 @@ int pin_login_attempt(pinAttempt_t *args)
     }
 
     if (!is_main_pin(digest, &pin_kn)) {
-        printf("pin_login_attempt 7\n");
+        // Update args with latest attempts remaining
+        get_last_success(args);
+        printf("BAD PIN: attempts_left: %lu  num_fails: %lu\n", args->attempts_left, args->num_fails);
+
         // PIN code is just wrong.
         // - nothing to update, since the chip's done it already
         return EPIN_AUTH_FAIL;
     }
 
-    secret_kn = KEYNUM_secret;
+    secret_kn = KEYNUM_seed;
 
     // change the various counters, since this worked
     rv = updates_for_good_login(digest);
     if (rv) {
-        printf("pin_login_attempt 8: rv=%d\n", rv);
+        // Update args with latest attempts remaining
+        get_last_success(args);
+        printf("GOOD PIN: attempts_left: %lu  num_fails: %lu\n", args->attempts_left, args->num_fails);
         return EPIN_SE_FAIL;
     }
 
     // SUCCESS! "digest" holds a working value. Save it.
-    pin_cache_save(args, digest);
+    rv = pin_cache_save(args, digest);
+    if (rv) {
+        return rv;
+    }
 
     // ASIDE: even if the above was bypassed, the following code will
     // fail when it tries to read/update the corresponding slots in the SE
@@ -676,7 +673,6 @@ int pin_login_attempt(pinAttempt_t *args)
 
     _sign_attempt(args);
 
-    printf("pin_login_attempt SUCCESS!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
     return 0;
 }
 
@@ -686,49 +682,37 @@ int pin_login_attempt(pinAttempt_t *args)
 //
 int pin_change(pinAttempt_t *args)
 {
-    printf("pin_change() 1\n");
     // Validate args and signature
     int rv = _validate_attempt(args, false);
-    printf("pin_change() 2\n");
     if (rv) {
-        printf("pin_change() 3: rv=%d\n", rv);
         return rv;
     }
 
-    printf("pin_change() 4\n");
     if ((args->state_flags & PA_SUCCESSFUL) != PA_SUCCESSFUL) {
-        printf("pin_change() 5\n");
         // must come here with a successful PIN login (so it's rate limited nicely)
         return EPIN_WRONG_SUCCESS;
     }
 
-    printf("pin_change() 6\n");
     if (args->state_flags & PA_IS_BLANK) {
-        printf("pin_change() 7\n");
         // if blank, must provide blank value
         if (args->pin_len) return EPIN_RANGE_ERR;
     }
 
     // Look at change flags.
     const uint32_t cf = args->change_flags;
-    printf("pin_change() 8: change_flags=%u\n", args->change_flags);
 
     // Must be here to do something.
     if (cf == 0) {
-        printf("pin_change() 9\n");
         return EPIN_RANGE_ERR;
     }
-    printf("pin_change() 10\n");
 
     // unlock the AE chip
     if (warmup_se()) {
-        printf("pin_change() 11\n");
         return EPIN_I_AM_BRICK;
     }
-    printf("pin_change() 12\n");
 
     // what pin do they need to know to make their change?
-    int required_kn = KEYNUM_main_pin;
+    int required_kn = KEYNUM_pin_hash;
     // what slot (key number) are updating?
     int target_slot = -1;
 
@@ -737,127 +721,103 @@ int pin_change(pinAttempt_t *args)
     // below the SE validates it all again.
 
     if (cf & CHANGE_WALLET_PIN) {
-        printf("pin_change() 13\n");
-        target_slot = KEYNUM_main_pin;
+        target_slot = KEYNUM_pin_hash;
     } else if (cf & CHANGE_SECRET) {
-        printf("pin_change() 14\n");
-        target_slot = KEYNUM_secret;
+        target_slot = KEYNUM_seed;
     } else {
-        printf("pin_change() 15\n");
         return EPIN_RANGE_ERR;
     }
 
-    printf("pin_change() 16\n");
     // Determine they know hash protecting the secret/pin to be changed.
     uint8_t required_digest[32];     // Construct hash of pin needed.
-    pin_hash_attempt(required_kn, args->old_pin, args->old_pin_len, required_digest);
-    printf("pin_change() 17\n");
 
-    // Check the old pin provided, is right.
-    se_pair_unlock();
-    if (se_checkmac(required_kn, required_digest)) {
-        // they got old PIN wrong, we won't be able to help them
-        se_reset_chip();
+    // Use pin cache when changing the secret, otherwise it's a pin change and we rehash
+    if (cf & CHANGE_SECRET) {
+        // Restore cached version of PIN digest: faster
+        pin_cache_restore(args, required_digest);
+    } else {
+        pin_hash_attempt(required_kn, args->old_pin, args->old_pin_len, required_digest);
 
-        // NOTE: altho we are changing flow based on result of ae_checkmac() here,
-        // if the response is faked by an active bus attacker, it doesn't matter
-        // because the change to the dataslot below will fail due to wrong PIN.
+        // Check the old pin provided, is right.
+        se_pair_unlock();
+        if (se_checkmac(required_kn, required_digest)) {
+            // they got old PIN wrong, we won't be able to help them
+            se_reset_chip();
 
-        printf("pin_change() 18\n");
-        return EPIN_OLD_AUTH_FAIL;
+            // NOTE: altho we are changing flow based on result of ae_checkmac() here,
+            // if the response is faked by an active bus attacker, it doesn't matter
+            // because the change to the dataslot below will fail due to wrong PIN.
+
+            return EPIN_OLD_AUTH_FAIL;
+        }
     }
 
-    printf("pin_change() 19\n");
     // Calculate new PIN hashed value: will be slow for main pin.
     if (cf & CHANGE_WALLET_PIN) {
-        printf("pin_change() 20\n");
 
-        uint8_t new_digest[32]; 
+        uint8_t new_digest[32];
         rv = pin_hash_attempt(required_kn, args->new_pin, args->new_pin_len, new_digest);
-        printf("pin_change() 21\n");
         if (rv) {
-            printf("pin_change() 22\n");
             goto se_fail;
         }
-        printf("pin_change() 23\n");
-        dump_buf(required_digest, 32);
+        // dump_buf(required_digest, 32);
         if (se_encrypted_write(target_slot, required_kn, required_digest, new_digest, 32)) {
-            printf("pin_change() 24\n");
             goto se_fail;
         }
 
-        printf("pin_change() 25\n");
         if (target_slot == required_kn) {
-            printf("pin_change() 26\n");
             memcpy(required_digest, new_digest, 32);
-            printf("pin_change() 27\n");
         }
 
-        printf("pin_change() 28\n");
-        if (target_slot == KEYNUM_main_pin) {
-            printf("pin_change() 29\n");
-
+        if (target_slot == KEYNUM_pin_hash) {
             // main pin is changing; reset counter to zero (good login) and our cache
-            pin_cache_save(args, new_digest);
-            printf("pin_change() 30\n");
+            rv = pin_cache_save(args, new_digest);
+            if (rv) {
+                return rv;
+            }
 
             updates_for_good_login(new_digest);
-            printf("pin_change() 31\n");
         }
     }
 
     // Record new secret.
     // Note the required_digest might have just changed above.
     if (cf & CHANGE_SECRET) {
-        printf("pin_change() 32\n");
-        int secret_kn = KEYNUM_secret;
-        printf("pin_change() 33\n");
+        int secret_kn = KEYNUM_seed;
 
         bool is_all_zeros = check_all_zeros(args->secret, SE_SECRET_LEN);
-        printf("pin_change() 34\n");
 
         // encrypt new secret, but only if not zeros!
         uint8_t     tmp[SE_SECRET_LEN] = {0};
         if (!is_all_zeros) {
-            printf("pin_change() 35\n");
             xor_mixin(tmp, rom_secrets->otp_key, SE_SECRET_LEN);
             xor_mixin(tmp, args->secret, SE_SECRET_LEN);
         }
 
-        printf("pin_change() 36\n");
-        dump_buf(required_digest, 32);
+        // dump_buf(required_digest, 32);
         if (se_encrypted_write(secret_kn, required_kn, required_digest, tmp, SE_SECRET_LEN)){
-            printf("pin_change() 37\n");
             goto se_fail;
         }
 
         // update the zero-secret flag to be correct.
         if (cf & CHANGE_SECRET) {
-            printf("pin_change() 38\n");
             if (is_all_zeros) {
-                printf("pin_change() 39\n");
                 args->state_flags |= PA_ZERO_SECRET;
             } else {
-                printf("pin_change() 40\n");
                 args->state_flags &= ~PA_ZERO_SECRET;
             }
         }
-        printf("pin_change() 41\n");
     }
 
     se_reset_chip();
-    printf("pin_change() 42\n");
 
     // need to pass back the (potentially) updated cache value and some flags.
     _sign_attempt(args);
-    printf("pin_change() 43\n");
 
     return 0;
 
 se_fail:
-    printf("pin_change() 44\n");
     se_reset_chip();
-    printf("pin_change() 45\n");
 
     return EPIN_SE_FAIL;
 }
@@ -882,10 +842,13 @@ int pin_fetch_secret(pinAttempt_t *args)
     // - no real need to re-prove PIN knowledge.
     // - if they tricked us, doesn't matter as below the SE validates it all again
     uint8_t     digest[32];
-    pin_cache_restore(args, digest);
+    rv = pin_cache_restore(args, digest);
+    if (rv) {
+        return rv;
+    }
 
-    int pin_kn = KEYNUM_main_pin;
-    int secret_slot = KEYNUM_secret;
+    int pin_kn = KEYNUM_pin_hash;
+    int secret_slot = KEYNUM_seed;
 
     // read out the secret that corresponds to the pin
     rv = se_encrypted_read(secret_slot, pin_kn, digest, args->secret, SE_SECRET_LEN);
@@ -895,63 +858,6 @@ int pin_fetch_secret(pinAttempt_t *args)
     // decrypt the secret, but only if not zeros!
     if (!is_all_zeros) xor_mixin(args->secret, rom_secrets->otp_key, SE_SECRET_LEN);
 
-    se_reset_chip();
-
-    if (rv) return EPIN_SE_FAIL;
-
-    return 0;
-}
-
-// pin_long_secret()
-//
-// Read or write the "long" secret: an additional 416 bytes on 608a only.
-//
-int pin_long_secret(pinAttempt_t *args)
-{
-    // Validate args and signature
-    int rv = _validate_attempt(args, false);
-    if (rv) return rv;
-
-    if ((args->state_flags & PA_SUCCESSFUL) != PA_SUCCESSFUL) {
-        // must come here with a successful PIN login (so it's rate limited nicely)
-        return EPIN_WRONG_SUCCESS;
-    }
-
-    // fetch the already-hashed pin
-    // - no real need to re-prove PIN knowledge.
-    // - if they tricked us, doesn't matter as below the SE validates it all again
-    uint8_t     digest[32];
-    pin_cache_restore(args, digest);
-
-    // which 32-byte section?
-#ifdef FIXME
-    STATIC_ASSERT(CHANGE_LS_OFFSET == 0xf00);
-#endif /* FIXME */
-    int blk = (args->change_flags >> 8) & 0xf;
-    if (blk > 13) return EPIN_RANGE_ERR;
-
-    // read/write exactly 32 bytes
-    if (!(args->change_flags & CHANGE_SECRET)) {
-        rv = se_encrypted_read32(KEYNUM_long_secret, blk, KEYNUM_main_pin, digest, args->secret);
-        if(rv) goto fail;
-
-        if(!check_all_zeros(args->secret, 32)) {
-            xor_mixin(args->secret, rom_secrets->otp_key_long+(32*blk), 32);
-        }
-    } else {
-        // write case
-        uint8_t tmp[32] = {0};
-
-        if (!check_all_zeros(args->secret, 32)) {
-            xor_mixin(tmp, args->secret, 32);
-            xor_mixin(tmp, rom_secrets->otp_key_long+(32*blk), 32);
-        }
-
-        rv = se_encrypted_write32(KEYNUM_long_secret, blk, KEYNUM_main_pin, digest, tmp);
-        if (rv) goto fail;
-    }
-
-fail:
     se_reset_chip();
 
     if (rv) return EPIN_SE_FAIL;

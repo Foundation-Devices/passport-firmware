@@ -1,7 +1,7 @@
-# SPDX-FileCopyrightText: 2020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+# SPDX-FileCopyrightText: 2020 Foundation Devices, Inc. <hello@foundationdevices.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# SPDX-FileCopyrightText: 2018 Coinkite, Inc.  <coldcardwallet.com>
+# SPDX-FileCopyrightText: 2018 Coinkite, Inc. <coldcardwallet.com>
 # SPDX-License-Identifier: GPL-3.0-only
 #
 # (c) Copyright 2018 by Coinkite Inc. This file is part of Coldcard <coldcardwallet.com>
@@ -43,10 +43,6 @@ class ChainsBase:
 
     @classmethod
     def msg_signing_prefix(cls):
-        return cls.name.encode() + b' Signed Message:\n'
-
-    @classmethod
-    def msg_signing_prefix(cls):
         # see strMessageMagic ... but usually just the coin's name
         # prefixed w/ a length byte
         return '\x18Bitcoin Signed Message:\n'
@@ -66,7 +62,7 @@ class ChainsBase:
     def deserialize_node(cls, text, addr_fmt):
         # xpub/xprv to object
         addr_fmt = AF_CLASSIC if addr_fmt == AF_P2SH else addr_fmt
-        return trezorcrypto.bip32.deserialize(text, cls.slip132[addr_fmt].pub, cls.slip132[addr_fmt].priv)
+        return trezorcrypto.bip32.deserialize(text, cls.slip132[addr_fmt].pub, True)
 
     @classmethod
     def p2sh_address(cls, addr_fmt, witdeem_script):

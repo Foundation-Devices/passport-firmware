@@ -206,6 +206,7 @@ void SystemClock_Config(void)
     #if defined(STM32F4) || defined(STM32F7) || defined(STM32H7)
 #ifdef MICROPY_PASSPORT
     RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE | RCC_OSCILLATORTYPE_HSI48;
+    RCC_OscInitStruct.HSI48State = RCC_HSI48_ON;
 #else
     RCC_OscInitStruct.OscillatorType = MICROPY_HW_RCC_OSCILLATOR_TYPE;
 #endif /* MICROPY_PASSPORT*/

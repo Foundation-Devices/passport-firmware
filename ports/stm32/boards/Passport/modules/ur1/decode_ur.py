@@ -1,10 +1,10 @@
-# SPDX-FileCopyrightText: 2020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+# SPDX-FileCopyrightText: 2020 Foundation Devices, Inc. <hello@foundationdevices.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-from .utils import sha256_hash
 from .mini_cbor import decode_simple_cbor
 from .bc32 import decode_bc32_data
 from ubinascii import unhexlify as a2b_hex, hexlify as b2a_hex
+from common import system
 
 def check_and_get_sequence(sequence):
   pieces = sequence.upper().split('OF')
@@ -21,7 +21,8 @@ def check_digest(digest, payload):
     raise ValueError('Unable to decode payload: {}'.format(payload))
 
   decoded_bytes = a2b_hex(decoded)
-  sha = sha256_hash(decoded_bytes)
+  sha = bytearray(32)
+  system.sha256(decoded_bytes, sha)
   decoded_digest = b2a_hex(sha).decode() # bytearray
   comp_digest = decode_bc32_data(digest) 
   if comp_digest != decoded_digest:
@@ -59,9 +60,9 @@ def deal_with_multiple_workloads(workloads, type='bytes'):
   fragments = ['' for i in range(num_workloads)]
   digest = None
   for workload in workloads:
-    print('workload = {}'.format(workload))
+    # print('workload = {}'.format(workload))
     pieces = workload.split('/')
-    print('pieces = {}'.format(pieces))
+    # print('pieces = {}'.format(pieces))
     check_ur_header(pieces[0], type)
     (index, total) = check_and_get_sequence(pieces[1])
     if total != num_workloads:

@@ -119,7 +119,7 @@ ifeq ($(DEBUG), 1)
 CFLAGS += -g -DPENDSV_DEBUG
 COPT = -O0
 else
-COPT += -Os -DNDEBUG
+COPT += -O2 -DNDEBUG
 endif
 
 # Options for mpy-cross

@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+// SPDX-FileCopyrightText: 2020 Foundation Devices, Inc. <hello@foundationdevices.com>
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 
@@ -6,9 +6,6 @@
 #define MICROPY_HW_MCU_NAME "STM32H753"
 
 #define MICROPY_PASSPORT
-
-// #define MICROPY_PASSPORT_HW_REV1
-#define MICROPY_PASSPORT_HW_REV2
 
 #define MICROPY_HW_ENABLE_RTC (1)
 #define MICROPY_HW_ENABLE_RNG (1)
@@ -23,6 +20,11 @@
 #define MICROPY_HW_HAS_FLASH (0)
 #define MICROPY_HW_ENABLE_INTERNAL_FLASH_STORAGE (0)
 #define MICROPY_HW_USB_MSC  (0)
+
+/* Turn off the network functionality */
+#define MICROPY_PY_NETWORK          (0)
+#define MICROPY_PY_USOCKET          (0)
+#define MICROPY_PY_UHASHLIB_SHA256  (0)
 
 #define PASSPORT_FOUNDATION_ENABLED (1)
 
@@ -51,7 +53,7 @@ void Passport_board_init(void);
 #define PASSPORT_KEYPAD_END_ATOMIC_SECTION(state)  enable_irq(state); keypad_write(KBD_ADDR, KBD_REG_INT_STAT, 0xFF)
 
 
-// The board has an 8MHz HSE, the following gives 400MHz CPU speed
+// The board has an 8MHz HSE, the following gives 480MHz CPU speed
 #define MICROPY_HW_CLK_PLLM (1)
 #define MICROPY_HW_CLK_PLLN (120)   //(19)
 #define MICROPY_HW_CLK_PLLP (2)

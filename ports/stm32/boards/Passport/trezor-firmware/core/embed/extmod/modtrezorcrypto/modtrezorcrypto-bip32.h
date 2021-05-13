@@ -29,6 +29,8 @@
 #include "nem.h"
 #endif
 
+#define FOUNDATION_ADDITIONS
+
 /// package: trezorcrypto.bip32
 
 /// class HDNode:
@@ -258,6 +260,29 @@ STATIC mp_obj_t mod_trezorcrypto_HDNode_derive_path(mp_obj_t self,
 STATIC MP_DEFINE_CONST_FUN_OBJ_2(mod_trezorcrypto_HDNode_derive_path_obj,
                                  mod_trezorcrypto_HDNode_derive_path);
 
+
+#ifdef FOUNDATION_ADDITIONS
+/// def serialize_private(self, version: int) -> str:
+///     """
+///     Serialize the public info from HD node to base58 string.
+///     """
+STATIC mp_obj_t mod_trezorcrypto_HDNode_serialize_private(mp_obj_t self,
+                                                          mp_obj_t version) {
+  uint32_t ver = trezor_obj_get_uint(version);
+  mp_obj_HDNode_t *o = MP_OBJ_TO_PTR(self);
+  char xpub[XPUB_MAXLEN] = {0};
+  int written = hdnode_serialize_private(&o->hdnode, o->fingerprint, ver, xpub,
+                                         XPUB_MAXLEN);
+  if (written <= 0) {
+    mp_raise_ValueError("Failed to serialize");
+  }
+  // written includes NULL at the end of the string
+  return mp_obj_new_str_copy(&mp_type_str, (const uint8_t *)xpub, written - 1);
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_2(mod_trezorcrypto_HDNode_serialize_private_obj, mod_trezorcrypto_HDNode_serialize_private);
+#endif
+
+
 /// def serialize_public(self, version: int) -> str:
 ///     """
 ///     Serialize the public info from HD node to base58 string.
@@ -316,7 +341,6 @@ STATIC mp_obj_t mod_trezorcrypto_HDNode_fingerprint(mp_obj_t self) {
 STATIC MP_DEFINE_CONST_FUN_OBJ_1(mod_trezorcrypto_HDNode_fingerprint_obj,
                                  mod_trezorcrypto_HDNode_fingerprint);
 
-#define FOUNDATION_ADDITIONS
 #ifdef FOUNDATION_ADDITIONS
 /// def my_fingerprint(self) -> int:
 ///     '''
@@ -406,6 +430,22 @@ STATIC mp_obj_t mod_trezorcrypto_HDNode_address(mp_obj_t self,
 }
 STATIC MP_DEFINE_CONST_FUN_OBJ_2(mod_trezorcrypto_HDNode_address_obj,
                                  mod_trezorcrypto_HDNode_address);
+
+#ifdef FOUNDATION_ADDITIONS
+/// def address_raw(self) -> bytes[20]:
+///     '''
+///     Compute a ripemd160-hash of hash(pubkey). Always 20 bytes of binary.
+///     '''
+STATIC mp_obj_t mod_trezorcrypto_HDNode_address_raw(mp_obj_t self) {
+    mp_obj_HDNode_t *o = MP_OBJ_TO_PTR(self);
+    // API requires a version, but we'll use zero and remove it.
+    uint8_t raw[21];
+    hdnode_get_address_raw(&o->hdnode, 0x0, raw);
+    return mp_obj_new_bytes(raw+1, 20);
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_1(mod_trezorcrypto_HDNode_address_raw_obj, mod_trezorcrypto_HDNode_address_raw);
+
+#endif // FOUNDATION_ADDITIONS
 
 #if !BITCOIN_ONLY
 
@@ -515,6 +555,10 @@ STATIC const mp_rom_map_elem_t mod_trezorcrypto_HDNode_locals_dict_table[] = {
 #endif
     {MP_ROM_QSTR(MP_QSTR_derive_path),
      MP_ROM_PTR(&mod_trezorcrypto_HDNode_derive_path_obj)},
+#ifdef FOUNDATION_ADDITIONS
+    {MP_ROM_QSTR(MP_QSTR_serialize_private),
+     MP_ROM_PTR(&mod_trezorcrypto_HDNode_serialize_private_obj)},
+#endif
     {MP_ROM_QSTR(MP_QSTR_serialize_public),
      MP_ROM_PTR(&mod_trezorcrypto_HDNode_serialize_public_obj)},
     {MP_ROM_QSTR(MP_QSTR_clone),
@@ -527,6 +571,8 @@ STATIC const mp_rom_map_elem_t mod_trezorcrypto_HDNode_locals_dict_table[] = {
 #ifdef FOUNDATION_ADDITIONS
     {MP_ROM_QSTR(MP_QSTR_my_fingerprint),
      MP_ROM_PTR(&mod_trezorcrypto_HDNode_my_fingerprint_obj)},
+    {MP_ROM_QSTR(MP_QSTR_address_raw),
+     MP_ROM_PTR(&mod_trezorcrypto_HDNode_address_raw_obj)},
 #endif
 
     {MP_ROM_QSTR(MP_QSTR_child_num),
@@ -561,6 +607,44 @@ STATIC const mp_obj_type_t mod_trezorcrypto_HDNode_type = {
 };
 
 /// mock:global
+
+#ifdef FOUNDATION_ADDITIONS
+
+/// def deserialize(self, value: str, version: int,  is_public: boolean) -> HDNode:
+///     '''
+///     Construct a BIP0032 HD node from a base58-serialized value.
+///     '''
+STATIC mp_obj_t mod_trezorcrypto_bip32_deserialize(mp_obj_t value, mp_obj_t version, mp_obj_t is_public) {
+    mp_buffer_info_t valueb;
+    mp_get_buffer_raise(value, &valueb, MP_BUFFER_READ);
+    if (valueb.len == 0) {
+        mp_raise_ValueError("Invalid value");
+    }
+    uint32_t _version = mp_obj_get_int_truncated(version);
+    bool _is_public = mp_obj_is_true(is_public);
+    HDNode hdnode;
+    uint32_t fingerprint;
+    if (_is_public) {
+      printf("Calling hdnode_deserialize_public()\n");
+      if (hdnode_deserialize_public(valueb.buf, _version, SECP256K1_NAME, &hdnode, &fingerprint) < 0) {
+          mp_raise_ValueError("Failed to deserialize public");
+      }
+    } else {
+      printf("Calling hdnode_deserialize_private()\n");
+      if (hdnode_deserialize_private(valueb.buf, _version, SECP256K1_NAME, &hdnode, &fingerprint) < 0) {
+          mp_raise_ValueError("Failed to deserialize private");
+      }
+    }
+
+    mp_obj_HDNode_t *o = m_new_obj(mp_obj_HDNode_t);
+    o->base.type = &mod_trezorcrypto_HDNode_type;
+    o->hdnode = hdnode;
+    o->fingerprint = fingerprint;
+
+    return MP_OBJ_FROM_PTR(o);
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_3(mod_trezorcrypto_bip32_deserialize_obj, mod_trezorcrypto_bip32_deserialize);
+#endif
 
 /// def from_seed(seed: bytes, curve_name: str) -> HDNode:
 ///     """
@@ -653,6 +737,9 @@ STATIC const mp_rom_map_elem_t mod_trezorcrypto_bip32_globals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_HDNode), MP_ROM_PTR(&mod_trezorcrypto_HDNode_type)},
     {MP_ROM_QSTR(MP_QSTR_from_seed),
      MP_ROM_PTR(&mod_trezorcrypto_bip32_from_seed_obj)},
+#ifdef FOUNDATION_ADDITIONS
+    { MP_ROM_QSTR(MP_QSTR_deserialize), MP_ROM_PTR(&mod_trezorcrypto_bip32_deserialize_obj) },
+#endif
 #if !BITCOIN_ONLY
     {MP_ROM_QSTR(MP_QSTR_from_mnemonic_cardano),
      MP_ROM_PTR(&mod_trezorcrypto_bip32_from_mnemonic_cardano_obj)},

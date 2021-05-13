@@ -1,7 +1,7 @@
-# SPDX-FileCopyrightText: 2020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+# SPDX-FileCopyrightText: 2020 Foundation Devices, Inc. <hello@foundationdevices.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# SPDX-FileCopyrightText: 2018 Coinkite, Inc.  <coldcardwallet.com>
+# SPDX-FileCopyrightText: 2018 Coinkite, Inc. <coldcardwallet.com>
 # SPDX-License-Identifier: GPL-3.0-only
 #
 # (c) Copyright 2018 by Coinkite Inc. This file is part of Coldcard <coldcardwallet.com>
@@ -27,7 +27,7 @@ from public_constants import (AF_CLASSIC, AFC_BECH32, AFC_SCRIPT, MAX_TXN_LEN,
                               SUPPORTED_ADDR_FORMATS)
 from sffile import SFFile
 from utils import HexWriter, cleanup_deriv_path, problem_file_line, xfp2str
-from ux import (abort_and_goto, ux_dramatic_pause, ux_show_story, ux_show_story_sequence)
+from ux import (abort_and_goto, ux_show_story, ux_show_story_sequence)
 
 # Where in SPI flash the two transactions are (in and out)
 TXN_INPUT_OFFSET = 0
@@ -43,14 +43,14 @@ class UserAuthorizedAction:
         self.result = None
         self.ux_done = False
 
-    def done(self):
+    async def done(self):
         # drop them back into menu system, but at top.
         self.ux_done = True
         from actions import goto_top_menu
-        m = goto_top_menu()
+        m = await goto_top_menu()
         m.show()
 
-    def pop_menu(self):
+    async def pop_menu(self):
         # drop them back into menu system, but try not to affect
         # menu position.
         self.ux_done = True
@@ -60,7 +60,7 @@ class UserAuthorizedAction:
         if the_ux.top_of_stack() == self:
             empty = the_ux.pop()
             if empty:
-                goto_top_menu()
+                await goto_top_menu()
 
         restore_menu()
 
@@ -72,15 +72,19 @@ class UserAuthorizedAction:
 
     async def failure(self, msg, exc=None, title='Failure'):
         self.failed = msg
-        self.done()
+        await self.done()
 
         if exc:
-            print("%s:" % msg)
+            # print("%s:" % msg)
             sys.print_exception(exc)
-            msg += "\n\n(%s)" % problem_file_line(exc)
 
-        from common import dis
+            exception_str = str(exc)
+            if exception_str:
+                msg += '\n\n'
+                msg += exception_str
 
+            msg += '\n\n'
+            msg += problem_file_line(exc)
 
         # may be a user-abort waiting, but we want to see error msg; so clear it
         # ux_clear_keys(True)
@@ -90,18 +94,14 @@ class UserAuthorizedAction:
 
 # Confirmation text for user when signing text messages.
 #
-MSG_SIG_TEMPLATE = '''\
-Ok to sign this?
-      --=--
+MSG_SIG_TEMPLATE = '''
 {msg}
       --=--
 
 Using the key associated with address:
 
 {subpath} =>
-{addr}
-
-Press Y if OK, otherwise X to cancel.'''
+{addr}'''
 
 # RFC2440 <https://www.ietf.org/rfc/rfc2440.txt> style signatures, popular
 # since the genesis block, but not really part of any BIP as far as I know.
@@ -118,22 +118,22 @@ RFC_SIGNATURE_TEMPLATE = '''\
 
 def sign_message_digest(digest, subpath, prompt):
     # do the signature itself!
-    from common import dis
+    from common import dis, system
 
     if prompt:
-        dis.fullscreen(prompt, percent=.25)
+        dis.fullscreen(prompt, percent=25)
 
     with stash.SensitiveValues() as sv:
-        dis.progress_bar_show(.50)
+        system.progress_bar(50)
 
         node = sv.derive_path(subpath)
         pk = node.private_key()
         sv.register(pk)
 
-        dis.progress_bar_show(.75)
+        system.progress_bar(75)
         rv = trezorcrypto.secp256k1.sign(pk, digest)
 
-    dis.progress_bar_show(1)
+    system.progress_bar(100)
 
     return rv
 
@@ -145,14 +145,14 @@ class ApproveMessageSign(UserAuthorizedAction):
         self.subpath = subpath
         self.approved_cb = approved_cb
 
-        from common import dis
+        from common import dis, system
         dis.fullscreen('Wait...')
 
         with stash.SensitiveValues() as sv:
             node = sv.derive_path(subpath)
             self.address = sv.chain.address(node, addr_fmt)
 
-        dis.progress_bar_show(1)
+        system.progress_bar(100)
 
     async def interact(self):
         # Prompt user w/ details and get approval
@@ -160,7 +160,7 @@ class ApproveMessageSign(UserAuthorizedAction):
 
         story = MSG_SIG_TEMPLATE.format(
             msg=self.text, addr=self.address, subpath=self.subpath)
-        ch = await ux_show_story(story)
+        ch = await ux_show_story(story, title='Sign File', right_btn='SIGN')
 
         if ch != 'y':
             # they don't want to!
@@ -179,9 +179,9 @@ class ApproveMessageSign(UserAuthorizedAction):
         if self.approved_cb:
             # don't kill menu depth for file case
             UserAuthorizedAction.cleanup()
-            self.pop_menu()
+            await self.pop_menu()
         else:
-            self.done()
+            await self.done()
 
     @staticmethod
     def validate(text):
@@ -317,19 +317,18 @@ def sign_txt_file(filename):
                     break
 
                 except OSError as exc:
-                    prob = 'Failed to write!\n\n%s\n\n' % exc
+                    prob = 'Unable to write!\n\n%s\n\n' % exc
                     sys.print_exception(exc)
                     # fall thru to try again
 
             # prompt them to input another card?
-            ch = await ux_show_story(prob+"Please insert an SDCard to receive signed message, "
-                                     "and press OK.", title="Need Card")
+            ch = await ux_show_story(prob+"Please insert a microSD card to save signed message, ", title="Need Card")
             if ch == 'x':
                 return
 
-        # done.
-        msg = "Created new file:\n\n%s" % out_fn
-        await ux_show_story(msg, title='File Signed')
+        # Done
+        msg = "Signed filename:\n\n%s" % out_fn
+        await ux_show_story(msg, title='File Signed', right_btn='DONE')
 
     # UserAuthorizedAction.check_busy()
     UserAuthorizedAction.active_request = ApproveMessageSign(
@@ -345,7 +344,6 @@ class ApproveTransaction(UserAuthorizedAction):
         super().__init__()
         self.psbt_len = psbt_len
         self.do_finalize = bool(flags & STXN_FINALIZE)
-        self.do_visualize = bool(flags & STXN_VISUALIZE)
         self.stxn_flags = flags
         self.psbt = None
         self.psbt_sha = psbt_sha
@@ -387,7 +385,7 @@ class ApproveTransaction(UserAuthorizedAction):
                 msg.write('\n\nWarnings:')
                 for label, m in self.psbt.warnings:
                     msg.write('\n%s: %s\n' % (label, m))
-            
+
             return msg.getvalue()
 # ADDRESSES
 # 05 1f d9 76 c3 a1 e5 70 a4 a1 fe 8d b7 b0 c7 d5 02 70 9d 80 69  8f 5a 99 da
@@ -397,188 +395,173 @@ class ApproveTransaction(UserAuthorizedAction):
 
     async def interact(self):
         # Prompt user w/ details and get approval
-        from common import dis
+        from common import dis, system
 
         # step 1: parse PSBT from sflash into in-memory objects.
         dis.fullscreen("Validating...")
 
-        if self.psbt == None:
+        try:
+            system.show_busy_bar()
+
+            if self.psbt == None:
+                try:
+                    # Read TXN from SPI Flash (we put it there whether it came from a QR code or an SD card)
+                    with SFFile(TXN_INPUT_OFFSET, length=self.psbt_len) as fd:
+                        self.psbt = psbtObject.read_psbt(fd)
+                except BaseException as exc:
+                    system.hide_busy_bar()
+                    if isinstance(exc, MemoryError):
+                        msg = "Transaction is too complex"
+                        exc = None
+                    else:
+                        msg = "PSBT parse failed"
+
+                    return await self.failure(msg, exc)
+
+            # Do some analysis/validation
             try:
-                # Read TXN from SPI Flash (we put it there whether it came from a QR code or an SD card)
-                with SFFile(TXN_INPUT_OFFSET, length=self.psbt_len) as fd:
-                    self.psbt = psbtObject.read_psbt(fd)
+                await self.psbt.validate()      # might do UX: accept multisig import
+                self.psbt.consider_inputs()
+                self.psbt.consider_keys()
+                self.psbt.consider_outputs()
+            except FraudulentChangeOutput as exc:
+                system.hide_busy_bar()
+                print('FraudulentChangeOutput: ' + exc.args[0])
+                return await self.failure(exc.args[0], title='Change Fraud')
+            except FatalPSBTIssue as exc:
+                system.hide_busy_bar()
+                print('FatalPSBTIssue: ' + exc.args[0])
+                return await self.failure(exc.args[0])
             except BaseException as exc:
+                system.hide_busy_bar()
+                del self.psbt
+                self.psbt = None
+                gc.collect()
+
                 if isinstance(exc, MemoryError):
                     msg = "Transaction is too complex"
                     exc = None
                 else:
-                    msg = "PSBT parse failed"
+                    msg = "Invalid PSBT"
 
                 return await self.failure(msg, exc)
 
-        # Do some analysis/validation
-        try:
-            await self.psbt.validate()      # might do UX: accept multisig import
-            self.psbt.consider_inputs()
-            self.psbt.consider_keys()
-            self.psbt.consider_outputs()
-        except FraudulentChangeOutput as exc:
-            print('FraudulentChangeOutput: ' + exc.args[0])
-            return await self.failure(exc.args[0], title='Change Fraud')
-        except FatalPSBTIssue as exc:
-            print('FatalPSBTIssue: ' + exc.args[0])
-            return await self.failure(exc.args[0])
-        except BaseException as exc:
-            del self.psbt
-            gc.collect()
+            # step 2: figure out what we are approving, so we can get sign-off
+            # - outputs, amounts
+            # - fee
+            #
+            # notes:
+            # - try to handle lots of outputs
+            # - cannot calc fee as sat/byte, only as percent
+            # - somethings are 'warnings':
+            #       - fee too big
+            #       - inputs we can't sign (no key)
+            #
+            try:
+                outputs = uio.StringIO()
+                outputs.write('Amount:')
 
-            if isinstance(exc, MemoryError):
-                msg = "Transaction is too complex"
-                exc = None
-            else:
-                msg = "Invalid PSBT"
+                first = True
+                for idx, tx_out in self.psbt.output_iter():
+                    outp = self.psbt.outputs[idx]
+                    if outp.is_change:
+                        continue
 
-            return await self.failure(msg, exc)
+                    if first:
+                        first = False
+                    else:
+                        outputs.write('\n')
 
-        # step 2: figure out what we are approving, so we can get sign-off
-        # - outputs, amounts
-        # - fee
-        #
-        # notes:
-        # - try to handle lots of outputs
-        # - cannot calc fee as sat/byte, only as percent
-        # - somethings are 'warnings':
-        #       - fee too big
-        #       - inputs we can't sign (no key)
-        #
-        try:
-            outputs = uio.StringIO()
-            outputs.write('Amount:')
-
-            first = True
-            for idx, tx_out in self.psbt.output_iter():
-                outp = self.psbt.outputs[idx]
-                if outp.is_change:
-                    continue
+                    outputs.write(self.render_output(tx_out))
 
                 if first:
-                    first = False
-                else:
-                    outputs.write('\n')
+                    # All outputs are change, so no amount is being "sent" to another wallet
+                    outputs.write('\nNone')
 
-                outputs.write(self.render_output(tx_out))
+                # print('total_out={} total_in={} change={}'.format=(self.psbt.total_value_out, self.psbt.total_value_in, self.psbt.total_value_in - self.psbt.total_value_out))
+                pages = [
+                    {'title': 'Sign Txn', 'msg': outputs.getvalue(), 'center': True, 'center_vertically': True},
+                    {'title': 'Sign Txn', 'msg': self.render_change_text(), 'center': True, 'center_vertically': True},
+                ]
 
-            # print('total_out={} total_in={} change={}'.format=(self.psbt.total_value_out, self.psbt.total_value_in, self.psbt.total_value_in - self.psbt.total_value_out))
-            pages = [
-                {'title': 'Sign Txn', 'msg': outputs.getvalue(), 'center': True, 'center_vertically': True},
-                {'title': 'Sign Txn', 'msg': self.render_change_text(), 'center': True, 'center_vertically': True},
-            ]
+                warnings = self.render_warnings()
+                # print('warnings = "{}"'.format(warnings))
+                if warnings != None:
+                    pages.append(
+                            {'title': 'Sign Txn', 'msg': warnings, 'center': True, 'center_vertically': True, 'right_btn': 'SIGN', 'clear_keys': True}
+                    )
 
-            warnings = self.render_warnings()
-            print('warnings = "{}"'.format(warnings))
-            if warnings != None:
-                pages.append(
-                        {'title': 'Sign Txn', 'msg': warnings, 'center': True, 'center_vertically': True, 'right_btn': 'SIGN!'}
-                )
+                # Stop busy bar to show info to user
+                system.hide_busy_bar()
 
-            if self.do_visualize:
-                # stop here and just return the text of approval message itself
-                self.result = await self.save_visualization(msg, (self.stxn_flags & STXN_SIGNED))
+                result = await ux_show_story_sequence(pages)
+
+            except MemoryError:
+                system.hide_busy_bar()
+
+                # recovery? maybe.
+                try:
+                    del self.psbt
+                    self.psbt = None
+                    del msg
+                except:
+                    pass        # might be NameError since we don't know how far we got
+                gc.collect()
+
+                msg = "Transaction is too complex"
+                return await self.failure(msg)
+
+            if result != 'y':
+                # User chose not to sign the transaction
+                self.refused = True
+
                 del self.psbt
-                self.done()
+                self.psbt = None
 
+                await self.done()
                 return
 
-            result = await ux_show_story_sequence(pages)
-
-        except MemoryError:
-            # recovery? maybe.
+            # do the actual signing.
             try:
-                del self.psbt
-                del msg
-            except:
-                pass        # might be NameError since we don't know how far we got
-            gc.collect()
+                gc.collect()
+                self.psbt.sign_it()
+            except FraudulentChangeOutput as exc:
+                return await self.failure(exc.args[0], title='Change Fraud')
+            except MemoryError:
+                msg = "Transaction is too complex"
+                return await self.failure(msg)
+            except BaseException as exc:
+                return await self.failure("Signing failed late", exc)
 
-            msg = "Transaction is too complex"
-            return await self.failure(msg)
+            # print('---------------- SIGNING COMPLETE ----------------------')
 
-        if result != 'y':
-            # User chose not to sign the transaction
-            self.refused = True
+            if self.approved_cb:
+                # for micro sd case
+                await self.approved_cb(self.psbt)
+                await self.done()
+                return
 
-            # TODO: ux_confirm() instead?
-            # await ux_dramatic_pause("Refused.", 1)
+            try:
+                system.show_busy_bar()
+                # re-serialize the PSBT back out
+                with SFFile(TXN_OUTPUT_OFFSET, max_size=MAX_TXN_LEN, message="Saving...") as fd:
+                    await fd.erase()
 
-            del self.psbt
+                    if self.do_finalize:
+                        self.psbt.finalize(fd)
+                    else:
+                        self.psbt.serialize(fd)
 
-            self.done()
-            return
+                    self.result = (fd.tell(), fd.checksum.digest())
 
-        # do the actual signing.
-        try:
-            gc.collect()
-            self.psbt.sign_it()
-        except FraudulentChangeOutput as exc:
-            return await self.failure(exc.args[0], title='Change Fraud')
-        except MemoryError:
-            msg = "Transaction is too complex"
-            return await self.failure(msg)
-        except BaseException as exc:
-            return await self.failure("Signing failed late", exc)
+                await self.done()
 
-        if self.approved_cb:
-            # for micro sd case
-            await self.approved_cb(self.psbt)
-            self.done()
-            return
-
-        try:
-            # re-serialize the PSBT back out
-            with SFFile(TXN_OUTPUT_OFFSET, max_size=MAX_TXN_LEN, message="Saving...") as fd:
-                await fd.erase()
-
-                if self.do_finalize:
-                    self.psbt.finalize(fd)
-                else:
-                    self.psbt.serialize(fd)
-
-                self.result = (fd.tell(), fd.checksum.digest())
-
-            self.done()
-
-        except BaseException as exc:
-            return await self.failure("PSBT output failed", exc)
-
-    # TODO: I don't think we're planning to support this, so consider removing it
-    def save_visualization(self, msg, sign_text=False):
-        # write text into spi flash, maybe signing it as we go
-        # - return length and checksum
-        txt_len = msg.seek(0, 2)
-        msg.seek(0)
-
-        chk = self.chain.hash_message(msg_len=txt_len) if sign_text else None
-
-        with SFFile(TXN_OUTPUT_OFFSET, max_size=txt_len+300, message="Visualizing...") as fd:
-            await fd.erase()
-
-            while 1:
-                blk = msg.read(256).encode('ascii')
-                if not blk:
-                    break
-                if chk:
-                    chk.update(blk)
-                fd.write(blk)
-
-            if chk:
-                from ubinascii import b2a_base64
-                # append the signature
-                digest = trezorcrypto.sha256(chk.digest()).digest()
-                sig = sign_message_digest(digest, 'm', None)
-                fd.write(b2a_base64(sig).decode('ascii').strip())
-                fd.write('\n')
-
-            return (fd.tell(), fd.checksum.digest())
+            except BaseException as exc:
+                return await self.failure("PSBT output failed", exc)
+            finally:
+                system.hide_busy_bar()
+        finally:
+            system.hide_busy_bar()
 
     def render_change_text(self):
         # Produce text report of what the "change" outputs are (based on our opinion).
@@ -588,14 +571,16 @@ class ApproveTransaction(UserAuthorizedAction):
             msg.write('Change Amount:')
             total = 0
             addrs = []
+            # print('len(outputs)={}'.format(len(self.psbt.outputs)))
             for idx, tx_out in self.psbt.output_iter():
                 outp = self.psbt.outputs[idx]
                 if not outp.is_change:
                     continue
+                # print('idx: {} output:{}'.format(idx, self.chain.render_address(tx_out.scriptPubKey)))
                 total += tx_out.nValue
                 addrs.append(self.chain.render_address(tx_out.scriptPubKey))
 
-            if not addrs:
+            if len(addrs) == 0:
                 msg.write('\nNo change')
                 return msg.getvalue()
 
@@ -702,19 +687,20 @@ def sign_transaction(psbt_len, flags=0x0, psbt_sha=None):
 def sign_psbt_file(filename):
     # sign a PSBT file found on a microSD card
     from files import CardSlot, CardMissingError
-    from common import dis
-    from sram4 import tmp_buf
+    from common import dis, system
+    # from sram4 import tmp_buf  -- the fd.readinto() below doesn't work for some odd reason, even though the fd.readinto() for firmware updates
+    tmp_buf = bytearray(1024)
     from utils import HexStreamer, Base64Streamer, HexWriter, Base64Writer
-
     UserAuthorizedAction.cleanup()
 
-    #print("sign: %s" % filename)
+    # print("sign: %s" % filename)
 
     # copy file into our spiflash
     # - can't work in-place on the card because we want to support writing out to different card
     # - accepts hex or base64 encoding, but binary prefered
     with CardSlot() as card:
         with open(filename, 'rb') as fd:
+
             dis.fullscreen('Reading...')
 
             # see how long it is
@@ -760,7 +746,7 @@ def sign_psbt_file(filename):
                             out.write(here)
                             total += len(here)
 
-                    dis.progress_bar_show(total / psbt_len)
+                    system.progress_bar((total * 100) // psbt_len)
 
             # might have been whitespace inflating initial estimate of PSBT size
             assert total <= psbt_len
@@ -808,24 +794,23 @@ def sign_psbt_file(filename):
 
                         if is_comp:
                             # write out as hex too, if it's final
-                            out2_full, out2_fn = card.pick_filename(
-                                base+'-final.txn', out_path)
+                            out2_full, out2_fn = card.pick_filename(base+'-final.txn', out_path)
                             if out2_full:
-                                with HexWriter(open(out2_full, 'wt')) as fd:
+                                with HexWriter(open(out2_full, 'w+t')) as fd:
                                     # save transaction, in hex
-                                    psbt.finalize(fd)
+                                    txid = psbt.finalize(fd)
 
                     # success and done!
                     break
 
                 except OSError as exc:
-                    prob = 'Failed to write!\n\n%s\n\n' % exc
+                    prob = 'Unable to write!\n\n%s\n\n' % exc
                     sys.print_exception(exc)
                     # fall thru to try again
 
             # prompt them to input another card?
-            ch = await ux_show_story(prob+"Please insert an SDCard to receive signed transaction, "
-                                     "and press OK.", title="Need Card")
+            ch = await ux_show_story(prob+"Please insert an microSD card to receive the signed transaction.",
+                                     title="Need Card")
             if ch == 'x':
                 return
 
@@ -833,6 +818,9 @@ def sign_psbt_file(filename):
         msg = "Updated PSBT is:\n\n%s" % out_fn
         if out2_fn:
             msg += '\n\nFinalized transaction (ready for broadcast):\n\n%s' % out2_fn
+
+            if txid:
+                msg += '\n\nFinal TXID:\n'+txid
 
         await ux_show_story(msg, title='PSBT Signed')
 
@@ -844,10 +832,10 @@ def sign_psbt_file(filename):
     # kill any menu stack, and put our thing at the top
     abort_and_goto(UserAuthorizedAction.active_request)
 
-def sign_psbt_buf(psbt_buf):
+async def sign_psbt_buf(psbt_buf):
     # sign a PSBT file found on a microSD card
     from uio import BytesIO
-    from common import dis
+    from common import dis, system
     from sram4 import tmp_buf
     from utils import HexStreamer, Base64Streamer, HexWriter, Base64Writer
 
@@ -867,32 +855,31 @@ def sign_psbt_buf(psbt_buf):
         fd.seek(0)
 
         if taste[0:5] == b'psbt\xff':
-            print('tastes like text PSBT')
+            # print('tastes like text PSBT')
             decoder = None
             def output_encoder(x): return x
         elif taste[0:10] == b'70736274ff':
-            print('tastes like binary PSBT')
+            # print('tastes like binary PSBT')
             decoder = HexStreamer()
             output_encoder = HexWriter
             psbt_len //= 2
         elif taste[0:6] == b'cHNidP':
-            print('tastes like Base64 PSBT')
+            # print('tastes like Base64 PSBT')
             decoder = Base64Streamer()
             output_encoder = Base64Writer
             psbt_len = (psbt_len * 3 // 4) + 10
         else:
+            print('Not a PSBT Transaction!')
             return
 
         total = 0
         with SFFile(TXN_INPUT_OFFSET, max_size=psbt_len) as out:
-            print('sign 1')
             # blank flash
             await out.erase()
-            print('sign 2')
 
             while 1:
                 n = fd.readinto(tmp_buf)
-                print('sign copy to SPI flash 1: n={}'.format(n))
+                # print('sign copy to SPI flash 1: n={}'.format(n))
                 if not n:
                     break
 
@@ -909,347 +896,50 @@ def sign_psbt_buf(psbt_buf):
                         out.write(here)
                         total += len(here)
 
-                print('sign copy to SPI flash 2: {}/{} = {}'.format(total, psbt_len, total/psbt_len))
-                dis.progress_bar_show(total / psbt_len)
-
-            print('sign 3')
+                # print('sign copy to SPI flash 2: {}/{} = {}'.format(total, psbt_len, total/psbt_len))
+                system.progress_bar((total * 100) // psbt_len)
 
         # might have been whitespace inflating initial estimate of PSBT size
         assert total <= psbt_len
         psbt_len = total
-        print('sign 4')
 
     # Create a new BytesIO() to hold the result
     async def done(psbt):
-        print('sign 5: done')
+        from common import system, last_scanned_qr_type
+        system.hide_busy_bar()
         signed_bytes = None
         with BytesIO() as bfd:
             with output_encoder(bfd) as fd:
-                print('sign 6: done')
-                if psbt.is_complete():
-                    print('sign 7: done')
-                    psbt.finalize(fd)
-                    print('sign 8: done')
-                else:
-                    print('sign 9: done')
-                    psbt.serialize(fd)
-                    print('sign 10: done')
-
+                # Always serialize back to PSBT for QR codes
+                psbt.serialize(fd)
                 bfd.seek(0)
                 signed_bytes = bfd.read()
-                print('signed_bytes={}'.format(signed_bytes))
-
-        print('sign 11: done')
+                # print('len(signed_bytes)={}'.format(len(signed_bytes)))
+                # print('signed_bytes={}'.format(signed_bytes))
 
         gc.collect()
 
         from ur1.encode_ur import encode_ur
-        from ubinascii import hexlify
-        signed_str = hexlify(signed_bytes)
-        print('signed_str={}'.format(signed_str))
-
         from ux import DisplayURCode
-        o = DisplayURCode('Signed Txn', 'Scan to Wallet', signed_str)
-        await o.interact_bare()
+        from data_codecs.qr_type import QRType
+        from ubinascii import hexlify as b2a_hex
 
+        signed_hex = b2a_hex(signed_bytes)
+        # lines = [signed_hex[i:i+100] for i in range(0, len(signed_hex), 100)]
+        # print('signed_bytes hex')
+        # for line in lines:
+        #     print(line)
+
+        # print('last_scanned_qr_type={}'.format(last_scanned_qr_type))
+        # print('len(signed_hex)={}'.format(len(signed_hex)))
+        o = DisplayURCode('Signed Txn', signed_hex, last_scanned_qr_type or QRType.UR2, None, is_binary=True)
+        result = await o.interact_bare()
         UserAuthorizedAction.cleanup()
 
-    print('sign 12: done')
     UserAuthorizedAction.active_request = ApproveTransaction(psbt_len, approved_cb=done)
-    print('sign 13: done')
 
     # kill any menu stack, and put our thing at the top
     abort_and_goto(UserAuthorizedAction.active_request)
-    print('sign 14: done')
-
-async def sign_psbt_buf_OLD(psbt_buf):
-    # sign a PSBT string
-    from common import dis
-    from sram4 import tmp_buf
-    from utils import HexStreamer, Base64Streamer, HexWriter, Base64Writer
-
-    UserAuthorizedAction.cleanup()
-
-    # Determine encoding used
-    psbt_len = len(psbt_buf)
-    taste = psbt_buf[0:10]
-    print('sign_psbt_buf: 1')
-    if taste[0:5] == b'psbt\xff':
-        print('sign_psbt_buf: 2')
-        print("sign 1")
-        decoder = None
-        def output_encoder(x): return x
-    elif taste[0:10] == b'70736274ff':
-        print("sign 2")
-        decoder = HexStreamer()
-        output_encoder = HexWriter
-        psbt_len //= 2
-    elif taste[0:6] == b'cHNidP':
-        print("sign 3")
-        decoder = Base64Streamer()
-        output_encoder = Base64Writer
-        psbt_len = (psbt_len * 3 // 4) + 10
-
-    print('sign_psbt_buf: 3')
-
-    async def done(psbt):
-        if psbt.is_complete():
-            psbt.finalize(fd)
-        else:
-            psbt.serialize(fd)
-
-        ch = await ux_show_signed_transaction()
-
-        await ux_show_story(msg, title='PSBT Signed')
-
-        UserAuthorizedAction.cleanup()
-
-    print('sign_psbt_buf: 4')
-    UserAuthorizedAction.active_request = ApproveTransaction(
-        psbt_len, approved_cb=done, psbt_buf=psbt_buf)
-    print('sign_psbt_buf: 5')
-
-    # Kill any menu stack, and put our thing at the top
-    abort_and_goto(UserAuthorizedAction.active_request)
-    print('sign_psbt_buf: 6')
-
-class RemoteBackup(UserAuthorizedAction):
-    def __init__(self):
-        super().__init__()
-        # self.result ... will be (len, sha256) of the resulting file at zero
-
-    async def interact(self):
-        try:
-            # Lead the user thru a complex UX.
-            from backups import make_complete_backup
-
-            r = await make_complete_backup(write_sflash=True)
-
-            if r:
-                # expect (length, sha)
-                self.result = r
-            else:
-                self.refused = True
-
-        except BaseException as exc:
-            self.failed = "Error during backup process."
-            print("Backup failure: ")
-            sys.print_exception(exc)
-        finally:
-            self.done()
-
-
-def start_remote_backup():
-    # tell the local user the secret words, and then save to SPI flash
-    # USB caller has to come back and download encrypted contents.
-
-    UserAuthorizedAction.cleanup()
-    UserAuthorizedAction.active_request = RemoteBackup()
-
-    # kill any menu stack, and put our thing at the top
-    abort_and_goto(UserAuthorizedAction.active_request)
-
-
-class NewPassphrase(UserAuthorizedAction):
-    def __init__(self, pw):
-        super().__init__()
-        self._pw = pw
-        # self.result ... will be (len, sha256) of the resulting file at zero
-
-    async def interact(self):
-        # prompt them
-        from common import settings
-
-        showit = False
-        while 1:
-            if showit:
-                ch = await ux_show_story('''Given:\n\n%s\n\nShould we switch to that wallet now?
-
-OK to continue, X to cancel.''' % self._pw, title="Passphrase")
-            else:
-                ch = await ux_show_story('''BIP39 passphrase (%d chars long) has been provided over USB connection. Should we switch to that wallet now?
-
-Press 2 to view the provided passphrase.\n\nOK to continue, X to cancel.''' % len(self._pw), title="Passphrase")
-
-            if ch == '2':
-                showit = True
-                continue
-            break
-
-        try:
-            if ch != 'y':
-                # User chose not to sign the transaction
-                self.refused = True
-
-                # TODO: ux_confirm() instead?
-                # await ux_dramatic_pause("Refused.", 1)
-            else:
-                from seed import set_bip39_passphrase
-
-                # full screen message shown: "Working..."
-                err = set_bip39_passphrase(self._pw)
-
-                if err:
-                    await self.failure(err)
-                else:
-                    self.result = settings.get('xpub')
-
-        except BaseException as exc:
-            self.failed = "Exception"
-            sys.print_exception(exc)
-        finally:
-            self.done()
-
-        if self.result:
-            new_xfp = settings.get('xfp')
-            await ux_show_story('''Above is the master key fingerprint of the current wallet.''',
-                                title="[%s]" % xfp2str(new_xfp))
-
-
-def start_bip39_passphrase(pw):
-    # tell the local user the secret words, and then save to SPI flash
-    # USB caller has to come back and download encrypted contents.
-
-    UserAuthorizedAction.cleanup()
-    UserAuthorizedAction.active_request = NewPassphrase(pw)
-
-    # kill any menu stack, and put our thing at the top
-    abort_and_goto(UserAuthorizedAction.active_request)
-
-
-class ShowAddressBase(UserAuthorizedAction):
-    title = 'Address:'
-
-    def __init__(self, *args):
-        super().__init__()
-
-        from common import dis
-        dis.fullscreen('Wait...')
-
-        # this must set self.address and do other slow setup
-        self.setup(*args)
-
-    async def interact(self):
-        # Just show the address... no real confirmation needed.
-        from common import dis
-
-        msg = self.get_msg()
-        msg += '\n\nCompare this payment address to the one shown on your other, less-trusted, software.'
-        msg += ' Press 4 to view QR Code.'
-
-        # TODO: Add a menu button to view QR code?
-        while 1:
-            ch = await ux_show_story(msg, title=self.title)
-
-            if ch == '4':
-                q = ux.QRDisplay(
-                    [self.address], (self.addr_fmt & AFC_BECH32))
-                await q.interact_bare()
-                continue
-
-            break
-
-        self.done()
-        UserAuthorizedAction.cleanup()      # because no results to store
-
-
-class ShowPKHAddress(ShowAddressBase):
-
-    def setup(self, addr_fmt, subpath):
-        self.subpath = subpath
-        self.addr_fmt = addr_fmt
-
-        with stash.SensitiveValues() as sv:
-            node = sv.derive_path(subpath)
-            self.address = sv.chain.address(node, addr_fmt)
-
-    def get_msg(self):
-        return '''{addr}\n\n= {sp}''' .format(addr=self.address, sp=self.subpath)
-
-
-class ShowP2SHAddress(ShowAddressBase):
-
-    def setup(self, ms, addr_fmt, xfp_paths, witdeem_script):
-
-        self.witdeem_script = witdeem_script
-        self.addr_fmt = addr_fmt
-        self.ms = ms
-
-        # calculate all the pubkeys involved.
-        self.subpath_help = ms.validate_script(
-            witdeem_script, xfp_paths=xfp_paths)
-
-        self.address = ms.chain.p2sh_address(addr_fmt, witdeem_script)
-
-    def get_msg(self):
-        return '''\
-{addr}
-
-Wallet:
-
-  {name}
-  {M} of {N}
-
-Paths:
-
-{sp}'''.format(addr=self.address, name=self.ms.name,
-               M=self.ms.M, N=self.ms.N, sp='\n\n'.join(self.subpath_help))
-
-
-def start_show_p2sh_address(M, N, addr_format, xfp_paths, witdeem_script):
-    # Show P2SH address to user, also returns it.
-    # - first need to find appropriate multisig wallet associated
-    # - they must provide full redeem script, and we will re-verify it and check pubkeys inside it
-
-    import ustruct
-    from multisig import MultisigWallet, MultisigOutOfSpace
-
-    try:
-        assert addr_format in SUPPORTED_ADDR_FORMATS
-        assert addr_format & AFC_SCRIPT
-    except:
-        raise AssertionError('Unknown/unsupported addr format')
-
-    # Search for matching multisig wallet that we must already know about
-    xfps = [i[0] for i in xfp_paths]
-
-    idx = MultisigWallet.find_match(M, N, xfps)
-    assert idx >= 0, 'Multisig wallet with those fingerprints not found'
-
-    ms = MultisigWallet.get_by_idx(idx)
-    assert ms
-    assert ms.M == M
-    assert ms.N == N
-
-    # UserAuthorizedAction.check_busy(ShowAddressBase)
-    UserAuthorizedAction.active_request = ShowP2SHAddress(
-        ms, addr_format, xfp_paths, witdeem_script)
-
-    # kill any menu stack, and put our thing at the top
-    abort_and_goto(UserAuthorizedAction.active_request)
-
-    # provide the value back to attached desktop
-    return UserAuthorizedAction.active_request.address
-
-
-def start_show_address(addr_format, subpath):
-    try:
-        assert addr_format in SUPPORTED_ADDR_FORMATS
-        assert not (addr_format & AFC_SCRIPT)
-    except:
-        raise AssertionError('Unknown/unsupported addr format')
-
-    # require a path to a key
-    subpath = cleanup_deriv_path(subpath)
-
-    # serAuthorizedAction.check_busy(ShowAddressBase)
-    UserAuthorizedAction.active_request = ShowPKHAddress(addr_format, subpath)
-
-    # kill any menu stack, and put our thing at the top
-    abort_and_goto(UserAuthorizedAction.active_request)
-
-    # provide the value back to attached desktop
-    return UserAuthorizedAction.active_request.address
 
 
 class NewEnrollRequest(UserAuthorizedAction):
@@ -1278,9 +968,6 @@ class NewEnrollRequest(UserAuthorizedAction):
                 # User chose not to sign the transaction
                 self.refused = True
 
-                # TODO: ux_confirm() instead?
-                # await ux_dramatic_pause("Refused.", 1)
-
         except MultisigOutOfSpace:
             return await self.failure('No space left')
         except BaseException as exc:
@@ -1288,13 +975,14 @@ class NewEnrollRequest(UserAuthorizedAction):
             sys.print_exception(exc)
         finally:
             UserAuthorizedAction.cleanup()      # because no results to store
-            self.pop_menu()
+            await self.pop_menu()
 
-
-def maybe_enroll_xpub(sf_len=None, config=None, name=None, ux_reset=False):
+def maybe_enroll_xpub(sf_len=None, config=None, name=None):
     # Offer to import (enroll) a new multisig wallet. Allow reject by user.
     from multisig import MultisigWallet
+    from common import system
 
+    system.turbo(True)
     UserAuthorizedAction.cleanup()
 
     if sf_len:
@@ -1306,14 +994,10 @@ def maybe_enroll_xpub(sf_len=None, config=None, name=None, ux_reset=False):
     ms = MultisigWallet.from_file(config, name=name)
 
     UserAuthorizedAction.active_request = NewEnrollRequest(ms)
+    system.turbo(False)
 
-    if ux_reset:
-        # for USB case, and import from PSBT
-        # kill any menu stack, and put our thing at the top
-        abort_and_goto(UserAuthorizedAction.active_request)
-    else:
-        # menu item case: add to stack
-        from ux import the_ux
-        the_ux.push(UserAuthorizedAction.active_request)
+    # Add to stack
+    from ux import the_ux
+    the_ux.push(UserAuthorizedAction.active_request)
 
 # EOF

@@ -21,7 +21,10 @@
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
+// #include <stdio.h>
 #include "quirc_internal.h"
+
+#include "utils.h"
 
 #pragma GCC diagnostic ignored "-Wdouble-promotion"
 
@@ -129,54 +132,70 @@ static void perspective_unmap(const double *c,
  * Span-based floodfill routine
  */
 
-#define FLOOD_FILL_MAX_DEPTH 4096
+// FOUNDATION: Added this code to restrict max stack depth
+#define FLOOD_FILL_MAX_DEPTH 720
 
+static int max_depth = 0;
 typedef void (*span_func_t)(void *user_data, int y, int left, int right);
 
-static void flood_fill_seed(struct quirc *q, int x, int y, int from, int to,
-							span_func_t func, void *user_data,
-							int depth)
-{
-	int left = x;
-	int right = x;
-	int i;
-	quirc_pixel_t *row = q->pixels + y * q->w;
+typedef struct _flood_fill_context {
+	struct quirc *q;
+	span_func_t func;
+	void *user_data;
+} flood_fill_context;
 
-	if (depth >= FLOOD_FILL_MAX_DEPTH)
+static void flood_fill_seed(flood_fill_context *context, short x, short y, short from, short to,
+							short depth)
+{
+	short left = x;
+	short right = x;
+	short i;
+
+	quirc_pixel_t *row = context->q->pixels + y * context->q->w;
+
+	// if (!check_stack_sentinel()) {
+	// 	printf("flood_fill_seed: depth=%d  max_depth=%d\n", depth, max_depth);
+	// 	return;
+	// }
+
+	if (depth >= FLOOD_FILL_MAX_DEPTH) {
 		return;
+	}
+
+	if (depth > max_depth) {
+		max_depth = depth;
+	}
 
 	while (left > 0 && row[left - 1] == from)
 		left--;
 
-	while (right < q->w - 1 && row[right + 1] == from)
+	while (right < context->q->w - 1 && row[right + 1] == from)
 		right++;
 
 	/* Fill the extent */
 	for (i = left; i <= right; i++)
 		row[i] = to;
 
-	if (func)
-		func(user_data, y, left, right);
+	if (context->func)
+		context->func(context->user_data, y, left, right);
 
 	/* Seed new flood-fills */
 	if (y > 0)
 	{
-		row = q->pixels + (y - 1) * q->w;
+		row = context->q->pixels + (y - 1) * context->q->w;
 
 		for (i = left; i <= right; i++)
 			if (row[i] == from)
-				flood_fill_seed(q, i, y - 1, from, to,
-								func, user_data, depth + 1);
+				flood_fill_seed(context, i, y - 1, from, to, depth + 1);
 	}
 
-	if (y < q->h - 1)
+	if (y < context->q->h - 1)
 	{
-		row = q->pixels + (y + 1) * q->w;
+		row = context->q->pixels + (y + 1) * context->q->w;
 
 		for (i = left; i <= right; i++)
 			if (row[i] == from)
-				flood_fill_seed(q, i, y + 1, from, to,
-								func, user_data, depth + 1);
+				flood_fill_seed(context, i, y + 1, from, to, depth + 1);
 	}
 }
 
@@ -273,7 +292,12 @@ static int region_code(struct quirc *q, int x, int y)
 	box->seed.y = y;
 	box->capstone = -1;
 
-	flood_fill_seed(q, x, y, pixel, region, area_count, box, 0);
+	flood_fill_context context;
+	context.q = q;
+	context.func = area_count;
+	context.user_data = box;
+
+	flood_fill_seed(&context, x, y, pixel, region, 0);
 
 	return region;
 }
@@ -347,9 +371,14 @@ static void find_region_corners(struct quirc *q,
 
 	memcpy(&psd.ref, ref, sizeof(psd.ref));
 	psd.scores[0] = -1;
-	flood_fill_seed(q, region->seed.x, region->seed.y,
-					rcode, QUIRC_PIXEL_BLACK,
-					find_one_corner, &psd, 0);
+
+	flood_fill_context context;
+	context.q = q;
+	context.func = find_one_corner;
+	context.user_data = &psd;
+
+	flood_fill_seed(&context, region->seed.x, region->seed.y,
+					rcode, QUIRC_PIXEL_BLACK, 0);
 
 	psd.ref.x = psd.corners[0].x - psd.ref.x;
 	psd.ref.y = psd.corners[0].y - psd.ref.y;
@@ -365,9 +394,9 @@ static void find_region_corners(struct quirc *q,
 	psd.scores[1] = i;
 	psd.scores[3] = -i;
 
-	flood_fill_seed(q, region->seed.x, region->seed.y,
-					QUIRC_PIXEL_BLACK, rcode,
-					find_other_corners, &psd, 0);
+	context.func = find_other_corners;
+	flood_fill_seed(&context, region->seed.x, region->seed.y,
+					QUIRC_PIXEL_BLACK, rcode, 0);
 }
 
 static void record_capstone(struct quirc *q, int ring, int stone)
@@ -471,8 +500,9 @@ static void finder_scan(struct quirc *q, int y)
 						pb[i] > check[i] * avg + err)
 						ok = 0;
 
-				if (ok)
+				if (ok) {
 					test_capstone(q, x, y, pb);
+				}
 			}
 		}
 
@@ -1014,12 +1044,18 @@ static void record_qr_grid(struct quirc *q, int a, int b, int c)
 			psd.scores[0] = -hd.y * qr->align.x +
 							hd.x * qr->align.y;
 
-			flood_fill_seed(q, reg->seed.x, reg->seed.y,
-							qr->align_region, QUIRC_PIXEL_BLACK,
-							NULL, NULL, 0);
-			flood_fill_seed(q, reg->seed.x, reg->seed.y,
-							QUIRC_PIXEL_BLACK, qr->align_region,
-							find_leftmost_to_line, &psd, 0);
+			flood_fill_context context;
+			context.q = q;
+			context.func = NULL;
+			context.user_data = NULL;
+
+			flood_fill_seed(&context, reg->seed.x, reg->seed.y,
+							qr->align_region, QUIRC_PIXEL_BLACK, 0);
+
+			context.func = find_leftmost_to_line;
+			context.user_data = &psd;
+			flood_fill_seed(&context, reg->seed.x, reg->seed.y,
+							QUIRC_PIXEL_BLACK, qr->align_region, 0);
 		}
 	}
 
@@ -1170,8 +1206,9 @@ void quirc_end(struct quirc *q)
 	uint8_t threshold = otsu(q);
 	pixels_setup(q, threshold);
 
-	for (i = 0; i < q->h; i++)
+	for (i = 0; i < q->h; i++) {
 		finder_scan(q, i);
+	}
 
 	for (i = 0; i < q->num_capstones; i++)
 		test_grouping(q, i);

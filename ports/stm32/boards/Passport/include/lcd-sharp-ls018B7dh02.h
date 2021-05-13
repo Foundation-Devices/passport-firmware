@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+// SPDX-FileCopyrightText: 2020 Foundation Devices, Inc. <hello@foundationdevices.com>
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // LCD driver for Sharp LS018B7DH02 monochrome display
@@ -41,10 +41,12 @@ typedef struct _LCDTestScreen {
     LCDTestLine lines[SCREEN_HEIGHT];
 } LCDTestScreen;
 
-void lcd_init(void);
+void lcd_init(bool clear);
 void lcd_deinit(void);
 void lcd_clear(bool invert);
 void lcd_update(uint8_t* screen_data, bool invert);
-void lcd_show_busy_bar();
 void lcd_test(void);
+void lcd_prebuffer_line(uint16_t y, uint8_t* line_data, bool invert);
+void lcd_update_line_range(uint16_t y_start, uint16_t y_end);
+
 #endif /* __LCD_H__ */

@@ -1041,7 +1041,7 @@ class QRCode:
         for data in self.data_list:
             buffer.put(data.mode, 4)
             buffer.put(len(data), mode_sizes[data.mode])
-            print('buffer={}'.format(buffer))
+            # print('buffer={}'.format(buffer))
             data.write(buffer)
 
         needed_bits = len(buffer)

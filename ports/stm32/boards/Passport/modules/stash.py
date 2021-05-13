@@ -1,7 +1,7 @@
-# SPDX-FileCopyrightText: 2020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+# SPDX-FileCopyrightText: 2020 Foundation Devices, Inc. <hello@foundationdevices.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# SPDX-FileCopyrightText: 2018 Coinkite, Inc.  <coldcardwallet.com>
+# SPDX-FileCopyrightText: 2018 Coinkite, Inc. <coldcardwallet.com>
 # SPDX-License-Identifier: GPL-3.0-only
 #
 # (c) Copyright 2018 by Coinkite Inc. This file is part of Coldcard <coldcardwallet.com>
@@ -18,7 +18,7 @@
 #    - 'abandon' * 11 + 'about'
 #
 import trezorcrypto, uctypes, gc
-from pincodes import AE_SECRET_LEN
+from pincodes import SE_SECRET_LEN
 
 def blank_object(item):
     # Use/abuse uctypes to blank objects until python. Will likely
@@ -32,9 +32,7 @@ def blank_object(item):
             buf[i] = 0
     elif isinstance(item, trezorcrypto.bip32.HDNode):
         pass
-        # This function was added by coinkite
-        # TODO: Important enough to add blank() back into trezor?
-        # item.blank()
+        # item.blank()  # node.blank() elsewhere
     else:
         raise TypeError(item)
 
@@ -47,7 +45,7 @@ class SecretStash:
 
     @staticmethod
     def encode(seed_bits=None, master_secret=None, xprv=None):
-        nv = bytearray(AE_SECRET_LEN)
+        nv = bytearray(SE_SECRET_LEN)
 
         if seed_bits:
             # typical: seed bits without checksum bits
@@ -95,7 +93,7 @@ class SecretStash:
             # seed phrase
             ll = ((marker & 0x3) + 2) * 8
 
-            # note: 
+            # note:
             # - byte length > number of words
             # - not storing checksum
             assert ll in [16, 24, 32]
@@ -121,11 +119,14 @@ class SecretStash:
 
 # optional global value: user-supplied passphrase to salt BIP39 seed process
 bip39_passphrase = ''
+bip39_hash = ''
 
 class SensitiveValues:
     # be a context manager, and holder to secrets in-memory
 
     def __init__(self, secret=None, for_backup=False):
+        from common import system
+
         if secret is None:
             # fetch the secret from bootloader/atecc508a
             from common import pa
@@ -134,22 +135,27 @@ class SensitiveValues:
                 raise ValueError('no secrets yet')
 
             self.secret = pa.fetch()
+            self.spots = [ self.secret ]
         else:
             # sometimes we already know it
-            assert set(secret) != {0}
+            # assert set(secret) != {0}
             self.secret = secret
+            self.spots = []
 
         # backup during volatile bip39 encryption: do not use passphrase
         self._bip39pw = '' if for_backup else str(bip39_passphrase)
+        # print('self._bip39pw={}'.format(self._bip39pw))
+
 
     def __enter__(self):
         import chains
 
         self.mode, self.raw, self.node = SecretStash.decode(self.secret, self._bip39pw)
 
-        self.chain = chains.current_chain()
+        self.spots.append(self.node)
+        self.spots.append(self.raw)
 
-        self.spots = [ self.secret, self.node, self.raw ]
+        self.chain = chains.current_chain()
 
         return self
 
@@ -161,7 +167,6 @@ class SensitiveValues:
 
         if hasattr(self, 'secret'):
             # will be blanked from above
-            assert self.secret == bytes(AE_SECRET_LEN)
             del self.secret
 
         if hasattr(self, 'node'):
@@ -175,31 +180,46 @@ class SensitiveValues:
         gc.collect()
 
         if exc_val:
-            # An exception happened, but we've done cleanup already now, so 
+            # An exception happened, but we've done cleanup already now, so
             # not a big deal. Cause it be raised again.
             return False
 
         return True
 
+    def get_xfp(self):
+        return self.node.my_fingerprint()
+
     def capture_xpub(self):
         # track my xpubkey fingerprint & value in settings (not sensitive really)
         # - we share these on any USB connection
+        import common
         from common import settings
 
-        # Implicit in the values is the BIP39 encryption passphrase,
-        # which we might not want to actually store.
-        # TODO: trezorcrypto doesn't implement this, but implement fingerprint() instead, which apparently
-        #       returns the fingerprint of the parent?!?!?!?
-        xfp = self.node.my_fingerprint()
-        xpub = self.chain.serialize_public(self.node)
+        # # Set the master values if no account selected yet
+        # if common.active_account:
+        #     # Derive xfp and xpub based on the current active account
+        #     # The BIP39 passphrase is already taken into account by SensitiveValues
+        #     # print('deriving from path: {}'.format(common.active_account.deriv_path))
+        #     if not common.active_account.deriv_path:
+        #         return
+        #
+        #     node = self.derive_path(common.active_account.deriv_path)
+        #
+        #     xfp = node.my_fingerprint()
+        #     print('capture_xpub(): xfp={}'.format(hex(xfp)))
+        #     xpub = self.chain.serialize_public(node, common.active_account.addr_type)
+        #     print('capture_xpub(): xpub={}'.format(xpub))
+        # else:
 
-        if self._bip39pw:
-            settings.set_volatile('xfp', xfp)
-            settings.set_volatile('xpub', xpub)
-        else:
-            settings.overrides.clear()
-            settings.set('xfp', xfp)
-            settings.set('xpub', xpub)
+        xfp = self.node.my_fingerprint()
+        # print('capture_xpub(): xfp={}'.format(hex(xfp)))
+        xpub = self.chain.serialize_public(self.node)
+        # print('capture_xpub(): xpub={}'.format(xpub))
+
+        # Always store these volatile - Takes less than 1 second to recreate, and it will change whenever
+        # a passphrase is entered, so no need to waste flash cycles on storing it.
+        settings.set_volatile('xfp', xfp)
+        settings.set_volatile('xpub', xpub)
 
         settings.set('chain', self.chain.ctype)
         settings.set('words', (self.mode == 'words'))
@@ -232,6 +252,6 @@ class SensitiveValues:
 
             rv.derive(here)
 
-        return rv    
+        return rv
 
 # EOF

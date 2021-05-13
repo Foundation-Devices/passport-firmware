@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+# SPDX-FileCopyrightText: 2020 Foundation Devices, Inc. <hello@foundationdevices.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # bip39_utils.py - Utility functions for working with BIP39 seed phrases
@@ -43,12 +43,10 @@ def word_to_keypad_numbers(word):
   return result
 
 
-# TODO: Simple linear search -- could replace with a binary search
-def get_words_matching_prefix(prefix, max=5):
+def get_words_matching_prefix(prefix, max=5, word_list='bip39'):
+    from foundation import bip39
 
-  from foundation import bip39
-
-  bip = bip39()
-  matches = bip.get_words_matching_prefix(prefix, max)
-
-  return matches.split(',')
+    # This actually handles bytewords too, depsite the name :(
+    bip = bip39()
+    matches = bip.get_words_matching_prefix(prefix, max, word_list)
+    return matches.split(',')

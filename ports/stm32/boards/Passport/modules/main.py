@@ -1,7 +1,7 @@
-# SPDX-FileCopyrightText: 2020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+# SPDX-FileCopyrightText: 2020 Foundation Devices, Inc. <hello@foundationdevices.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# SPDX-FileCopyrightText: 2018 Coinkite, Inc.  <coldcardwallet.com>
+# SPDX-FileCopyrightText: 2018 Coinkite, Inc. <coldcardwallet.com>
 # SPDX-License-Identifier: GPL-3.0-only
 #
 # (c) Copyright 2018 by Coinkite Inc. This file is part of Coldcard <coldcardwallet.com>
@@ -13,24 +13,19 @@
 import utime
 import uasyncio.core as asyncio
 from uasyncio import sleep_ms
+from periodic import update_ambient_screen_brightness, update_battery_level, check_auto_shutdown, demo_loop
+from schema_evolution import handle_schema_evolutions
 
+#
 # Show REPL welcome message
 print("Entered main.py")
 import gc
-print('1: Available RAM = {}'.format(gc.mem_free()))
-
-# camera = Camera()
-# start = utime.ticks_ms()
-# camera.copy_capture(bytearray(10), bytearray(10))
-# camera.copy_capture(bytearray(10), bytearray(10))
-# camera.copy_capture(bytearray(10), bytearray(10))
-# end = utime.ticks_ms()
-# print('Camera copy and conversion took {}ms'.format(end - start))
+print('Available RAM = {}'.format(gc.mem_free()))
 
 SETTINGS_FLASH_START = 0x81E0000
 SETTINGS_FLASH_SIZE  = 0x20000
 
-# We run main in a separate task so that the startup loop's variable can be released
+# We run main in a separate task so that the startup loop's variables can be released
 async def main():
 
     from ux import the_ux
@@ -39,48 +34,77 @@ async def main():
         await sleep_ms(10)
         await the_ux.interact()
 
-# Setup a new task for the main execution
-
 
 async def startup():
+    import common
+    from common import pa, loop
+    from actions import goto_top_menu, validate_passport_hw, initial_pin_setup, start_login_sequence
+
     print("startup()")
+    common.system.hide_busy_bar()
 
-    from actions import accept_terms, validate_passport_hw
-    await accept_terms()
+    import uctypes
+    buf = uctypes.bytearray_at(0x38000000, 1)
 
-    # We will come here again if the device is shutdown, but the validation
-    # words have not been confirmed (assuming the terms were accepted).
+    # Check for self-test
+    if buf[0] == 1:
+        from self_test_ux import SelfTestUX
+        self_test = SelfTestUX()
+        await self_test.show()
+
+    from accept_terms_ux import AcceptTermsUX
+    accept_terms = AcceptTermsUX()
+    await accept_terms.show()
+
     await validate_passport_hw()
 
-    # Setup first PIN if it's blank
-    from common import pa
-    from actions import initial_pin_setup
+    # Setup initial PIN if it's blank
     if pa.is_blank():
         await initial_pin_setup()
 
-    # Prompt for PIN and then pick appropriate top-level menu,
-    # based on contents of secure chip (ie. is there
-    # a wallet defined)
-    from actions import start_login_sequence
+    # Prompt for PIN and then pick appropriate top-level menu
     await start_login_sequence()
 
-    # from actions import test_normal_menu
-    # await test_normal_menu()
-    from actions import goto_top_menu
-    goto_top_menu()
+    # Set the key for the flash cache (cache is inaccessible prior to user logging in)
+    common.system.show_busy_bar()
+    common.flash_cache.set_key()
+    common.flash_cache.load()
 
-    from common import loop
+    # Trigger a get here so that the XFP & XPUB are captured
+    common.settings.get('xfp')
+
+    # See if an update was just performed -- we may need to run a schema evolution script
+    update_from_to = common.settings.get('update')
+    # print('update_from_to={}'.format(update_from_to))
+    if update_from_to:
+        await handle_schema_evolutions(update_from_to)
+
+    common.system.hide_busy_bar()
+
+    await goto_top_menu()
+
     loop.create_task(main())
 
 
-def go(operation='', field='chain', value='BTC'):
+def go():
     import common
     from sram4 import viewfinder_buf
-    print('2: Available RAM = {}'.format(gc.mem_free()))
+
+    # Initialize the common objects
 
     # Avalanche noise source
     from foundation import Noise
     common.noise = Noise()
+
+    # Initialize the seed of the PRNG in MicroPython with a real random number
+    # We only use the PRNG for non-critical randomness that just needs to be fast
+    import random
+    from utils import randint
+    random.seed(randint(0, 2147483647))
+
+    # Power monitor
+    from foundation import Powermon
+    common.powermon = Powermon()
 
     # Get the async event loop to pass in where needed
     common.loop = asyncio.get_event_loop()
@@ -88,37 +112,33 @@ def go(operation='', field='chain', value='BTC'):
     # System
     from foundation import System
     common.system = System()
+    common.system.show_busy_bar()
 
-    print('2.75: Available RAM = {}'.format(gc.mem_free()))
     # Initialize the keypad
     from keypad import Keypad
     common.keypad = Keypad()
-    print('3: Available RAM = {}'.format(gc.mem_free()))
 
     # Initialize SD card
     from files import CardSlot
     CardSlot.setup()
-    print('3.5: Available RAM = {}'.format(gc.mem_free()))
 
     # External SPI Flash
     from sflash import SPIFlash
     common.sf = SPIFlash()
 
-    # Initialize NV settings
+    # Initialize internal flash settings
     from settings import Settings
     common.settings = Settings(common.loop)
-    print('4: Available RAM = {}'.format(gc.mem_free()))
 
+    # Initialize the external flash cache
+    from flash_cache import FlashCache
+    common.flash_cache = FlashCache(common.loop)
 
     # Initialize the display and show the splash screen
     from display import Display
-    print("disp 1")
     common.dis = Display()
-    print("disp 2")
     common.dis.set_brightness(common.settings.get('screen_brightness', 100))
-    print("disp 3")
     common.dis.splash()
-    print('5: Available RAM = {}'.format(gc.mem_free()))
 
     # Allocate buffers for camera
     from constants import VIEWFINDER_WIDTH, VIEWFINDER_HEIGHT, CAMERA_WIDTH, CAMERA_HEIGHT
@@ -127,41 +147,19 @@ def go(operation='', field='chain', value='BTC'):
     import uctypes
     common.qr_buf = uctypes.bytearray_at(0x20000000, CAMERA_WIDTH * CAMERA_HEIGHT)
     # common.qr_buf = bytearray(CAMERA_WIDTH * CAMERA_HEIGHT)
-    print('6: Available RAM = {}'.format(gc.mem_free()))
 
     # Viewfinder buf 1s 1 bit per pixel and we round the screen width up to 240
-    # so it's a multiple of 8 bits.  The screen height of 303 minus 31 for the
+    # so it's a multiple of 8 bits. The screen height of 303 minus 31 for the
     # header and 31 for the footer gives 241 pixels, which we round down to 240
     # to give one blank (white) line before the footer.
     common.viewfinder_buf = bytearray((VIEWFINDER_WIDTH * VIEWFINDER_HEIGHT) // 8)
-    print('7: Available RAM = {}'.format(gc.mem_free()))
-
 
     # Show REPL welcome message
     print("Passport by Foundation Devices Inc. (C) 2020.\n")
 
-    print('8: Available RAM = {}'.format(gc.mem_free()))
-
     from foundation import SettingsFlash
     f = SettingsFlash()
 
-    if operation == 'dump':
-        print('Settings = {}'.format(common.settings.curr_dict))
-        print('addr = {}'.format(common.settings.addr))
-    elif operation == 'erase':
-        f.erase()
-    elif operation == 'set':
-        common.settings.set(field, value)
-    elif operation == 'stress':
-        for f in range(35):
-            print("Round {}:".format(f))
-            print('  Settings = {}'.format(common.settings.curr_dict))            
-            common.settings.set('field_{}'.format(f), f)
-            common.settings.save()
-
-        print('\nFinal Settings = {}'.format(common.settings.curr_dict))            
-
-    # This "pa" object holds some state shared w/ bootloader about the PIN
     try:
         from pincodes import PinAttempt
 
@@ -169,11 +167,27 @@ def go(operation='', field='chain', value='BTC'):
         common.pa.setup(b'')
     except RuntimeError as e:
         print("Secure Element Problem: %r" % e)
-    print('9: Available RAM = {}'.format(gc.mem_free()))
 
 
     # Setup the startup task
     common.loop.create_task(startup())
+
+    # Setup check for automatic screen brightness control
+    # Not used at this time
+    # common.loop.create_task(update_ambient_screen_brightness())
+
+    # Setup check to read battery level and put it in common.battery_level
+    common.loop.create_task(update_battery_level())
+
+    # Setup check for auto shutdown
+    common.loop.create_task(check_auto_shutdown())
+
+    # Setup check to read battery level and put it in common.battery_level
+    common.loop.create_task(demo_loop())
+
+    gc.collect()
+
+    print('Available RAM after init = {}'.format(gc.mem_free()))
 
     run_loop()
 
@@ -208,23 +222,6 @@ def run_loop():
                 ux.show_fatal_error(msg)
             except Exception as exc2:
                 sys.print_exception(exc2)
-
-            # securely die (wipe memory)
-            # TODO: Add this back in!
-            # try:
-            #     import callgate
-            #     callgate.show_logout(1)
-            # except: pass
-
-
-# Initialization
-# - NV storage / options
-# - PinAttempt class
-# -
-
-# Required to port
-# - pincodes.py - need to simplify
-#
 
 
 go()

@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2018 Coinkite, Inc.  <coldcardwallet.com>
+// SPDX-FileCopyrightText: 2018 Coinkite, Inc. <coldcardwallet.com>
 // SPDX-License-Identifier: GPL-3.0-only
 //
 /*
@@ -10,9 +10,8 @@
 #include <stdbool.h>
 
 #include "fwheader.h"
+#include "secresult.h"
 
-extern bool verify_current_firmware(void);
-extern bool verify_header(passport_firmware_header_t *hdr);
-extern bool verify_signature(passport_firmware_header_t *hdr, uint8_t *fw_hash, uint32_t hashlen);
-extern void verify_min_version(uint8_t *min_version);
-
+extern secresult verify_header(passport_firmware_header_t *hdr);
+extern secresult verify_current_firmware(bool process_led);
+extern secresult verify_signature(passport_firmware_header_t *hdr, uint8_t *fw_hash, uint32_t hashlen);

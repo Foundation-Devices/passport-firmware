@@ -1,9 +1,9 @@
-# SPDX-FileCopyrightText: 2020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+# SPDX-FileCopyrightText: 2020 Foundation Devices, Inc. <hello@foundationdevices.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 
 from uasyncio import sleep_ms
-from common import dis
+from common import dis, system, settings
 from display import Display, FontSmall
 from settings import Settings
 from ux import KeyInputHandler
@@ -229,16 +229,14 @@ class Game:
 async def snake_game():
 
     # Game functions and settings
-    s = Settings()
-    s.load()
     game = Game()
-    game.highscore = s.get('snake_highscore', 0)
+    game.highscore = settings.get('snake_highscore', 0)
 
     input = KeyInputHandler(down='udplrxy', up='xy')
 
     while game.running:
         event = await input.get_event()
-            
+
         if event != None:
             # Handle key event and update game state
             key, event_type = event
@@ -268,10 +266,11 @@ async def snake_game():
                     elif game.state == TRYING_TO_QUIT:
                         game.running = False
 
+        system.turbo(True)
         game.update(utime.ticks_ms())
         game.render()
+        system.turbo(False)
         await sleep_ms(1)
 
-    s.set('snake_highscore', game.highscore)
-    s.save()
+    settings.set('snake_highscore', game.highscore)
     return None

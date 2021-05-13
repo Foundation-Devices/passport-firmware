@@ -1,0 +1,19 @@
+usage()
+{
+    echo "Usage: `basename $0` <version information file name> <release string> [-h]"
+    echo "         -h: help"
+    exit 1
+}
+
+file=$1
+release=$2
+
+[ -z "$file" ] && usage
+[ -z "$release" ] && usage
+
+echo "// SPDX-FileCopyrightText: $(date +"%Y") Foundation Devices, Inc. <hello@foundationdevices.com>" > $file
+echo "// SPDX-License-Identifier: GPL-3.0-or-later" >> $file
+echo "//" >> $file
+echo "" >> $file
+echo "char *build_date = \"$(date +"%b. %d, %Y")\";" >> $file
+echo "char *build_version = \"$release\";" >> $file

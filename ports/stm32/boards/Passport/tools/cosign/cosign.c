@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+// SPDX-FileCopyrightText: 2020 Foundation Devices, Inc. <hello@foundationdevices.com>
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 #include <stdio.h>
@@ -44,9 +44,9 @@ static void usage(
     printf("Usage:%s\n", name);
     printf("\t-d: debug logging\n"
            "\t-f <firmware file>: full path to firmware file to sign\n"
-           "\t-h: this message"
+           "\t-h: this message\n"
 #ifdef USE_CRYPTO
-           "\t-k <private key filey>\n"
+           "\t-k <private key file>\n"
 #endif /* USE_CRYPTO */
            "\t-v <version>: firmware version\n"
           );
@@ -129,7 +129,7 @@ out:
     fclose(fp);
     return ret;
 }
-
+#ifdef USE_CRYPTO
 static uint8_t *read_private_key(
     char *key
 )
@@ -324,7 +324,7 @@ int find_public_key(
     }
     return -1;
 }
-
+#endif /* USE_CRYPTO */
 static void sign_firmware(
     char *fw,
 #ifdef USE_CRYPTO
@@ -333,7 +333,6 @@ static void sign_firmware(
     char *version
 )
 {
-    int rc;
     size_t ret = 0;
     size_t fwlen;
     uint8_t *fwbuf = NULL;
@@ -348,6 +347,7 @@ static void sign_firmware(
     uint8_t fw_hash[HASH_LEN];
     uint8_t *working_signature;
 #ifdef USE_CRYPTO
+    int rc;
     uint8_t working_key = 0;
     uint8_t *private_key;
     uint8_t *public_key;
@@ -369,21 +369,21 @@ static void sign_firmware(
     {
         printf("could not get private key\n");
         return;
-    }    
+    }
 
     public_key = read_public_key(key);
     if (public_key == NULL)
     {
         printf("could not get public key\n");
         return;
-    }    
+    }
 
     rc = find_public_key(public_key);
     if (rc < 0)
     {
-        printf("key %s does not have a supported public key\n", key);
-        return;
-    }    
+        printf("key %s not a supported public key...assuming user key\n", key);
+        working_key = FW_USER_KEY;
+    }
     else
         working_key = rc;
 #endif /* USE_CRYPTO */
@@ -438,7 +438,7 @@ static void sign_firmware(
     }
 
     /*
-     * Test for an existing header in the firwmare. I one exists that
+     * Test for an existing header in the firwmare. If one exists that
      * means that it has been signed at least once already.
      */
     hdrptr = (passport_firmware_header_t *)fwbuf;
@@ -484,8 +484,15 @@ static void sign_firmware(
         hdrptr = (passport_firmware_header_t *)header;
 
         /* Create a new header...this is the first signature. */
+        time_t now = time(NULL);
         hdrptr->info.magic = FW_HEADER_MAGIC;
-        hdrptr->info.timestamp = time(NULL);
+        hdrptr->info.timestamp = now;
+        struct tm now_tm = *localtime(&now);
+
+        // Make a string version of the date too for easier display in the bootloader
+        // where we don't have fancy date/time functions.
+        strftime((char*)hdrptr->info.fwdate, sizeof(hdrptr->info.fwdate), "%b %d, %Y", &now_tm);
+
         strcpy((char *)hdrptr->info.fwversion, version);
         hdrptr->info.fwlength = fwlen;
 #ifdef USE_CRYPTO
@@ -499,6 +506,7 @@ static void sign_firmware(
     {
         printf("FW header content:\n");
         printf("\ttimestamp: %d\n",   hdrptr->info.timestamp);
+        printf("\t   fwdate: %s\n",   hdrptr->info.fwdate);
         printf("\tfwversion: %s\n",   hdrptr->info.fwversion);
         printf("\t fwlength: %d\n",   hdrptr->info.fwlength);
     }
@@ -512,6 +520,7 @@ static void sign_firmware(
             printf("%02x", fw_hash[i]);
         printf("\n");
     }
+
 #ifdef USE_CRYPTO
     /* Encrypt the hash here... */
     rc = uECC_sign(private_key,
@@ -523,13 +532,16 @@ static void sign_firmware(
         goto out;
     }
 
-    rc = uECC_verify(approved_pubkeys[working_key],
-                     fw_hash, sizeof(fw_hash),
-                     working_signature, uECC_secp256k1());
-    if (rc == 0)
+    if (working_key != FW_USER_KEY)
     {
-        printf("verify signature failed\n");
-        goto out;
+        rc = uECC_verify(approved_pubkeys[working_key],
+                         fw_hash, sizeof(fw_hash),
+                         working_signature, uECC_secp256k1());
+        if (rc == 0)
+        {
+            printf("verify signature failed\n");
+            goto out;
+        }
     }
 #else
     memset(working_signature, 0, SIGNATURE_LEN);
@@ -581,6 +593,7 @@ static void dump_firmware_signature(
     size_t fwlen;
     uint8_t *fwbuf = NULL;
     passport_firmware_header_t *hdrptr;
+    uint8_t fw_hash[HASH_LEN];
 
     if (fw == NULL)
     {
@@ -604,6 +617,7 @@ static void dump_firmware_signature(
     {
         printf("FW header content:\n");
         printf("\ttimestamp: %d\n",   hdrptr->info.timestamp);
+        printf("\t   fwdate: %s\n",   hdrptr->info.fwdate);
         printf("\tfwversion: %s\n",   hdrptr->info.fwversion);
         printf("\t fwlength: %d\n",   hdrptr->info.fwlength);
         printf("\t      key: %d\n",   hdrptr->signature.pubkey1);
@@ -616,6 +630,22 @@ static void dump_firmware_signature(
         for (int i = 0; i < SIGNATURE_LEN; ++i)
             printf("%02x", hdrptr->signature.signature2[i]);
         printf("\n");
+
+        // Print hashes
+        hash_fw_user(fwbuf, fwlen, fw_hash, HASH_LEN, true);
+
+        printf("\nFW Build Hash:    ");
+        for (int i = 0; i < HASH_LEN; ++i)
+            printf("%02x", fw_hash[i]);
+        printf("\n");
+
+        hash_fw_user(fwbuf, fwlen, fw_hash, HASH_LEN, false);
+
+        printf("FW Download Hash: ");
+        for (int i = 0; i < HASH_LEN; ++i)
+            printf("%02x", fw_hash[i]);
+        printf("\n");
+
     }
     else
         printf("No firmware header found in file %s\n", fw);

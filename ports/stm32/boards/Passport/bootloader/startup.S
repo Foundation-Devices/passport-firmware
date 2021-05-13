@@ -1,8 +1,8 @@
 /*
-  SPDX-FileCopyrightText: 2020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+  SPDX-FileCopyrightText: 2020 Foundation Devices, Inc. <hello@foundationdevices.com>
   SPDX-License-Identifier: GPL-3.0-or-later
 
-  SPDX-FileCopyrightText: 2018 Coinkite, Inc.  <coldcardwallet.com>
+  SPDX-FileCopyrightText: 2018 Coinkite, Inc. <coldcardwallet.com>
   SPDX-License-Identifier: GPL-3.0-only
 */
 /* starting value for the top of our stack. */

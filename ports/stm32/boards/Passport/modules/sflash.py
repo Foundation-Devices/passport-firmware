@@ -1,13 +1,13 @@
-# SPDX-FileCopyrightText: 2020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+# SPDX-FileCopyrightText: 2020 Foundation Devices, Inc. <hello@foundationdevices.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# SPDX-FileCopyrightText: 2018 Coinkite, Inc.  <coldcardwallet.com>
+# SPDX-FileCopyrightText: 2018 Coinkite, Inc. <coldcardwallet.com>
 # SPDX-License-Identifier: GPL-3.0-only
 #
 # (c) Copyright 2018 by Coinkite Inc. This file is part of Coldcard <coldcardwallet.com>
 # and is covered by GPLv3 license found in COPYING.
 #
-# sflash.py - SPI Flash on rev D and up boards. Simple serial SPI flash on SPI2 port.
+# sflash.py - SPI Flash
 #
 # see also ../external/micropython/drivers/memory/spiflash.c
 # but not using that, because:
@@ -15,11 +15,11 @@
 # - it wants to waste 4k on a buffer
 #
 # Layout for project:
-#   - 384k PSBT incoming (MAX_TXN_LEN)
-#   - 384k PSBT outgoing (MAX_TXN_LEN)
-#   - 128k nvram settings (32 slots of 4k each)
-#
-# During firmware updates, entire flash, starting at zero may be used.
+#   - 768 PSBT incoming (MAX_TXN_LEN)
+#   - 768 PSBT outgoing (MAX_TXN_LEN)
+#   - The previous two regions are only used when signing PSBTs.
+#   - The same space is used to hold firmware updates.
+#   - 256k flash cache - similar to settings, but for UTXOs and wallet address cache
 #
 import machine
 
@@ -37,9 +37,9 @@ CMD_CHIP_ERASE  = const(0xc7)
 CMD_C4READ      = const(0xeb)
 
 class SPIFlash:
-    # must write with this page size granulatity
+    # must write with this page size granularity
     PAGE_SIZE = 256
-    # must erase with one of these size granulatity!
+    # must erase with one of these size granulatrty!
     SECTOR_SIZE = 4096
     BLOCK_SIZE = 65536
 
@@ -122,12 +122,12 @@ class SPIFlash:
         from nvstore import SLOTS
         end = SLOTS[0]
 
-        from common import dis
+        from common import system
         dis.fullscreen("Cleanup...")
 
         for addr in range(0, end, self.BLOCK_SIZE):
             self.block_erase(addr)
-            dis.progress_bar_show(addr/end)
+            system.progress_bar_show((addr*100)//end)
 
             while self.is_busy():
                 pass

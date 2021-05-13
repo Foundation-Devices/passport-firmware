@@ -12,9 +12,9 @@ Copyright: 2015, Kenneth MacKay
 License: BSD-2-Clause
 
 Files: graphics/*
-Copyright: 2020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+Copyright: 2020 Foundation Devices, Inc. <hello@foundationdevices.com>
 License: GPL-3.0-or-later
 
 Files: .vscode/settings.json TODO.txt bootloader/se-config.h clang-format.txt include/se-config.h modules/graphics.py pins.csv utils/README.md
-Copyright: 2020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+Copyright: 2020 Foundation Devices, Inc. <hello@foundationdevices.com>
 License: GPL-3.0-or-later

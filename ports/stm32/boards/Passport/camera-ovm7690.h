@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+// SPDX-FileCopyrightText: 2020 Foundation Devices, Inc. <hello@foundationdevices.com>
 // SPDX-License-Identifier: BSD-3-Clause
 //
 
@@ -44,7 +44,7 @@
 #define CAMERA_WIDTH 396
 #define CAMERA_HEIGHT 330
 #define FRAMEBUF_SIZE (CAMERA_WIDTH * CAMERA_HEIGHT)
-
+#if 0 /* Not used for now */
 /* Camera registers */
 #define GAIN 0x00
 #define BGAIN 0x01
@@ -190,6 +190,7 @@
 #define REGDF 0xDF
 #define REGE0 0xE0
 #define REGE1 0xE1
+#endif
 
 extern uint16_t *camera_frame_buffer;
 

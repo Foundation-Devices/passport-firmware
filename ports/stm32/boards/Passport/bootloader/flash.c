@@ -1,13 +1,13 @@
-// SPDX-FileCopyrightText: 2020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+// SPDX-FileCopyrightText: 2020 Foundation Devices, Inc. <hello@foundationdevices.com>
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// SPDX-FileCopyrightText: 2018 Coinkite, Inc.  <coldcardwallet.com>
+// SPDX-FileCopyrightText: 2018 Coinkite, Inc. <coldcardwallet.com>
 // SPDX-License-Identifier: GPL-3.0-only
 //
 // (c) Copyright 2018 by Coinkite Inc. This file is part of Coldcard <coldcardwallet.com>
 // and is covered by GPLv3 license found in COPYING.
 //
-// 
+//
 // flash.c -- manage flash and its sensitive contents.
 //
 
@@ -40,7 +40,7 @@ static inline bool is_pairing_secret_programmed(
     return false;
 }
 
-static inline bool is_se_programmed(void)
+static inline secresult is_se_programmed(void)
 {
     int rc;
     uint8_t config[128] = {0};
@@ -50,8 +50,8 @@ static inline bool is_se_programmed(void)
         LOCKUP_FOREVER(); /* Can't talk to the SE */
 
     if ((config[86] != 0x55) && (config[87] != 0x55))
-        return true;
-    return false;
+        return SEC_TRUE;
+    return SEC_FALSE;
 }
 
 // See FLASH_WaitForLastOperation((uint32_t)FLASH_TIMEOUT_VALUE)
@@ -113,11 +113,11 @@ void flash_lock(void)
     // see HAL_FLASH_Lock();
     SET_BIT(FLASH->CR1, FLASH_CR_LOCK);
     if (READ_BIT(FLASH->CR1, FLASH_CR_LOCK)) {
-        return; //INCONSISTENT("failed to lock bank 1");
+        return;
     }
     SET_BIT(FLASH->CR2, FLASH_CR_LOCK);
     if (READ_BIT(FLASH->CR2, FLASH_CR_LOCK)) {
-        return; //INCONSISTENT("failed to lock bank 2");
+        return;
     }
 }
 
@@ -131,7 +131,7 @@ void flash_unlock(void)
         WRITE_REG(FLASH->KEYR1, FLASH_KEY2);
 
         if(READ_BIT(FLASH->CR1, FLASH_CR_LOCK)) {
-            return; //INCONSISTENT("failed to unlock bank 1");
+            return;
         }
     }
     if (READ_BIT(FLASH->CR2, FLASH_CR_LOCK)) {
@@ -140,11 +140,12 @@ void flash_unlock(void)
         WRITE_REG(FLASH->KEYR2, FLASH_KEY2);
 
         if(READ_BIT(FLASH->CR2, FLASH_CR_LOCK)) {
-            return; //INCONSISTENT("failed to unlock bank 2");
+            return;
         }
     }
 }
 
+__attribute__((section(".ramfunc")))
 int flash_ob_lock(bool lock)
 {
     if (!lock)
@@ -155,7 +156,7 @@ int flash_ob_lock(bool lock)
             /* Authorizes the Option Byte registers programming */
             WRITE_REG(FLASH->OPTKEYR, FLASH_OPT_KEY1);
             WRITE_REG(FLASH->OPTKEYR, FLASH_OPT_KEY2);
-        
+
             /* Verify that the Option Bytes are unlocked */
             if (READ_BIT(FLASH->OPTCR, FLASH_OPTCR_OPTLOCK) != 0U)
             {
@@ -168,7 +169,7 @@ int flash_ob_lock(bool lock)
         /* see HAL_FLASH_OB_Lock() */
         /* Set the OPTLOCK Bit to lock the FLASH Option Byte Registers access */
         SET_BIT(FLASH->OPTCR, FLASH_OPTCR_OPTLOCK);
-    
+
         /* Verify that the Option Bytes are locked */
         if (READ_BIT(FLASH->OPTCR, FLASH_OPTCR_OPTLOCK) == 0U)
         {
@@ -289,18 +290,26 @@ static int flash_rom_secrets(rom_secrets_t *secrets)
 {
     __IO uint32_t *src_secrets = (__IO uint32_t *)secrets;
     __IO uint32_t *flash_secrets = (__IO uint32_t *)(BL_NVROM_BASE);
+    __IO uint32_t empty[FLASH_NB_32BITWORD_IN_FLASHWORD] = {0};
 
     uint32_t flash_word_len = sizeof(uint32_t) * FLASH_NB_32BITWORD_IN_FLASHWORD;
     uint32_t pos = (uint32_t)src_secrets;
     uint32_t dest = (uint32_t)flash_secrets;
+    uint32_t zeros = (uint32_t)empty;
     int i;
 
     flash_unlock();
 
-    for (i = 0; i < sizeof(rom_secrets_t); i += flash_word_len, pos += flash_word_len, dest += flash_word_len) {
-        if (flash_burn(dest, pos)) {
+    for (i = 0; i < sizeof(rom_secrets_t); i += flash_word_len, pos += flash_word_len, dest += flash_word_len)
+    {
+        if (flash_burn(dest, pos))
             return -1;
-        }
+    }
+
+    for (; i < BL_NVROM_SIZE; i += flash_word_len, dest += flash_word_len)
+    {
+        if (flash_burn(dest, zeros))
+            return -1;
     }
 
     flash_lock();
@@ -351,6 +360,24 @@ static int flash_bootloader(rom_secrets_t *secrets)
 }
 #endif /* JUST_PROGRAM_ROM_SECRETS */
 
+__attribute__((section(".ramfunc")))
+void flash_lockdown_hard(void)
+{
+#ifdef LOCKED
+    _flash_wait_done(FLASH_BANK_1);
+    _flash_wait_done(FLASH_BANK_2);
+    flash_ob_lock(false);
+
+    MODIFY_REG(FLASH->OPTSR_PRG, FLASH_OPTSR_RDP, (uint32_t)OB_RDP_LEVEL_2);
+
+    _flash_wait_done(FLASH_BANK_1);
+    _flash_wait_done(FLASH_BANK_2);
+    SET_BIT(FLASH->OPTCR, FLASH_OPTCR_OPTSTART);
+
+    flash_ob_lock(true);
+#endif /* LOCKED */
+}
+
 static void pick_pairing_secret(rom_secrets_t *local)
 {
     uint32_t secret[8];
@@ -376,11 +403,11 @@ static void pick_pairing_secret(rom_secrets_t *local)
         *pos = rng_sample();
     }
 
-    pos = (uint32_t *)&local->otp_key_long;
-    len = sizeof(local->otp_key_long);
-    for (i = 0; i < len; i += sizeof(uint32_t), ++pos) {
-        *pos = rng_sample();
-    }
+    // pos = (uint32_t *)&local->otp_key_long;
+    // len = sizeof(local->otp_key_long);
+    // for (i = 0; i < len; i += sizeof(uint32_t), ++pos) {
+    //     *pos = rng_sample();
+    // }
 
     pos = (uint32_t *)&local->hash_cache_secret;
     len = sizeof(local->hash_cache_secret);
@@ -389,11 +416,12 @@ static void pick_pairing_secret(rom_secrets_t *local)
     }
 }
 
-void flash_first_boot(void)
+secresult flash_first_boot(void)
 {
     int rc;
-    uint8_t fw_hash[HASH_LEN];
-    uint8_t board_hash[HASH_LEN];
+    uint8_t fw_hash[HASH_LEN] = {0};
+    uint8_t board_hash[HASH_LEN] = {0};
+    uint8_t zeros[HASH_LEN] = {0};
     passport_firmware_header_t *fwhdr = (passport_firmware_header_t *)FW_HDR;
     uint8_t *fwptr = (uint8_t *)fwhdr + FW_HEADER_SIZE;
     bool secrets_already_programmed;
@@ -401,17 +429,17 @@ void flash_first_boot(void)
     rom_secrets_t local_secrets = {0};
 
     if (sizeof(rom_secrets_t) > 2048)
-        LOCKUP_FOREVER();
+        return ERR_ROM_SECRETS_TOO_BIG;
 
-    if (!verify_header(fwhdr))
-        LOCKUP_FOREVER();
+    if (verify_header(fwhdr) != SEC_TRUE)
+        return ERR_INVALID_FIRMWARE_HEADER;
 
     hash_fw(&fwhdr->info, fwptr, fwhdr->info.fwlength, fw_hash, sizeof(fw_hash));
 
-    if (!verify_signature(fwhdr, fw_hash, sizeof(fw_hash)))
-        LOCKUP_FOREVER();
+    if (verify_signature(fwhdr, fw_hash, sizeof(fw_hash)) == SEC_FALSE)
+        return ERR_INVALID_FIRMWARE_SIGNATURE;
 
-    secrets_already_programmed = is_pairing_secret_programmed(rom_secrets->pairing_secret, 
+    secrets_already_programmed = is_pairing_secret_programmed(rom_secrets->pairing_secret,
                                                               sizeof(rom_secrets->pairing_secret));
 
     if (secrets_already_programmed)
@@ -421,7 +449,7 @@ void flash_first_boot(void)
 
     rc = se_setup_config(&local_secrets);
     if (rc != 0)
-        LOCKUP_FOREVER();
+        return ERR_UNABLE_TO_CONFIGURE_SE;
 
     if (!secrets_already_programmed)
     {
@@ -433,41 +461,40 @@ void flash_first_boot(void)
 #endif /* JUST_PROGRAM_ROM_SECRETS */
         HAL_ResumeTick();
         if (rc < 0)
-            LOCKUP_FOREVER();
-    }    
+            return ERR_UNABLE_TO_WRITE_ROM_SECRETS;
+    }
 
-#ifdef DEMO
-    memset(board_hash, 0, sizeof(board_hash));
-#else
+    // We need to lockdown the flash BEFORE programming the first board_hash into the SE so that the correct
+    // option bytes from the MCU are included in the hash.
+    flash_lockdown_hard();
+
+#ifdef PRODUCTION_BUILD
     hash_board(fw_hash, sizeof(fw_hash), board_hash, sizeof(board_hash));
-#endif /* DEMO */
-
-    rc = se_program_board_hash(board_hash, sizeof(board_hash));
-    if (rc < 0)
-        LOCKUP_FOREVER();
-
-    flash_lockdown_hard((uint32_t)OB_RDP_LEVEL_2);    
-}
-
-void flash_lockdown_hard(uint32_t rdp_level)
-{
-#ifndef FIXME /* Enable once we're almost ready to release and don't
-               * forget to move the secrets back into 0
-               */
-    return;
 #else
-    flash_ob_lock(false);
+    memset(board_hash, 0, sizeof(board_hash));
+#endif /* PRODUCTION_BUILD */
 
-    MODIFY_REG(FLASH->OPTSR_PRG, FLASH_OPTSR_RDP, rdp_level);
+    rc = se_program_board_hash(zeros, board_hash, sizeof(board_hash));
+    if (rc < 0)
+        return ERR_UNABLE_TO_UPDATE_FIRMWARE_HASH_IN_SE;
 
-    flash_ob_lock(true);
-#endif /* FIXME */
+    return SEC_TRUE;
 }
 
-bool flash_is_programmed(void)
+secresult flash_is_programmed(void)
 {
     if (!is_pairing_secret_programmed(rom_secrets->pairing_secret, sizeof(rom_secrets->pairing_secret)))
-        return false;
+        return SEC_FALSE;
 
     return is_se_programmed();
 }
+
+#ifdef LOCKED
+secresult flash_is_locked(void)
+{
+    uint32_t rdp_level = READ_BIT(FLASH->OPTSR_CUR, FLASH_OPTSR_RDP);
+    if (rdp_level == OB_RDP_LEVEL_2)
+        return SEC_TRUE;
+    return SEC_FALSE;
+}
+#endif /* LOCKED */

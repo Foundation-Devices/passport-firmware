@@ -122,7 +122,7 @@ STATIC void print_reg(const char *label, uint32_t val) {
     mp_hal_stdout_tx_str(fmt_hex(val, hexStr));
     mp_hal_stdout_tx_str("\r\n");
 }
-
+#ifndef MICROPY_PASSPORT
 STATIC void print_hex_hex(const char *label, uint32_t val1, uint32_t val2) {
     char hex_str[9];
     mp_hal_stdout_tx_str(label);
@@ -131,7 +131,7 @@ STATIC void print_hex_hex(const char *label, uint32_t val1, uint32_t val2) {
     mp_hal_stdout_tx_str(fmt_hex(val2, hex_str));
     mp_hal_stdout_tx_str("\r\n");
 }
-
+#endif /* MICROPY_PASSPORT */
 // The ARMv7M Architecture manual (section B.1.5.6) says that upon entry
 // to an exception, that the registers will be in the following order on the
 // // stack: R0, R1, R2, R3, R12, LR, PC, XPSR
@@ -140,7 +140,11 @@ typedef struct {
     uint32_t    r0, r1, r2, r3, r12, lr, pc, xpsr;
 } ExceptionRegisters_t;
 
+#ifdef MICROPY_PASSPORT
+int pyb_hard_fault_debug = 1;
+#else
 int pyb_hard_fault_debug = 0;
+#endif /* MICROPY_PASSPORT */
 
 void HardFault_C_Handler(ExceptionRegisters_t *regs) {
     if (!pyb_hard_fault_debug) {
@@ -153,6 +157,47 @@ void HardFault_C_Handler(ExceptionRegisters_t *regs) {
     pyb_usb_flags = 0;
     #endif
 
+#ifdef MICROPY_PASSPORT
+    uint32_t cfsr = SCB->CFSR;
+
+    mp_hal_stdout_tx_str("HardFault Occurred\r\n");
+    print_reg("HFSR  ", SCB->HFSR);
+    print_reg("CFSR  ", cfsr);
+    if (cfsr & 0x8000) {
+        uint32_t faultaddr = (uint32_t)SCB->BFAR;
+        uint32_t settings_sector = 0x081e0000;
+
+        mp_hal_stdout_tx_str("Bus Fault Occurred\r\n");
+        print_reg("Offending Address  ", SCB->BFAR);
+
+        if (faultaddr & settings_sector) {
+            FLASH_EraseInitTypeDef EraseInitStruct = {0};
+
+            /*
+             * Settings flash is pulling a double ECC fault. In order to
+             * recover we must erase the contents and then reset so that
+             * the software startup is successful.
+             */
+            mp_hal_stdout_tx_str("Recovery in progress...\r\n");
+
+            HAL_FLASH_Unlock();
+            __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_ALL_ERRORS_BANK1 | FLASH_FLAG_ALL_ERRORS_BANK2);
+
+            EraseInitStruct.TypeErase = TYPEERASE_SECTORS;
+            EraseInitStruct.VoltageRange = VOLTAGE_RANGE_3; // voltage range needs to be 2.7V to 3.6V
+            EraseInitStruct.Banks = FLASH_BANK_2;
+            EraseInitStruct.Sector = 7;
+            EraseInitStruct.NbSectors = 1;
+
+            uint32_t SectorError = 0;
+            HAL_FLASHEx_Erase(&EraseInitStruct, &SectorError);
+            HAL_FLASH_Lock();
+        }
+    }
+
+    /* Reset the board */
+    powerctrl_mcu_reset();
+#else
     mp_hal_stdout_tx_str("HardFault\r\n");
 
     print_reg("R0    ", regs->r0);
@@ -189,7 +234,7 @@ void HardFault_C_Handler(ExceptionRegisters_t *regs) {
             print_hex_hex("  ", (uint32_t)sp, *sp);
         }
     }
-
+#endif /* MICROPY_PASSPORT */
     /* Go to infinite loop when Hard Fault exception occurs */
     while (1) {
         __fatal_error("HardFault");
@@ -671,11 +716,13 @@ void TIM6_DAC_IRQHandler(void) {
 #endif
 
 #if defined(TIM7) // STM32F401 doesn't have TIM7
+#ifndef MICROPY_PASSPORT
 void TIM7_IRQHandler(void) {
     IRQ_ENTER(TIM7_IRQn);
     timer_irq_handler(7);
     IRQ_EXIT(TIM7_IRQn);
 }
+#endif /* MICROPY_PASSPORT */
 #endif
 
 #if defined(TIM8) // STM32F401 doesn't have TIM8

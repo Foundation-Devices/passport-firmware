@@ -1,7 +1,7 @@
-# SPDX-FileCopyrightText: 2020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+# SPDX-FileCopyrightText: 2020 Foundation Devices, Inc. <hello@foundationdevices.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# SPDX-FileCopyrightText: 2018 Coinkite, Inc.  <coldcardwallet.com>
+# SPDX-FileCopyrightText: 2018 Coinkite, Inc. <coldcardwallet.com>
 # SPDX-License-Identifier: GPL-3.0-only
 #
 # (c) Copyright 2018 by Coinkite Inc. This file is part of Coldcard <coldcardwallet.com>
@@ -85,35 +85,5 @@ def is_factory_mode():
 
     # return is_factory
     return False
-
-
-def is_fresh_version():
-    # from sigheader import RAM_BOOT_FLAGS, RBF_FRESH_VERSION
-    # import stm
-
-    # flags = stm.mem32[RAM_BOOT_FLAGS]
-
-    # return bool(flags & RBF_FRESH_VERSION)
-    return False
-
-
-def serial_number():
-    # Our USB serial number, both in DFU mode (system boot ROM), and later thanks to code in
-    #   USBD_StrDescriptor()
-    #
-    # - this is **probably** public info, since shared freely over USB during enumeration
-    #
-    import machine
-    i = machine.unique_id()
-    return "%02X%02X%02X%02X%02X%02X" % (i[11], i[10] + i[2], i[9], i[8] + i[0], i[7], i[6])
-
-
-def probe_system():
-    # run-once code to determine what hardware we are running on
-    global hw_label
-    hw_label = 'Passport'
-
-
-probe_system()
 
 # EOF

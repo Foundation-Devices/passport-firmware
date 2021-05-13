@@ -1,7 +1,7 @@
-# SPDX-FileCopyrightText: 2020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+# SPDX-FileCopyrightText: 2020 Foundation Devices, Inc. <hello@foundationdevices.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# SPDX-FileCopyrightText: 2018 Coinkite, Inc.  <coldcardwallet.com>
+# SPDX-FileCopyrightText: 2018 Coinkite, Inc. <coldcardwallet.com>
 # SPDX-License-Identifier: GPL-3.0-only
 #
 # Constants and various "limits" shared between embedded and desktop USB protocol
@@ -11,6 +11,8 @@ try:
 except ImportError:
     const = int
 
+from constants import PSBT_MAX_SIZE
+
 # For upload/download this is the max size of the data block.
 MAX_BLK_LEN = const(2048)
 
@@ -18,13 +20,10 @@ MAX_BLK_LEN = const(2048)
 # - includes args for upload command
 MAX_MSG_LEN = const(4+4+4+MAX_BLK_LEN)
 
-# Max PSBT txn we support (384k bytes as PSBT)
+# Max PSBT txn we support (896k as PSBT)
 # - the max on the wire for mainnet is 100k
 # - but a PSBT might contain a full txn for each input
-MAX_TXN_LEN = const(384*1024)
-
-# Max size of any upload (firmware.dfu files in particular)
-MAX_UPLOAD_LEN = const(2*MAX_TXN_LEN)
+MAX_TXN_LEN = PSBT_MAX_SIZE // 2
 
 # Max length of text messages for signing
 MSG_SIGNING_MAX_LENGTH = const(240)

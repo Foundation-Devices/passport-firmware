@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+# SPDX-FileCopyrightText: 2020 Foundation Devices, Inc. <hello@foundationdevices.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 
@@ -14,9 +14,9 @@ LD_FILES = boards/Passport/passport.ld boards/common_ifs.ld
 TEXT0_ADDR = 0x08020800
 
 # MicroPython settings
-MICROPY_PY_LWIP = 1
-MICROPY_PY_USSL = 1
-MICROPY_SSL_MBEDTLS = 1
+MICROPY_PY_LWIP = 0
+MICROPY_PY_USSL = 0
+MICROPY_SSL_MBEDTLS = 0
 
 FROZEN_MANIFEST = boards/Passport/manifest.py
 
@@ -55,17 +55,25 @@ build-Passport/boards/Passport/crypto/%.o: CFLAGS_MOD += \
 CFLAGS_MOD += -Iboards/$(BOARD)/trezor-firmware/core/embed/extmod/modtrezorcrypto -Iboards/$(BOARD)/trezor-firmware/core
 SRC_MOD += $(addprefix boards/$(BOARD)/trezor-firmware/core/embed/extmod/modtrezorcrypto/, modtrezorcrypto.c crc.c)
 
-BL_NVROM_BASE = 0x081c0000
-BL_NVROM_SIZE = 0x20000
+BL_NVROM_BASE = 0x0801FF00
+BL_NVROM_SIZE = 0x100
 CFLAGS_MOD += -DBL_NVROM_BASE=$(BL_NVROM_BASE) -DBL_NVROM_SIZE=$(BL_NVROM_SIZE)
-CFLAGS_MOD += -Iboards/$(BOARD)/include
+CFLAGS_MOD += -Iboards/$(BOARD)/include -Iboards/$(BOARD)/common/micro-ecc
 
 # include code common to both the bootloader and firmware
 SRC_MOD += $(addprefix boards/$(BOARD)/common/,\
-				delay.c \
-                                lcd-sharp-ls018B7dh02.c \
-				pprng.c \
-				se.c \
-				sha256.c \
-				spiflash.c \
-				utils.c )
+                backlight.c \
+                delay.c \
+                display.c \
+                gpio.c \
+                keypad-adp-5587.c \
+                lcd-sharp-ls018B7dh02.c \
+                pprng.c \
+                ring_buffer.c \
+                se.c \
+                sha256.c \
+                spiflash.c \
+                utils.c \
+				hash.c \
+				micro-ecc/uECC.c \
+                passport_fonts.c )

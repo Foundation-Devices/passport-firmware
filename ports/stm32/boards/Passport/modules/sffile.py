@@ -1,7 +1,7 @@
-# SPDX-FileCopyrightText: 2020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+# SPDX-FileCopyrightText: 2020 Foundation Devices, Inc. <hello@foundationdevices.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# SPDX-FileCopyrightText: 2018 Coinkite, Inc.  <coldcardwallet.com>
+# SPDX-FileCopyrightText: 2018 Coinkite, Inc. <coldcardwallet.com>
 # SPDX-License-Identifier: GPL-3.0-only
 #
 # (c) Copyright 2018 by Coinkite Inc. This file is part of Coldcard <coldcardwallet.com>
@@ -19,13 +19,13 @@
 import trezorcrypto
 from uasyncio import sleep_ms
 from uio import BytesIO
+from common import system
 
-# We have a single block of 128K on the STM32H753
-blksize = const(131072)
+blksize = const(65536)
 
 def PADOUT(n):
     # rounds up
-    return (n + blksize - 1) & ~(blksize-1)
+    return (n + blksize - 1) & ~(blksize - 1)
 
 
 class SFFile:
@@ -85,7 +85,7 @@ class SFFile:
 
             if i and self.message:
                 from common import dis
-                dis.progress_bar_show(i/self.max_size)
+                system.progress_bar((i*100)//self.max_size)
 
             # expect block erase to take up to 2 seconds
             while self.sf.is_busy():
@@ -100,12 +100,12 @@ class SFFile:
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.message:
             from common import dis
-            dis.progress_bar_show(1)
+            system.progress_bar(100)
 
         return False
 
     def wait_writable(self):
-        # TODO: timeouts here
+        # TODO: Could add some timeout handling here.
         while self.sf.is_busy():
             pass
 
@@ -170,13 +170,13 @@ class SFFile:
 
         if self.message and ll > 1:
             from common import dis
-            dis.progress_bar_show(self.pos / self.length)
+            system.progress_bar((self.pos * 100) // self.length)
 
         # altho tempting to return a bytearray (which we already have) many
         # callers expect return to be bytes and have those methods, like "find"
         return bytes(rv)
 
-    def read_into(self, b):
+    def readinto(self, b):
         # limitation: this will read past end of file, but not tell the caller
         actual = min(self.length - self.pos, len(b))
         if actual <= 0:
@@ -224,7 +224,7 @@ class SizerFile(SFFile):
     def read(self, ll=None):
         raise ValueError
 
-    def read_into(self, b):
+    def readinto(self, b):
         raise ValueError
 
     def close(self):

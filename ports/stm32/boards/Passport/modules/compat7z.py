@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2018 Coinkite, Inc.  <coldcardwallet.com>
+# SPDX-FileCopyrightText: 2018 Coinkite, Inc. <coldcardwallet.com>
 # SPDX-License-Identifier: GPL-3.0-only
 #
 # (c) Copyright 2018 by Coinkite Inc. This file is part of Coldcard <coldcardwallet.com>
@@ -18,6 +18,7 @@ from ubinascii import crc32
 from ustruct import unpack, pack, calcsize
 from ucollections import namedtuple
 from trezorcrypto import sha256          # uhashlib also works
+import trezorcrypto
 from uio import BytesIO
 from common import noise
 
@@ -25,8 +26,9 @@ def masked_crc(bits):
     return crc32(bits) & 0xffffffff
 
 def urandom(l):
+    from noise_source import NoiseSource
     rv = bytearray(l)
-    noise.random_bytes(rv)
+    noise.random_bytes(rv, NoiseSource.ALL)
     return rv
 
 def encode_utf_16_le(s):
@@ -46,7 +48,7 @@ def decode_utf_16_le(s):
 '''
   Size of encoding sequence depends from first byte:
   First_Byte  Extra_Bytes        Value
-  (binary)   
+  (binary)
   0xxxxxxx               : ( xxxxxxx           )
   10xxxxxx    BYTE y[1]  : (  xxxxxx << (8 * 1)) + y
   110xxxxx    BYTE y[2]  : (   xxxxx << (8 * 2)) + y
@@ -74,7 +76,7 @@ def read_var64(f):
         y = unpack("<Q", tmp)[0]
         x = first & (0xEF >> pos)
         return (x << pos) + y
-    
+
 def write_var64(n):
     # write their funky 64-bit variable-width unsigned number.
     # up to 64 bits of uint, but typically just single bytes
@@ -100,7 +102,7 @@ def test_var64():
         f = StringIO(write_var64(i))
         assert read_var64(f) == i, '%d != %s' % (i, b2a_hex(f.getvalue()))
 '''
-    
+
 def check_file_headers(f):
     # read the file-header and the "first" other header
     # assume f is seekable
@@ -113,7 +115,7 @@ def check_file_headers(f):
     sh = SectionHeader.read(f)
 
     if sh.actual_crc() != fh.crc:
-        print('act=%r expect=%r bits=%r' % (sh.actual_crc(), fh.crc, fh.bits))
+        # print('act=%r expect=%r bits=%r' % (sh.actual_crc(), fh.crc, fh.bits))
         raise ValueError("Second header has wrong CRC")
 
     if sh.size > 10000:
@@ -128,7 +130,7 @@ def check_file_headers(f):
         if len(th) != sh.size:
             raise IndexError("Truncated file? %s" % e.message)
 
-        # Look for properties about compression. this could be 
+        # Look for properties about compression. this could be
         # faked-out but good enough for now
         if b'\x24\x06\xf1\x07\x01' not in th:
             raise RuntimeError("Not marked as AES+SHA encrypted?")
@@ -144,7 +146,7 @@ def check_file_headers(f):
     f.seek(0)
 
     return
-    
+
 
 class FileHeader(object):
     def __init__(self):
@@ -175,12 +177,12 @@ class FileHeader(object):
 
     def write(self):
         self.bits = self.magic + pack('<BBL', self.major, self.minor, self.crc)
-        return self.bits 
+        return self.bits
 
     def actual_crc(self):
         return masked_crc(self.bits)
 
-        
+
 
 class SectionHeader(namedtuple('SectionHeader', ['offset', 'size', 'crc' ])):
     @classmethod
@@ -269,10 +271,11 @@ class Builder(object):
             key = self.calculate_key(password, progress_fcn)
 
             out = b''
-            aes = tcc.AES(tcc.AES.CBC | tcc.AES.Decrypt, key, self.iv)
+            # aes = tcc.AES(tcc.AES.CBC | tcc.AES.Decrypt, key, self.iv)
+            aes = trezorcrypto.aes(trezorcrypto.aes.CBC, key, self.iv)
 
             for blk in range(0, len(body), 16):
-                out += aes.update(body[blk:blk+16])
+                out += aes.decrypt(body[blk:blk+16])
 
             # trim padding, check CRC
             out = out[0:unpacked_size]
@@ -281,7 +284,7 @@ class Builder(object):
 
             # done. return contents
             return fname, out
-            
+
     def verify_file_crc(self, fd, max_size, expected_sections=3):
         # Read each section, and check CRC of headers, return list of files & sizes.
         fhdr = FileHeader.read(fd)
@@ -299,7 +302,7 @@ class Builder(object):
             assert len(body) <= unpacked_size+16, 'too big, encoded'
             assert len(body) % 16 == 0, 'not blocked'
 
-            #print("Section ok: '%s' of %d bytes =>  %r" % (fname, unpacked_size, shdr))
+            # print("Section ok: '%s' of %d bytes =>  %r" % (fname, unpacked_size, shdr))
 
             files.append((fname, unpacked_size))
 
@@ -312,7 +315,8 @@ class Builder(object):
         if not self.aes:
             # do this late, so easier to test w/ known values.
             #self.aes = AES.AESCipher(self.key, mode=AES.MODE_CBC, IV=self.iv)
-            self.aes = tcc.AES(tcc.AES.CBC | tcc.AES.Encrypt, self.key, self.iv)
+            # self.aes = tcc.AES(tcc.AES.CBC | tcc.AES.Encrypt, self.key, self.iv)
+            self.aes = trezorcrypto.aes(trezorcrypto.aes.CBC, self.key, self.iv)
 
         here = len(raw)
         self.pt_crc = crc32(raw, self.pt_crc)
@@ -326,7 +330,7 @@ class Builder(object):
         self.unpacked_size += here
 
         assert len(raw) % 16 == 0, b2a_hex(raw)
-        self.body += self.aes.update(raw)
+        self.body += self.aes.encrypt(raw)
 
 
     def calculate_key(self, password, progress_fcn=None):
@@ -344,8 +348,9 @@ class Builder(object):
             temp = pack('<Q', i)
             result.update(temp)
             if i % 1000 == 0 and progress_fcn:
-                progress_fcn(i/rounds)
-            
+                progress_fcn((i*100) // rounds)
+
+        progress_fcn(100)
         return result.digest()
 
     def render_hdr(self, fname):
@@ -382,7 +387,7 @@ class Builder(object):
         '''
         rv += BB('07 0b 01 00 01 24')
         rv += BB('06 f1 07 01')      		# = AES-256 + SHA-256
-    
+
         props = self.render_crypto_props()
         rv += write_var64(len(props))
         rv += props
@@ -391,15 +396,15 @@ class Builder(object):
 		# 00 - OutIndex
         rv += BB('01 00')
 
-        rv += BB('0c ') + write_var64(self.unpacked_size) + BB(' 00') 
+        rv += BB('0c ') + write_var64(self.unpacked_size) + BB(' 00')
 
         if 0:
             rv += BB('08 00')       # empty kSubStreamsInfo
         else:
             # kSubStreamsInfo with kCRC
-            rv += BB('08 0a 01 ') + pack('<L', self.pt_crc & 0xffffffff) + BB('00')       
+            rv += BB('08 0a 01 ') + pack('<L', self.pt_crc & 0xffffffff) + BB('00')
 
-        rv += BB('00')       # kEnd 
+        rv += BB('00')       # kEnd
 
         '''
             05 - kFilesInfo
@@ -412,8 +417,8 @@ class Builder(object):
         fname = encode_utf_16_le(fname + u'\x00')
         rv += BB('05 01 11') + write_var64(len(fname) + 1) + BB('00') + fname
 
-        rv += BB('00')       # kEnd 
-        rv += BB('00')       # kEnd 
+        rv += BB('00')       # kEnd
+        rv += BB('00')       # kEnd
 
         return rv
 
@@ -478,7 +483,7 @@ class Builder(object):
         assert rv.read(2) == b'\0\0'
 
         return fname, body_size, unpacked_size, expect_crc
-        
+
 
     def render_crypto_props(self):
         # render 2 bytes of header, then IV and or salt.
@@ -506,7 +511,7 @@ class Builder(object):
         ff.crc = masked_crc(sect.write())
 
         return ff.write() + sect.write(), sh
-        
+
 
 ''' working test code, but not needed in field...
 
@@ -526,13 +531,13 @@ def test_keybuild():
     assert t.rounds_pow == 19, "test data assumes 19"
     assert t.key == a2b_hex('886660203c30b116ac07bc8d24066697f35e476e7f07d6118ea9f27fbfb5d27b')
     assert t.key == t.calculate_key()
-    
+
     t.salt = 'abcdef'
     t.rounds_pow = 16
     assert pylzma.calculate_key(t.password, cycles=t.rounds_pow, salt=t.salt) \
                 == t.calculate_key()
     print("key deriv. works")
-    
+
 def test_buildone():
     t = Builder(b'test')
     t.add_data(b'a'*16)

@@ -1,5 +1,5 @@
 /*
-   SPDX-FileCopyrightText: 2020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+   SPDX-FileCopyrightText: 2020 Foundation Devices, Inc. <hello@foundationdevices.com>
    SPDX-License-Identifier: GPL-3.0-or-later
 
    GNU linker script for STM32H753
@@ -25,10 +25,10 @@ MEMORY
 _minimum_stack_size = 2K;
 _minimum_heap_size = 16K;
 
-/* Define the stack.  The stack is full descending so begins just above last byte
-   of RAM.  Note that EABI requires the stack to be 8-byte aligned for a call. */
+/* Define the stack. The stack is full descending so begins just above last byte
+   of RAM. Note that EABI requires the stack to be 8-byte aligned for a call. */
 _estack = ORIGIN(RAM) + LENGTH(RAM) - _estack_reserve;
-_sstack = _estack - 32K; /* tunable */
+_sstack = _estack - 48K; /* tunable */
 
 /* RAM extents for the garbage collector */
 _ram_start = ORIGIN(RAM);

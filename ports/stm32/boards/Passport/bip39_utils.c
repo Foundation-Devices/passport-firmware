@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+// SPDX-FileCopyrightText: 2020 Foundation Devices, Inc. <hello@foundationdevices.com>
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 
@@ -12,7 +12,7 @@
 
 #include "bip39_utils.h"
 
-extern word_info_t word_info[];
+extern word_info_t bip39_word_info[];
 
 #ifdef UNUSED_CODE
 uint32_t letter_to_number(char ch) {
@@ -77,19 +77,19 @@ uint8_t starts_with(const char* s, const char* prefix) {
 }
 
 // Fills in `matches` with a comma-separated list of matching words
-void get_words_matching_prefix(char* prefix, char* matches, uint32_t matches_len, uint32_t max_matches) {
+void get_words_matching_prefix(char* prefix, char* matches, uint32_t matches_len, uint32_t max_matches, const word_info_t* word_info, uint32_t num_words) {
   char* pnext_match = matches;
   char candidate_keypad_digits[MAX_WORD_LEN + 1];
   uint32_t num_matches = 0;
   uint32_t total_written = 0;
 
-  for (uint32_t i = 0; i < NUM_WORDS; i++) { 
+  for (uint32_t i = 0; i < num_words; i++) {
     snprintf(candidate_keypad_digits, MAX_WORD_LEN + 1, "%lu", word_info[i].keypad_digits);
     if (starts_with(candidate_keypad_digits, prefix)) {
       // This is a match, so convert the offsets to a real string and append to the buffer
       uint32_t len = word_info_to_string(candidate_keypad_digits, word_info[i].offsets, pnext_match);
       if (total_written + len > matches_len - 1) {
-        // Don't write this one, as there is not enough room        
+        // Don't write this one, as there is not enough room
         break;
       }
       total_written += len;
@@ -112,5 +112,3 @@ void get_words_matching_prefix(char* prefix, char* matches, uint32_t matches_len
   }
   *pnext_match = 0;
 }
-
-

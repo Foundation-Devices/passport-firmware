@@ -1,8 +1,8 @@
 /*
-  SPDX-FileCopyrightText: 2020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+  SPDX-FileCopyrightText: 2020 Foundation Devices, Inc. <hello@foundationdevices.com>
   SPDX-License-Identifier: GPL-3.0-or-later
 
-  SPDX-FileCopyrightText: 2018 Coinkite, Inc.  <coldcardwallet.com>
+  SPDX-FileCopyrightText: 2018 Coinkite, Inc. <coldcardwallet.com>
   SPDX-License-Identifier: GPL-3.0-only
 */
 
@@ -26,24 +26,29 @@ SEARCH_DIR(.)
 /* Memory Spaces Definitions */
 MEMORY
 {
-  rom     (rx)  : ORIGIN = BL_FLASH_BASE, LENGTH = BL_FLASH_SIZE
-  ram     (rwx) : ORIGIN = BL_SRAM_BASE,  LENGTH = BL_SRAM_SIZE
-  itcm    (rwx) : ORIGIN = 0x00000000,    LENGTH = 0x10000
+    rom     (rx)  : ORIGIN = BL_FLASH_BASE, LENGTH = BL_FLASH_SIZE
+    ram     (rwx) : ORIGIN = BL_SRAM_BASE,  LENGTH = BL_SRAM_SIZE
+    itcm    (rwx) : ORIGIN = 0x00000000,    LENGTH = 0x10000
 }
 
 /* The stack size used by the bootloader. */
-STACK_SIZE = DEFINED(STACK_SIZE) ? STACK_SIZE : DEFINED(__stack_size__) ? __stack_size__ : 0x4000;
+STACK_SIZE = DEFINED(STACK_SIZE) ? STACK_SIZE : DEFINED(__stack_size__) ? __stack_size__ : 0x8000;
 
 /* Section Definitions */
 SECTIONS
 {
+    .isr_vector :
+    {
+        . = ALIGN(4);
+        KEEP(*(.isr_vector)) /* Startup code */
+        . = ALIGN(4);
+    } > rom
+
     .text :
     {
         . = ALIGN(4);
         _sfixed = .;
         KEEP(*(.entry_code))
-        KEEP(*(.outside_pcrop))
-        main.o(.text*)
 
         . = ALIGN(256);
         /* important: this pulls in library (libgcc) stuff here */
@@ -55,7 +60,7 @@ SECTIONS
 
     } > rom
 
-    /* .ARM.exidx is sorted, so has to go in its own output section.  */
+    /* .ARM.exidx is sorted, so has to go in its own output section. */
     PROVIDE_HIDDEN (__exidx_start = .);
     .ARM.exidx :
     {
@@ -121,18 +126,6 @@ SECTIONS
     /* Some very manual linking! I've tried doing it right, and couldn't get it to work well */
     addr_rom_secrets = BL_NVROM_BASE;
 
-	/* if you initialize a global var to some non-zero value, then that data ends up
-		in .relocate as read-only data and used briefly at startup (when copied to RAM).
-		We don't want to support that, so we're checking here that hasn't happened. */
-/*
-	ASSERT(_pdg_hack == _erelocate, 
-				"Sorry, no initialized data support! Set to zero or remove.")
-*/
-    /* ensure binary fits */
-/*
-    ASSERT(_erelocate - BL_CODE_BASE + _etext <= BL_FLASH_BASE + BL_FLASH_SIZE,
-                "Binary is too big to fit!!!")
-*/
     . = ALIGN(4);
     _end = . ;
 }

@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2018 Coinkite, Inc.  <coldcardwallet.com>
+# SPDX-FileCopyrightText: 2018 Coinkite, Inc. <coldcardwallet.com>
 # SPDX-License-Identifier: GPL-3.0-only
 #
 # (c) Copyright 2018 by Coinkite Inc. This file is part of Coldcard <coldcardwallet.com>
@@ -48,11 +48,13 @@ def _try_microsd(bad_fs_ok=False):
         return False
 
 
-def wipe_microsd_card():
-    # Erase and re-format SD card. Not secure erase, because that is too slow.
+def format_microsd_card():
+    # Erase and re-format SD card. Not a fully secure erase, because that is too slow.
     import callgate
     import pyb
-    from common import dis
+    from common import dis, system
+
+    system.turbo(True)
 
     try:
         os.umount('/sd')
@@ -69,26 +71,40 @@ def wipe_microsd_card():
     sd.power(0)
     sd.power(1)
 
-    dis.fullscreen('Part Erase...')
     cutoff = 1024       # arbitrary
     blk = bytearray(512)
 
+    # Just get one block of random data and write the same block
+    callgate.fill_random(blk)
+
+    dis.fullscreen('Erasing microSD...')
+
     for bnum in range(cutoff):
-        callgate.fill_random(blk)
         sd.writeblocks(bnum, blk)
-        dis.progress_bar_show(bnum/cutoff)
+        system.progress_bar(int((bnum/cutoff) * 100))
 
-    dis.fullscreen('Formating...')
+    system.progress_bar(100)
 
-    # remount, with newfs option
-    os.mount(sd, '/sd', readonly=0, mkfs=1)
+    system.show_busy_bar()
 
-    # done, cleanup
-    os.umount('/sd')
+    # Create a new FAT file system
+    from os import VfsFat
+    dis.fullscreen('Formatting FAT...')
+    VfsFat.mkfs(sd)
+
+    # # # remount
+    # # dis.fullscreen('Remounting microSD...')
+    # # os.mount(sd, '/sd', readonly=0)
+    #
+    # # done, cleanup
+    # os.umount('/sd')
 
     # important: turn off power
     sd = pyb.SDCard()
     sd.power(0)
+    system.hide_busy_bar()
+
+    system.turbo(False)
 
 
 class CardMissingError(RuntimeError):

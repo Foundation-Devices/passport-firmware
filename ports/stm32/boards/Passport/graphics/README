@@ -1,0 +1,5 @@
+NOTE: The following website is able to convert PNGs to true two-color images:
+
+https://manytools.org/image/colorize-filter/
+
+The py/build.py script requires exactly two color entries or it will fail.

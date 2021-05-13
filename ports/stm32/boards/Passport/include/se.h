@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+ * SPDX-FileCopyrightText: 2020 Foundation Devices, Inc. <hello@foundationdevices.com>
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 #ifndef _SECURE_ELEMENT_H_
@@ -53,6 +53,7 @@ extern void se_crc16_chain(uint8_t length, const uint8_t *data, uint8_t crc[2]);
 extern void se_write(seopcode_t opcode, uint8_t p1, uint16_t p2, uint8_t *data, uint8_t data_len);
 extern int  se_read(uint8_t *data, uint8_t len);
 extern int  se_read1(void);
+extern int  se_read_data_slot(int slot_num, uint8_t *data, int len);
 extern int  se_config_read(uint8_t *config);
 extern int  se_pair_unlock(void);
 extern int  se_checkmac(uint8_t keynum, const uint8_t *secret);
@@ -60,7 +61,12 @@ extern int  se_checkmac_hard(uint8_t keynum, const uint8_t *secret);
 extern int  se_gendig_slot(int slot_num, const uint8_t *slot_contents, uint8_t *digest);
 extern bool se_is_correct_tempkey(const uint8_t *expected_tempkey);
 extern int  se_pick_nonce(uint8_t *num_in, uint8_t *tempkey);
+extern int  se_encrypted_read(int data_slot, int read_kn, const uint8_t *read_key, uint8_t *data, int len);
 extern int  se_encrypted_write(int data_slot, int write_kn, const uint8_t *write_key, const uint8_t *data, int len);
-extern int  se_encrypted_write32(int data_slot, int blk, int write_kn, const uint8_t *write_key, const uint8_t *data);
+extern int  se_get_counter(uint32_t *result, uint8_t counter_number);
+extern int  se_add_counter(uint32_t *result, uint8_t counter_number, int incr);
+extern int  se_gendig_counter(int counter_num, const uint32_t expected_value, uint8_t digest[32]);
+
+extern uint8_t se_show_error(void);
 
 #endif /* _SECURE_ELEMENT_H_ */

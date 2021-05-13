@@ -1,9 +1,10 @@
-// SPDX-FileCopyrightText: 2020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+// SPDX-FileCopyrightText: 2020 Foundation Devices, Inc. <hello@foundationdevices.com>
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// SPDX-FileCopyrightText: 2018 Coinkite, Inc.  <coldcardwallet.com>
+// SPDX-FileCopyrightText: 2018 Coinkite, Inc. <coldcardwallet.com>
 // SPDX-License-Identifier: GPL-3.0-only
 //
+#include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
 #include <errno.h>
@@ -21,11 +22,11 @@
 #include "utils.h"
 
 #ifndef PASSPORT_BOOTLOADER
-#include "lcd-sharp-ls018B7dh02.h"
+#include "display.h"
 #endif /* PASSPORT_BOOTLOADER */
 
 /*
- * This bit should be define in the STM32H7 header files but it is not...
+ * This bit should be defined in the STM32H7 header files but it is not...
  * somehow was missed. It is a valid bit in the interrupt status register
  * so we'll define it here so as not to mess with the micropython HAL
  * installation.
@@ -35,7 +36,23 @@
 // "one wire" is on PA0 aka. UART4
 #define MY_UART         UART4
 
+/* SE error codes */
+#define SE_SUCCESS              0x00
+#define SE_CHECKMAC_MISCOMPARE  0x01
+#define SE_PARSE_ERROR          0x03
+#define SE_ECC_FAULT            0x05
+#define SE_SELF_TEST_ERROR      0x07
+#define SE_EXECUTION_ERROR      0x0F
+#define SE_WAKE_ACK             0x11
+#define SE_WATCHDOG_EXPIRING    0xEE
+#define SE_COMMS_ERROR          0xFF
+
+/* SE extended error codes */
+#define SE_EX_RETRY_OUT         0xE0
+
 #define STATS(x)
+
+static uint8_t last_error;
 
 uint32_t crc_errors;
 uint32_t not_ready_n;
@@ -65,6 +82,38 @@ typedef enum {
     IOFLAG_IDLE     = 0xBB,
     IOFLAG_SLEEP    = 0xCC,
 } ioflag_t;
+
+#ifndef PASSPORT_BOOTLOADER
+static char se_error[23];
+static char *error_to_str(uint8_t error)
+{
+    switch (error)
+    {
+        case SE_SUCCESS:              strcpy(se_error, "SE_SUCCESS"); break;
+        case SE_CHECKMAC_MISCOMPARE:  strcpy(se_error, "SE_CHECKMAC_MISCOMPARE"); break;
+        case SE_PARSE_ERROR:          strcpy(se_error, "SE_PARSE_ERROR"); break;
+        case SE_ECC_FAULT:            strcpy(se_error, "SE_ECC_FAULT"); break;
+        case SE_SELF_TEST_ERROR:      strcpy(se_error, "SE_SELF_TEST_ERROR"); break;
+        case SE_EXECUTION_ERROR:      strcpy(se_error, "SE_EXECUTION_ERROR"); break;
+        case SE_WAKE_ACK:             strcpy(se_error, "SE_WAKE_ACK"); break;
+        case SE_WATCHDOG_EXPIRING:    strcpy(se_error, "SE_WATCHDOG_EXPIRING"); break;
+        case SE_COMMS_ERROR:          strcpy(se_error, "SE_COMMS_ERROR"); break;
+        case SE_EX_RETRY_OUT:         strcpy(se_error, "SE_EX_RETRY_OUT"); break;
+        default:                      strcpy(se_error, "unknown error"); break;
+    }
+    return se_error;
+}
+#endif /* PASSPORT_BOOTLOADER */
+
+uint8_t se_show_error(void)
+{
+    uint8_t error = last_error;
+#ifndef PASSPORT_BOOTLOADER
+    printf("[%s] last SE error: %s, (%02X)\n", __func__, error_to_str(last_error), last_error);
+#endif /* PASSPORT_BOOTLOADER */
+    last_error = 0;
+    return error;
+}
 
 static inline void _send_byte(uint8_t ch)
 {
@@ -135,11 +184,8 @@ static inline int _read_byte(void)
         // "fast" timeout reached, clear flag
         ++rtof;
         MY_UART->ICR = USART_ICR_RTOCF;
-        return -1;
     }
-#ifdef FIXME
-    INCONSISTENT("rxf");
-#endif
+
     return -1;
 }
 
@@ -271,9 +317,6 @@ void se_write(seopcode_t opcode, uint8_t p1, uint16_t p2, uint8_t *data, uint8_t
         .p2_lsb = p2 & 0xff,
         .p2_msb = (p2 >> 8) & 0xff,
     };
-#ifdef FIXME
-    STATIC_ASSERT(sizeof(known) == 6);
-#endif
     STATS(last_op = opcode);
     STATS(last_p1 = p1);
     STATS(last_p2 = p2);
@@ -296,16 +339,12 @@ void se_write(seopcode_t opcode, uint8_t p1, uint16_t p2, uint8_t *data, uint8_t
     // insert a variable-length body area (sometimes)
     if (data_len) {
         _send_serialized(data, data_len);
-    
+
         se_crc16_chain(data_len, data, crc);
     }
 
     // send final CRC bytes
     _send_serialized(crc, 2);
-
-#ifndef PASSPORT_BOOTLOADER
-    lcd_show_busy_bar();
-#endif /* PASSPORT_BOOTLOADER */
 }
 
 int se_read(uint8_t *data, uint8_t len)
@@ -342,12 +381,14 @@ int se_read(uint8_t *data, uint8_t len)
                 len_error++;
                 if (resp_len == 4) {
                     /* Error code returned */
-                    ERRV(tmp[1], "ae errcode");
+                    ERRV(tmp[1], "se errcode");
                     len_error_two++;
 
                     if (tmp[1] == 0xEE)
                         wdgtimeout++;
-                    return -1;
+
+                    last_error = tmp[1];
+                    goto out;
                 }
                 ERRV(tmp[0], "wr len");
                 goto try_again;
@@ -356,13 +397,14 @@ int se_read(uint8_t *data, uint8_t len)
             if (!check_crc(tmp, actual)) {
                 ERR("bad crc");
                 crc_errors++;
+                last_error = SE_COMMS_ERROR;
                 goto try_again;
             }
         }
 
         memcpy(data, tmp + 1, actual - 3);
 
-        /* 
+        /*
          * Pause the watchdog in case there's more to do
          * NOTE: Requires a wake commmand to resume!
          */
@@ -374,6 +416,10 @@ try_again:
         ln_retry++;
     }
     retry_out++;
+    last_error = SE_EX_RETRY_OUT;
+
+out:
+    se_show_error();
     return -1;
 }
 
@@ -386,6 +432,51 @@ int se_read1(void)
     if (rc < 0)
         return -1;
     return data;
+}
+
+int se_read_data_slot(int slot_num, uint8_t *data, int len)
+{
+    int rc;
+    int rval = 0;
+#ifdef FIXME
+    ASSERT((len == 4) || (len == 32) || (len == 72));
+#endif
+    // zone => data
+    // only reading first block of 32 bytes. ignore the rest
+    se_write(OP_Read, (len == 4 ? 0x00 : 0x80) | 2, (slot_num<<3), NULL, 0);
+    rc = se_read(data, (len == 4) ? 4 : 32);
+    if (rc < 0)
+    {
+        rval = -1;
+        goto out;
+    }
+
+    if (len == 72) {
+        // read second block
+        se_write(OP_Read, 0x82, (1<<8) | (slot_num<<3), NULL, 0);
+        rc = se_read(data+32, 32);
+        if (rc < 0)
+        {
+            rval = -1;
+            goto out;
+        }
+
+        // read third block, but only using part of it
+        uint8_t     tmp[32];
+        se_write(OP_Read, 0x82, (2<<8) | (slot_num<<3), NULL, 0);
+        rc = se_read(tmp, 32);
+        if (rc < 0)
+        {
+            rval = -1;
+            goto out;
+        }
+
+        memcpy(data+64, tmp, 72-64);
+    }
+
+out:
+    se_sleep();
+    return rval;
 }
 
 void se_crc16_chain(uint8_t length, const uint8_t *data, uint8_t crc[2])
@@ -433,7 +524,7 @@ int se_wake(void)
 #ifdef PASSPORT_BOOTLOADER
     delay_us(2500);
 #else
-    delay_us(100);
+    delay_us(1250);
 #endif
 
     return 0;
@@ -571,7 +662,7 @@ bool se_is_correct_tempkey(
     uint8_t resp[32];
     int rc;
 
-    se_write(OP_MAC, mode, KEYNUM_pairing, NULL, 0);
+    se_write(OP_MAC, mode, KEYNUM_pairing_secret, NULL, 0);
     rc = se_read(resp, 32);
     se_sleep();
     if (rc < 0)
@@ -584,7 +675,7 @@ bool se_is_correct_tempkey(
     sha256_update(&ctx, rom_secrets->pairing_secret, 32);
     sha256_update(&ctx, expected_tempkey, 32);
 
-    const uint8_t fixed[16] = { OP_MAC, mode, KEYNUM_pairing, 0x0,
+    const uint8_t fixed[16] = { OP_MAC, mode, KEYNUM_pairing_secret, 0x0,
                                     0,0,0,0, 0,0,0,0,       // eight zeros
                                     0,0,0,                  // three zeros
                                     0xEE };
@@ -606,7 +697,7 @@ int se_pair_unlock()
     int rc;
     int attempts = 3;
     for (int i = 0; i < attempts; i++) {
-        rc = se_checkmac(KEYNUM_pairing, rom_secrets->pairing_secret);
+        rc = se_checkmac(KEYNUM_pairing_secret, rom_secrets->pairing_secret);
         if (rc == 0)
             return 0;
     }
@@ -673,7 +764,7 @@ int se_checkmac(
     sha256_final(&ctx, req.resp);
     memcpy(req.od, od, 13);
 
-    // Give our answer to the chip.  The 0x01 means that TempKey holds
+    // Give our answer to the chip. The 0x01 means that TempKey holds
     // the second 32 byte value. First 32 byte value is in key slot 1 (pairing secret).
     se_write(OP_CheckMac, 0x01, keynum, (uint8_t *)&req, sizeof(req));
     rc = se_read1();
@@ -715,7 +806,72 @@ int se_checkmac_hard(
     return 0;
 }
 
-int se_encrypted_write32(
+static int se_encrypted_read32(
+    int data_slot,
+    int blk,
+    int read_kn,
+    const uint8_t *read_key,
+    uint8_t *data
+)
+{
+    int rc;
+    uint8_t digest[32];
+
+    rc = se_pair_unlock();
+    if (rc < 0)
+        return -1;
+
+    rc = se_gendig_slot(read_kn, read_key, digest);
+    if (rc < 0)
+        return -1;
+
+    // read nth 32-byte "block"
+    se_write(OP_Read, 0x82, (blk << 8) | (data_slot<<3), NULL, 0);
+    rc = se_read(data, 32);
+    se_sleep();
+    if (rc < 0)
+        return -1;
+
+    xor_mixin(data, digest, 32);
+
+    return 0;
+}
+
+int se_encrypted_read(
+    int data_slot,
+    int read_kn,
+    const uint8_t *read_key,
+    uint8_t *data,
+    int len
+)
+{
+    int rc;
+#ifdef FIXME
+    // not clear if chip supports 4-byte encrypted reads
+    ASSERT((len == 32) || (len == 72));
+#endif
+    rc = se_encrypted_read32(data_slot, 0, read_kn, read_key, data);
+    if (rc < 0)
+        return -1;
+
+    if (len == 32)
+        return 0;
+
+    rc = se_encrypted_read32(data_slot, 1, read_kn, read_key, data+32);
+    if (rc < 0)
+        return -1;
+
+    uint8_t tmp[32];
+    rc = se_encrypted_read32(data_slot, 2, read_kn, read_key, tmp);
+    if (rc < 0)
+        return -1;
+
+    memcpy(data+64, tmp, 72-64);
+
+    return 0;
+}
+
+static int se_encrypted_write32(
     int data_slot,
     int blk,
     int write_kn,
@@ -881,4 +1037,113 @@ void se_setup(void)
 
     // finally enable UART
     MY_UART->CR1 |= USART_CR1_UE;
+}
+
+// Just read a one-way counter.
+//
+int se_get_counter(uint32_t *result, uint8_t counter_number)
+{
+    int rc;
+
+    se_write(OP_Counter, 0x0, counter_number, NULL, 0);
+    rc = se_read((uint8_t *)result, 4);
+    se_sleep();
+    if (rc < 0)
+        return -1;
+
+    // IMPORTANT: Always verify the counter's value because otherwise
+    // nothing prevents an active MitM changing the value that we think
+    // we just read.
+    uint8_t     digest[32];
+    rc = se_gendig_counter(counter_number, *result, digest);
+    if (rc < 0)
+        return -1;
+
+    if (!se_is_correct_tempkey(digest))
+        return -1;
+
+    return 0;
+}
+
+// Add-to and return a one-way counter's value. Have to go up in
+// single-unit steps, but can we loop.
+//
+int se_add_counter(uint32_t *result, uint8_t counter_number, int incr)
+{
+    int rc;
+    int rval = 0;
+
+    for (int i = 0; i < incr; i++) {
+        se_write(OP_Counter, 0x1, counter_number, NULL, 0);
+        rc = se_read((uint8_t *)result, 4);
+        if (rc < 0)
+        {
+            rval = -1;
+            goto out;
+        }
+    }
+
+    // IMPORTANT: Always verify the counter's value because otherwise
+    // nothing prevents an active MitM changing the value that we think
+    // we just read. They could also stop us from incrementing the counter.
+
+    uint8_t     digest[32];
+    rc = se_gendig_counter(counter_number, *result, digest);
+    if (rc < 0)
+    {
+        rval = -1;
+        goto out;
+    }
+
+    if (!se_is_correct_tempkey(digest))
+        rval = -1;
+
+out:
+    se_sleep();
+    return rval;
+}
+
+// Construct a digest over one of the two counters. Track what we think
+// the digest should be, and ask the chip to do the same. Verify we match
+// using MAC command (done elsewhere).
+//
+int se_gendig_counter(int counter_num, const uint32_t expected_value, uint8_t digest[32])
+{
+    int rc;
+    uint8_t num_in[20], tempkey[32];
+
+    rng_buffer(num_in, sizeof(num_in));
+
+    rc = se_pick_nonce(num_in, tempkey);
+    if (rc < 0)
+        return -1;
+
+    //using Zone=4="Counter" => "KeyID specifies the monotonic counter ID"
+    se_write(OP_GenDig, 0x4, counter_num, NULL, 0);
+    rc = se_read1();
+    se_sleep();
+    if (rc != 0)
+        return -1;
+
+    // we now have to match the digesting (hashing) that has happened on
+    // the chip. No feedback at this point if it's right tho.
+    //
+    //   msg = hkey + b'\x15\x02' + ustruct.pack("<H", slot_num)
+    //   msg += b'\xee\x01\x23' + (b'\0'*25) + challenge
+    //   assert len(msg) == 32+1+1+2+1+2+25+32
+    //
+    SHA256_CTX ctx;
+    sha256_init(&ctx);
+
+    uint8_t zeros[32] = { 0 };
+    uint8_t args[8] = { OP_GenDig, 0x4, counter_num, 0,  0xEE, 0x01, 0x23, 0x0 };
+
+    sha256_update(&ctx, zeros, 32);
+    sha256_update(&ctx, args, sizeof(args));
+    sha256_update(&ctx, (const uint8_t *)&expected_value, 4);
+    sha256_update(&ctx, zeros, 20);
+    sha256_update(&ctx, tempkey, 32);
+    sha256_final(&ctx, digest);
+
+    return 0;
 }

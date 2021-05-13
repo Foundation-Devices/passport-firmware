@@ -171,9 +171,9 @@ static CAMERA_REG Camera_RegInit[] = {
 
     {0x14, 0x29}, /* Max AGC 8x */
     {0x13, 0xE7}, /* fast AGC/AEC, AEC step unlimited, banding filter, AEC below banding, AGC auto, AWB auto, exp auto */
-    {0x11, 0x00}, /* external clock or internal clock prescalar */
+    {0x11, 0x40}, /* external clock or internal clock prescalar */
 
-    {0x0E, 0x03}, /* already specified above */
+    {0x0E, 0x00}, /* already specified above */
 
     {0xC8, 0x02},
     {0xC9, 0x40}, /* Input Horiz 576 */
@@ -252,7 +252,7 @@ camera_on(void)
     int rc;
     uint8_t val;
 
-    printf("DRIVER: camera_on()\n");
+    // printf("DRIVER: camera_on()\n");
     rc = camera_read(0x0E, &val);
     if (rc < 0)
     {
@@ -279,9 +279,7 @@ camera_off(void)
     uint8_t val;
     HAL_StatusTypeDef rc;
 
-printf("DRIVER: camera_off() 1\n");
     rc = HAL_DCMI_Stop(&hdcmi);
-printf("DRIVER: camera_off() 1\n");
     if (rc != HAL_OK)
     {
         printf("[%s] HAL_DCMI_Stop() failed\n", __func__);
@@ -289,7 +287,6 @@ printf("DRIVER: camera_off() 1\n");
     }
 
     irc = camera_read(0x0E, &val);
-printf("DRIVER: camera_off() 2\n");
     if (irc < 0)
     {
         printf("[%s] camera_read() failed\n", __func__);
@@ -299,14 +296,12 @@ printf("DRIVER: camera_off() 2\n");
 
     /* Put camera into sleep mode */
     irc = camera_write(0x0E, val | (1 << 3));
-printf("DRIVER: camera_off() 3\n");
     if (irc < 0)
     {
         printf("[%s] camera_write() failed\n", __func__);
         rval = -1;
     }
 out:
-printf("DRIVER: camera_off() - DONE\n");
     return rval;
 }
 
@@ -334,9 +329,6 @@ int camera_snapshot(void)
 
     // uint32_t total_start = HAL_GetTick();
     // uint32_t total_end = 0;
-
-    /* Clear the buffer */
-    memset(camera_frame_buffer, 0, (FRAMEBUF_SIZE * 2));
 
     /* Clear any current interrupts */
     hdcmi.Instance->ICR = DCMI_IT_FRAME | DCMI_IT_OVR | DCMI_IT_ERR | DCMI_IT_VSYNC | DCMI_IT_LINE;
@@ -366,6 +358,7 @@ int camera_snapshot(void)
         }
         // printf("[%s] frame complete in %d milliseconds\n", __func__, count);
     }
+
 out:
     // Need to call this after DMA completes
     camera_stop_dcmi();
@@ -423,7 +416,7 @@ int camera_init(void)
 
     FrameBufAddr = (uint32_t)camera_frame_buffer;
 
-    printf("****************************************************************************\n");
+    // printf("****************************************************************************\n");
 
     /*
    * Per STM Appnote AN5020
@@ -498,6 +491,17 @@ int camera_init(void)
     GPIO_InitStruct.Alternate = GPIO_AF4_I2C1;
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
+    /* Configure the BUF1_OE and BUF2_OE */
+    HAL_GPIO_WritePin(GPIOE, GPIO_PIN_9, 0);
+    HAL_GPIO_WritePin(GPIOE, GPIO_PIN_10, 0);
+
+    GPIO_InitStruct.Pin = GPIO_PIN_9 | GPIO_PIN_10;
+    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    GPIO_InitStruct.Alternate = 0;
+    HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
+
     /* Configure Timer 3 channel 4 */
     __TIM3_CLK_ENABLE();
 
@@ -541,7 +545,8 @@ int camera_init(void)
     __HAL_RCC_I2C1_CLK_ENABLE();
 
     hi2c1.Instance = I2C1;
-    hi2c1.Init.Timing = 0x109095DF;
+    hi2c1.Init.Timing = 0x00B07FFF; /* 0x00100727 - 300 KHz @ 64 MHz */
+                                    /* 0x00B07FFF - 300 KHz @ 480 MHz */
     hi2c1.Init.OwnAddress1 = 0;
     hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
     hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
@@ -586,6 +591,7 @@ int camera_init(void)
     HAL_GPIO_WritePin(GPIOE, GPIO_PIN_7, GPIO_PIN_SET);
     HAL_Delay(20);
     HAL_GPIO_WritePin(GPIOE, GPIO_PIN_7, GPIO_PIN_RESET);
+    HAL_Delay(20);
 
     /* Configure camera size */
     camera_setQVGA();
@@ -595,7 +601,7 @@ int camera_init(void)
     val &= ~(1 << 7);
     camera_write(0x6F, val);
 
-    printf("CAMERA INIT COMPLETE!\n");
+    // printf("CAMERA INIT COMPLETE!\n");
     return 0;
 }
 

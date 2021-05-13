@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+# SPDX-FileCopyrightText: 2020 Foundation Devices, Inc. <hello@foundationdevices.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 TOP = ../..
@@ -17,15 +17,17 @@ ARCH ?= x86
 CFLAGS  = -Wall -fno-strict-aliasing
 CFLAGS += -fno-omit-frame-pointer
 CFLAGS += -I$(TOP)/include
+CFLAGS += -I/usr/local/include
 CFLAGS += -I$(TOP)/common/micro-ecc -DuECC_PLATFORM=uECC_x86
 CFLAGS += -DPASSPORT_COSIGN_TOOL
-#CFLAGS += -DUSE_CRYPTO
+CFLAGS += -DUSE_CRYPTO
+CFLAGS += -L/usr/local/lib
 
 LDFLAGS  = -Wl,-Map,$(MAP)
 
 LIBS  = -lcrypto
 
-CROSS_COMPILE	?= 
+CROSS_COMPILE	?=
 CC              = $(CROSS_COMPILE)gcc
 EXECUTABLE      = cosign
 TARGETDIR       = x86

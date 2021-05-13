@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2018 Coinkite, Inc.  <coldcardwallet.com>
+// SPDX-FileCopyrightText: 2018 Coinkite, Inc. <coldcardwallet.com>
 // SPDX-License-Identifier: GPL-3.0-only
 //
 /*
@@ -9,40 +9,45 @@
  *
  */
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 
-#include "utils.h"
-#include "sha256.h"
+#include "delay.h"
 #include "firmware-keys.h"
 #include "hash.h"
-#include "delay.h"
-#include "uECC.h"
 #include "se.h"
-#include "se-atecc608a.h"
+#include "se-config.h"
+#include "sha256.h"
+#include "uECC.h"
+#include "utils.h"
 
-#include "update.h"
+#include "se-atecc608a.h"
 #include "verify.h"
 
-bool verify_header(passport_firmware_header_t *hdr)
+secresult verify_header(passport_firmware_header_t *hdr)
 {
     if (hdr->info.magic != FW_HEADER_MAGIC) goto fail;
     if (hdr->info.timestamp == 0) goto fail;
     if (hdr->info.fwversion[0] == 0x0) goto fail;
-    if (hdr->info.fwlength == 0x0) goto fail;
+    if (hdr->info.fwlength < FW_HEADER_SIZE) goto fail;
+
 #ifdef USE_CRYPTO
-    if (hdr->signature.pubkey1 == 0) goto fail;
-    if (hdr->signature.pubkey1 > FW_MAX_PUB_KEYS) goto fail;
-    if (hdr->signature.pubkey2 == 0) goto fail;
-    if (hdr->signature.pubkey2 > FW_MAX_PUB_KEYS) goto fail;
+    // if (hdr->signature.pubkey1 == 0) goto fail;
+    if ((hdr->signature.pubkey1 != FW_USER_KEY) && (hdr->signature.pubkey1 > FW_MAX_PUB_KEYS)) goto fail;
+    if (hdr->signature.pubkey1 != FW_USER_KEY)
+    {
+        // if (hdr->signature.pubkey2 == 0) goto fail;
+        if (hdr->signature.pubkey2 > FW_MAX_PUB_KEYS) goto fail;
+    }
 #endif /* USE_CRYPTO */
 
-    return true;
+    return SEC_TRUE;
 
 fail:
-    return false;
+    return SEC_FALSE;
 }
 
-bool verify_signature(
+secresult verify_signature(
     passport_firmware_header_t *hdr,
     uint8_t *fw_hash,
     uint32_t hashlen
@@ -51,53 +56,77 @@ bool verify_signature(
 #ifdef USE_CRYPTO
     int rc;
 
-    rc = uECC_verify(approved_pubkeys[hdr->signature.pubkey1],
-                     fw_hash, hashlen,
-                     hdr->signature.signature1, uECC_secp256k1());
-    if (rc == 0)
-        return false;
+    if (hdr->signature.pubkey1 == FW_USER_KEY)
+    {
+        uint8_t user_public_key[72] = {0};
 
-    rc = uECC_verify(approved_pubkeys[hdr->signature.pubkey2],
-                     fw_hash, hashlen,
-                     hdr->signature.signature2, uECC_secp256k1());
-    if (rc == 0)
-        return false;
+        /*
+         * It looks like the user signed this firmware so, in order to
+         * validate, we need to get the public key from the SE.
+         */
+        se_pair_unlock();
+        rc = se_read_data_slot(KEYNUM_user_fw_pubkey, user_public_key, sizeof(user_public_key));
+        if (rc < 0)
+            return SEC_FALSE;
 
-    return true;
+        rc = uECC_verify(user_public_key,
+                         fw_hash, hashlen,
+                         hdr->signature.signature1, uECC_secp256k1());
+        if (rc == 0)
+            return SEC_FALSE;
+    }
+    else
+    {
+        rc = uECC_verify(approved_pubkeys[hdr->signature.pubkey1],
+                         fw_hash, hashlen,
+                         hdr->signature.signature1, uECC_secp256k1());
+        if (rc == 0)
+            return SEC_FALSE;
+
+        rc = uECC_verify(approved_pubkeys[hdr->signature.pubkey2],
+                         fw_hash, hashlen,
+                         hdr->signature.signature2, uECC_secp256k1());
+        if (rc == 0)
+            return SEC_FALSE;
+    }
+
+    return SEC_TRUE;
 #else
-    return true;
+    return SEC_TRUE;
 #endif /* USE_CRYPTO */
 }
 
-bool verify_current_firmware(void)
+secresult verify_current_firmware(
+    bool process_led
+)
 {
-    int rc;
     uint8_t fw_hash[HASH_LEN];
-    uint8_t board_hash[HASH_LEN];
     passport_firmware_header_t *fwhdr = (passport_firmware_header_t *)FW_HDR;
     uint8_t *fwptr = (uint8_t *)fwhdr + FW_HEADER_SIZE;
 
     if (!verify_header(fwhdr))
-        goto fail;
+        return ERR_INVALID_FIRMWARE_HEADER;
 
     hash_fw(&fwhdr->info, fwptr, fwhdr->info.fwlength, fw_hash, sizeof(fw_hash));
 
-    if (!verify_signature(fwhdr, fw_hash, sizeof(fw_hash)))
-        goto fail;
+    if (verify_signature(fwhdr, fw_hash, sizeof(fw_hash)) == SEC_FALSE)
+        return ERR_INVALID_FIRMWARE_SIGNATURE;
 
-#ifdef DEMO
-    memset(board_hash, 0, sizeof(board_hash));
-#else
-    hash_board(fw_hash, sizeof(fw_hash), board_hash, sizeof(board_hash));
-#endif /* DEMO */
-    rc = se_set_gpio_secure(board_hash);
-    if (rc < 0)
-         goto fail;
+#ifdef PRODUCTION_BUILD
+    if (process_led)
+    {
+        int rc;
+        uint8_t board_hash[HASH_LEN];
 
-    return true;
+        hash_board(fw_hash, sizeof(fw_hash), board_hash, sizeof(board_hash));
 
-fail:
-    return false;
+        rc = se_set_gpio_secure(board_hash);
+        if (rc < 0)
+             return ERR_UNABLE_TO_UPDATE_FIRMWARE_HASH_IN_SE;
+    }
+#endif /* PRODUCTION_BUILD */
+
+    return SEC_TRUE;
 }
 
 // EOF

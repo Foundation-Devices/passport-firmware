@@ -1,9 +1,10 @@
-// SPDX-FileCopyrightText: 2020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+// SPDX-FileCopyrightText: 2020 Foundation Devices, Inc. <hello@foundationdevices.com>
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// SPDX-FileCopyrightText: 2018 Coinkite, Inc.  <coldcardwallet.com>
+// SPDX-FileCopyrightText: 2018 Coinkite, Inc. <coldcardwallet.com>
 // SPDX-License-Identifier: GPL-3.0-only
 //
+
 #include <string.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -17,14 +18,12 @@
 #include "se-config.h"
 #include "sha256.h"
 
-#define INCONSISTENT(x) /* FIXME */
-
 static int se_write_data_slot(int slot_num, uint8_t *data, int len, bool lock_it)
 {
-#ifdef FIXME
-    ASSERT(len >= 32);
-    ASSERT(len <= 416);
-#endif
+    if ((len < 32) || (len > 416) || (lock_it && slot_num == 8)) {
+        return -1;
+    }
+
     for (int blk = 0, xlen = len; xlen > 0; blk++, xlen -= 32) {
         int rc;
 
@@ -38,10 +37,6 @@ static int se_write_data_slot(int slot_num, uint8_t *data, int len, bool lock_it
     }
 
     if (lock_it) {
-#ifdef FIXME
-        ASSERT(slot_num != 8);          // no support for mega slot 8
-        ASSERT(len == 32);              // probably not a limitation here
-#endif
         // Assume 36/72-byte long slot, which will be partially written, and rest
         // should be ones.
         const int slot_len = (slot_num <= 7) ? 36 : 72;
@@ -82,34 +77,7 @@ static int se_lock_data_zone(void)
 
     return se_read1();
 }
-#if 0 /* Not used now */
-// Read a 4-byte area from config area, or -1 if fail.
-//
-static int se_read_config_word(int offset, uint8_t *dest)
-{
-    offset &= 0x7f;
 
-    // read 32 bits (aligned)
-    se_write(OP_Read, 0x00, offset/4, NULL, 0);
-
-    int rv = se_read(dest, 4);
-    if (rv < 0)
-        return -1;
-
-    return 0;
-}
-
-// Read a byte from config area.
-//
-static int se_read_config_byte(int offset)
-{
-    uint8_t tmp[4];
-
-    se_read_config_word(offset, tmp);
-
-    return tmp[offset % 4];
-}
-#endif /* 0 */
 static int se_config_write(uint8_t *config)
 {
     // send all 128 bytes, less some that can't be written.
@@ -143,10 +111,10 @@ static int se_config_write(uint8_t *config)
 // secret in cleartext. They could then restore original chip and access freely.
 //
 // PASSPORT NOTE: We can eliminate the above by having the factory bootloader
-//                be different than the normal bootloader.  The factory bootloader
+//                be different than the normal bootloader. The factory bootloader
 //                will have the one-time setup code only, not the runtime code.
 //                The normal bootloader will NOT have the one-time setup code,
-//                but WILL have the main runtime code.  So swapping in blank
+//                but WILL have the main runtime code. So swapping in blank
 //                SE would not trigger us to write the pairing secret in the clear.
 //
 int se_setup_config(rom_secrets_t *secrets)
@@ -212,7 +180,7 @@ int se_setup_config(rom_secrets_t *secrets)
                 case 15:
                 break;
 
-                case KEYNUM_pairing:
+                case KEYNUM_pairing_secret:
                     if (se_write_data_slot(kn, secrets->pairing_secret, 32, false))
                         return -4;
                 break;
@@ -226,38 +194,56 @@ int se_setup_config(rom_secrets_t *secrets)
                     // - stretching pin/words attempts (iterated may times)
                     // See mathcheck.py for details.
                     uint8_t     tmp[32];
-    
+
                     rng_buffer(tmp, sizeof(tmp));
-    
+
                     if (se_write_data_slot(kn, tmp, 32, true))
                         return -5;
                 }
                 break;
 
-                case KEYNUM_main_pin:
+                case KEYNUM_pin_hash:
                 case KEYNUM_lastgood:
-                case KEYNUM_firmware:
+                case KEYNUM_firmware_hash:
                     if (se_write_data_slot(kn, zeros, 32, false))
                         return -6;
                 break;
 
-                case KEYNUM_secret:
-                    if (se_write_data_slot(kn, zeros, 72, false))
+                case KEYNUM_supply_chain: {
+                    // SCV key is in user settings flash
+                    uint8_t* supply_chain_key = (uint8_t*)USER_SETTINGS_FLASH_ADDR;
+                    bool is_erased = true;
+                    for (uint32_t i=0; i<32; i++) {
+                        if (supply_chain_key[i] != 0xFF) {
+                            is_erased = false;
+                        }
+                    }
+
+                    // If the scv key is not set in flash, then don't proceed, else validation will never work!
+                    if (is_erased) {
+                        return -11;
+                    }
+
+                    int rc = se_write_data_slot(kn, supply_chain_key, 32, false);
+
+                    // Always erase the supply chain key, even if the write failed
+                    flash_sector_erase(USER_SETTINGS_FLASH_ADDR);
+
+                    if (rc)
                         return -7;
+                }
                 break;
 
-                case KEYNUM_long_secret:
-                {
-                    uint8_t long_zeros[416] = {0};
-                    if (se_write_data_slot(kn, long_zeros, 416, false))
+                case KEYNUM_seed:
+                case KEYNUM_user_fw_pubkey:
+                    if (se_write_data_slot(kn, zeros, 72, false))
                         return -8;
-                }
                 break;
 
                 case KEYNUM_match_count:
                 {
                     uint32_t buf[32/4] = { 1024, 1024 };
-                    if (se_write_data_slot(KEYNUM_match_count, (uint8_t *)buf,sizeof(buf),false)) 
+                    if (se_write_data_slot(KEYNUM_match_count, (uint8_t *)buf,sizeof(buf),false))
                         return -9;
                 }
                 break;
@@ -323,7 +309,7 @@ int se_set_gpio_secure(uint8_t *digest)
     if (rc < 0)
         return -1;
 
-    rc = se_checkmac(KEYNUM_firmware, digest);
+    rc = se_checkmac(KEYNUM_firmware_hash, digest);
     if (rc < 0)
         return -1;
 
@@ -335,25 +321,23 @@ int se_set_gpio_secure(uint8_t *digest)
 }
 
 int se_program_board_hash(
-    uint8_t *board_hash,
+    uint8_t *previous_hash,
+    uint8_t *new_hash,
     uint8_t hash_len
 )
 {
-#ifdef DEMO
-    uint8_t zeros[HASH_LEN] = {0};
-    
-    return se_encrypted_write(KEYNUM_firmware, KEYNUM_main_pin, zeros, board_hash, hash_len);
+#ifdef PRODUCTION_BUILD
+    return se_encrypted_write(KEYNUM_firmware_hash, KEYNUM_firmware_hash, previous_hash, new_hash, hash_len);
 #else
-    /* We don't know how we're going to do this yet */
     return 0;
-#endif /* DEMO */
+#endif /* PRODUCTION_BUILD */
 }
 
 bool se_valid_secret(
     uint8_t *secret
 )
 {
-    int rc = se_checkmac(KEYNUM_pairing, secret);
+    int rc = se_checkmac(KEYNUM_pairing_secret, secret);
     if (rc < 0)
         return false;
     return true;
