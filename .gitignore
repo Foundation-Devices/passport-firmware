@@ -44,14 +44,14 @@ user.props
 ######################
 genrst/
 
-ports/stm32/boards/Passport/finalbootloader/bootloader.bin.tmp
-
-ports/stm32/boards/Passport/finalbootloader/bootloader.lss
-
-ports/stm32/boards/Passport/finalbootloader/bootloader.sym
-
 *.d
 
-ports/stm32/boards/Passport/tools/signit/x86/release/
 
-ports/stm32/boards/Passport/tools/cosign/x86/release/
+
+ports/stm32/boards/Passport/tools/add-secrets/x86/release/
+
+ports/stm32/secrets*
+
+ports/stm32/boards/Passport/bootloader/version_info.c
+
+ports/stm32/boards/Passport/bootloader/secrets*
