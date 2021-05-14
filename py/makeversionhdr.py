@@ -71,7 +71,7 @@ def make_version_header(filename):
 #define MICROPY_GIT_TAG "%s"
 #define MICROPY_GIT_HASH "%s"
 #define MICROPY_BUILD_DATE "%s"
-""" % (git_tag, git_hash, datetime.date.today().strftime("%Y-%m-%d"))
+""" % ("cb53ae6", "cb53ae6", "2021-05-12")
 
     # Check if the file contents changed from last time
     write_file = True
