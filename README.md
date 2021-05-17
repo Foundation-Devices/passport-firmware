@@ -6,13 +6,6 @@ Get yours at [foundationdevices.com](https://foundationdevices.com) and [follow 
 
 <img src="https://user-images.githubusercontent.com/62639971/100824536-2ed61a00-340b-11eb-9283-46174164bc84.jpg" width="800"/>
 
-## Work In Progress
-
-Please note that this code is a Work In Progress.  It does not represent the final state of the Passport firmware. 
-We will be adding other features over the next several weeks, such as BIP32 passphrases, multisig support, and more.
-In addition, we have commissioned a security audit team with expertise in Bitcoin wallets to conduct
-an audit of the Passport source code.  The audit will include all Foundation Devices code and all third-party code.
-
 ## Project Structure
 
 The source code is organized according to the standard MicroPython project structure.
@@ -45,13 +38,13 @@ Passport's firmware incorporates open-source software from several third-party p
 
 -   [MicroPython](https://github.com/micropython/micropython) - This forms the core foundation on which Passport is built.
 
--   [Trezor Firmware](https://github.com/trezor/trezor-firmware) - Trezor has kindly open-sourced a highly-optimized library of crypto algorithms. Rather than modify the Trezor code, we decided to include the original source. This will make it trivial to incorporate future improvements and fixes from Trezor and their contributors. We will likely convert this to a git submodule in the future.
-
 -   [Coldcard Firmware](https://github.com/Coldcard/firmware) - Passport's security model has a lot in common with Coldcard, and the Passport firmware was originally based directly on the ColdCard repository. As development progressed, however, we chose to follow MicroPython best practices and start with a fresh MicroPython repository. We've ported numerous files from Coldcard as needed, and we thank them for their great contribution to open source.
 
--   [Quirc](https://github.com/dlbeer/quirc) - Quirc is a QR decoding library that offers an embedded-friendly interface to process images from a camera for QR codes. This library has proven to be fast and reliable in Passport. We made some changes and contributed back to Quirc (pull request pending), and we will be conducting a security audit of this library before shipping Passport.
+-   [Trezor Firmware](https://github.com/trezor/trezor-firmware) - Trezor has kindly open-sourced a highly-optimized library of crypto algorithms. Rather than modify the Trezor code, we decided to include the original source. This will make it easier to incorporate future improvements and fixes from Trezor and their contributors. We may convert this to a git submodule in the future.
 
--   [QRCode](https://github.com/ricmoo/QRCode) - QRCode is a QR code creator library that takes a string or data and encode it to a QR code which can then be displayed on screen, saved to file, etc. This library has a simple clean interface and was easy to integrate. We will be conducting a security audit of this library before shipping Passport.
+-   [Quirc](https://github.com/dlbeer/quirc) - Quirc is a QR decoding library that offers an embedded-friendly interface to process images from a camera for QR codes. This library has proven to be fast and reliable in Passport. We made some changes and contributed back to Quirc (pull request pending).
+
+-   [QRCode](https://github.com/ricmoo/QRCode) - QRCode is a QR code creator library that takes a string or data and encode it to a QR code which can then be displayed on screen, saved to file, etc. This library has a simple clean interface and was easy to integrate.
 
 -   [Foundation UR Python 2.0](https://github.com/Foundation-Devices/foundation-ur-py) - This is our Python port of the UR 2.0 standard from the wonderful Blockchain Commons. It provides the ability to encode/decode multi-part animated QR codes that represent data which is too large to fit in a single QR code. This is the new standard air-gapped wallets are expected to adopt moving forward.
 
@@ -77,4 +70,4 @@ In summary, Passport makes use of the following licenses.
 - MIT License
 - The Unlicense
 
-Due to the inclusion of GPLv3 code, Passport Firmware should be treated in a copyleft manner.
+**Due to the inclusion of GPLv3 code, Passport Firmware should be treated in a copyleft manner.**
