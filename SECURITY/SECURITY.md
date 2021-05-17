@@ -68,8 +68,6 @@ Passport’s general security philosophy can be described as follows:
 
 * **Assume the microcontroller will be compromised.** Most microcontrollers, even those with advanced security features like firewalls, are insecure and trivial to compromise. Passport ensures that all sensitive data is first encrypted and then stored in the secure element. Passport also attempts to alert the user if the STM part is compromised by a sophisticated attacker.
 
-<div style="background-color: yellow">___**TODO: ^ Is this referring to the red light or the error checks we perform?  Both?  Neither?  Something else?**___</div><br/>
-
 * **Keep it simple.** By default, Passport only allows installation of firmware signed by Foundation Devices. Passport presents a simple UI and does not include complex features like secondary wallets or self-destruct PINs. Passport encourages use of an encrypted microSD card or multisig, rather than writing down seeds in plaintext.
 
 ### 3.2 Security Feature Summary
