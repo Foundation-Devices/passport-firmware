@@ -20,7 +20,7 @@ Code specific to Passport is included in the following folders:
 
 -   [`ports/stm32`](ports/stm32) Low-level platform configuration for MicroPython.
 -   [`ports/stm32/boards/Passport`](ports/stm32/boards/Passport) C files that implement some device drivers and code that was 5-10 times faster in C than in Python.
--   [`bootloader`](ports/stm32/boards/Passport/bootloader) C-based code that handles secure element initialization, firmware validation and updates, and system startup
+-   [`bootloader`](ports/stm32/boards/Passport/bootloader) C-based code that handles secure element initialization, firmware validation and updates, and system startup.
 -   [`common`](ports/stm32/boards/Passport/common) Common C code shared between the bootloader and the main firmware.
 -   [`graphics`](ports/stm32/boards/Passport/graphics) Images and a build script that converts the images to Python data for easier loading.
 -   [`modules`](ports/stm32/boards/Passport/modules) The MicroPython code that implements the user interface and menu actions.
@@ -55,7 +55,7 @@ Please report suspected security vulnerabilities in private to security@foundati
 
 ## Licensing
 
-All licenses used in Pasport are [reuse](https://reuse.software/) friendly, and the license for each component is marked separately in the header files where appropriate or in a `.reuse/dep5` file otherwise. See the `LICENSES` folder and the
+All licenses used in Passport are [reuse](https://reuse.software/) friendly, and the license for each component is marked separately in the header files where appropriate or in a `.reuse/dep5` file otherwise. See the `LICENSES` folder and the
 `ports/stm32/boards/Passport/LICENSES` folders for details on each license file.
 
 In summary, Passport makes use of the following licenses.
