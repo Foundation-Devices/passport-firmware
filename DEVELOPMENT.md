@@ -39,7 +39,7 @@ Several tools are required for building and debugging Passport.
     cd ~/
     git clone https://github.com/dhylands/rshell
     sudo apt install python3-pip
-    sudo pip3 install rshell                                  (this should install rshell in /usr/local/ area)
+    sudo pip3 install rshell                                  # (this should install rshell in /usr/local/)
 
 ## Building
 ### Open Shell Windows/Tabs
