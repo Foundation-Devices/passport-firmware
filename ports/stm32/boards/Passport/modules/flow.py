@@ -66,7 +66,7 @@ SettingsMenu = [
     MenuItem('About', f=about_info),
     MenuItem('Firmware', menu=FirmwareMenu),
     MenuItem('Backup', menu=BackupMenu),
-    # MenuItem('Screen Brightness', chooser=brightness_chooser),
+    MenuItem('Screen Brightness', chooser=brightness_chooser),
     MenuItem('Auto Shutdown', chooser=shutdown_timeout_chooser),
     MenuItem('Multisig', menu=make_multisig_menu, arg='Multisig'),
     MenuItem('Accounts', menu=make_accounts_menu, arg='Accounts'),
@@ -76,7 +76,7 @@ SettingsMenu = [
 NoWalletSettingsMenu = [
     MenuItem('About', f=about_info),
     MenuItem('Firmware', menu=FirmwareMenu),
-    # MenuItem('Screen Brightness', chooser=brightness_chooser),
+    MenuItem('Screen Brightness', chooser=brightness_chooser),
     MenuItem('Auto Shutdown', chooser=shutdown_timeout_chooser),
     MenuItem('Change PIN', f=change_pin),
 ]

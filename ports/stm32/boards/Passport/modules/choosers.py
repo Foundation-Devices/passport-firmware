@@ -40,8 +40,8 @@ def shutdown_timeout_chooser():
 def brightness_chooser():
     screen_brightness = settings.get('screen_brightness', 100)
 
-    ch = ['Off', '25%', '50%', '75%', '100%', 'Automatic']
-    va = [0, 25, 50, 75, 100, 999]
+    ch = ['Off', '25%', '50%', '75%', '100%'] # , 'Automatic']
+    va = [0, 25, 50, 75, 100] # , 999]
 
     try:
         which = va.index(screen_brightness)
