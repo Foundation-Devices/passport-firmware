@@ -21,7 +21,7 @@ import common
 from common import settings, system, noise, dis
 from utils import (UXStateMachine, imported, pretty_short_delay, xfp2str, to_str,
                    truncate_string_to_width, set_next_addr, scan_for_address, get_accounts, run_chooser,
-                   make_account_name_num, is_valid_address, save_next_addr)
+                   make_account_name_num, is_valid_address, save_next_addr, needs_microsd)
 from wallets.utils import get_export_mode, get_addr_type_from_address, get_deriv_path_from_addr_type_and_acct
 from ux import (the_ux, ux_confirm, ux_enter_pin,
                 ux_enter_text, ux_scan_qr_code, ux_shutdown,
@@ -30,10 +30,6 @@ from se_commands import *
 from data_codecs.qr_type import QRType
 import trezorcrypto
 from seed_check_ux import SeedCheckUX
-
-async def needs_microsd():
-    # Standard msg shown if no SD card detected when we need one.
-    return await ux_show_story("Please insert a microSD card.", title='MicroSD', center=True, center_vertically=True)
 
 async def about_info(*a):
     from common import system

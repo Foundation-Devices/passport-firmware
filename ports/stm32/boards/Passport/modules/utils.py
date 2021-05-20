@@ -758,4 +758,9 @@ def is_alphanumeric_qr(buf):
 
     return True
 
+async def needs_microsd():
+    from ux import ux_show_story
+    # Standard msg shown if no SD card detected when we need one.
+    return await ux_show_story("Please insert a microSD card.", title='MicroSD', center=True, center_vertically=True)
+
 # EOF
