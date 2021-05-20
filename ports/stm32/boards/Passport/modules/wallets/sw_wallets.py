@@ -8,9 +8,9 @@ from data_codecs.qr_type import QRType
 from .bitcoin_core import BitcoinCoreWallet
 from .bluewallet import BlueWallet
 from .btcpay import BtcPayWallet
-from .casa import CasaWallet
-from .caravan import CaravanWallet
-from .dux_reserve import DuxReserveWallet
+# from .casa import CasaWallet
+# from .caravan import CaravanWallet
+# from .dux_reserve import DuxReserveWallet
 from .electrum import ElectrumWallet
 # from .fullynoded import FullyNodedWallet
 # from .gordian import GordianWallet
@@ -24,9 +24,9 @@ supported_software_wallets = [
     BitcoinCoreWallet,
     BlueWallet,
     BtcPayWallet,
-    CaravanWallet,
-    CasaWallet,
-    DuxReserveWallet,
+    # CaravanWallet,
+    # CasaWallet,
+    # DuxReserveWallet,
     ElectrumWallet,
     # FullyNodedWallet,
     # GordianWallet,
