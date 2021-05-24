@@ -494,6 +494,17 @@ def file_exists(path):
     except:
         return False
 
+def folder_exists(path):
+    import os
+    from stat import S_ISDIR
+
+    try:
+        s = os.stat(path)
+        mode = s[0]
+        return S_ISDIR(mode)
+    except OSError as e:
+        return False
+
 # Derive addresses from the specified path until we find the address or have tried max_to_check addresses
 # If single sig, we need `path`.
 # If multisig, we need `ms_wallet`, but not `path`

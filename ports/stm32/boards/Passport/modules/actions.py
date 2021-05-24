@@ -618,7 +618,7 @@ async def create_new_seed(*a):
 
 Experienced users can always view and record the 24-word seed in the Advanced settings menu.''', title='Backup')
         if ch == 'x':
-            if await ux_confirm("Are you sure you want to cancel the backup?\n\nWithout a microSD backup or the seed phrase, you won't be able to recover your funds"):
+            if await ux_confirm("Are you sure you want to cancel the backup?\n\nWithout a microSD backup or the seed phrase, you won't be able to recover your funds."):
                 # Go back to the outer loop and show the selection again
                 break
 
@@ -1015,7 +1015,7 @@ async def file_picker(msg, suffix=None, min_size=None, max_size=None, taster=Non
     # - escape: allow these chars to skip picking process
     from menu import MenuSystem, MenuItem
     import uos
-    from utils import get_filesize
+    from utils import get_filesize, folder_exists
 
     system.turbo(True)
 
@@ -1031,6 +1031,10 @@ async def file_picker(msg, suffix=None, min_size=None, max_size=None, taster=Non
                     folder_path = [folder_path]
 
                 for path in folder_path:
+                    # If the folder doesn't exist, skip it (e.g., if /sd/backups/ doesn't exist)
+                    if not folder_exists(path):
+                        continue
+
                     files = uos.ilistdir(path)
                     for fn, ftype, *var in files:
                         # print("fn={} ftype={} var={}  suffix={}".format(fn, ftype, var, suffix))
