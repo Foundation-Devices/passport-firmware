@@ -661,6 +661,10 @@ def is_new_wallet_in_progress():
     ap = settings.get('wallet_prog', None)
     return ap != None
 
+def is_screenshot_mode_enabled():
+    from common import screenshot_mode_enabled
+    return screenshot_mode_enabled
+
 async def do_rename_account(acct_num, new_name):
     from common import settings
     from export import auto_backup

@@ -1943,6 +1943,10 @@ async def test_read_flash_cache(*a):
 async def toggle_screenshot_mode(*a):
     import common
     common.screenshot_mode_enabled = not common.screenshot_mode_enabled
+
+    if common.screenshot_mode_enabled:
+        await ux_show_story('Press and release the aA1 key in the lower right corner of the keypad to save a screenshot to the microSD card.\n\nIf no microSD is inserted, nothing will happen.',
+            title='Screenshots', center=True, center_vertically=True)
     # print('common.screenshot_mode_enabled={}'.format(common.screenshot_mode_enabled))
 
 async def toggle_snapshot_mode(*a):
