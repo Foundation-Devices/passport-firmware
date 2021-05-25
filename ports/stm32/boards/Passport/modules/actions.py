@@ -37,13 +37,10 @@ async def about_info(*a):
     from utils import swab32
 
     while True:
-        serial = system.get_serial_number()
         my_xfp = settings.get('xfp', 0)
         xpub = settings.get('xpub', None)
 
-        msg = '''Serial Number:
-{serial}
-
+        msg = '''
 Master Fingerprint:
 {xfp}
 
@@ -51,8 +48,7 @@ Reversed Fingerprint:
 {rev_xfp}
 
 Master XPUB:
-{xpub}'''.format(serial=serial,
-                 xfp=xfp2str(my_xfp) if my_xfp else '<No Seed Yet>',
+{xpub}'''.format(xfp=xfp2str(my_xfp) if my_xfp else '<No Seed Yet>',
                  rev_xfp=xfp2str(swab32(my_xfp)) if my_xfp else '<No Seed Yet>',
                  xpub=xpub if xpub != None else '<No Seed Yet>')
 

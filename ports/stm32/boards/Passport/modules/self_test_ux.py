@@ -53,30 +53,20 @@ class SelfTestUX(UXStateMachine):
 
     def __init__(self):
         # States
-        self.SHOW_SERIAL_NUMBER = 1
-        self.KEYPAD_TEST = 2
-        self.CAMERA_TEST = 3
-        self.CAMERA_TEST_RESULT = 4
-        self.SCREEN_ALIGNMENT = 5
-        self.MICROSD_TEST = 6
+        self.KEYPAD_TEST = 1
+        self.CAMERA_TEST = 2
+        self.CAMERA_TEST_RESULT = 3
+        self.SCREEN_ALIGNMENT = 4
+        self.MICROSD_TEST = 5
+        self.TESTS_COMPLETE = 6
         self.qr_data = None
 
         # print('SelfTestUX init')
-        super().__init__(self.SHOW_SERIAL_NUMBER)
+        super().__init__(self.KEYPAD_TEST)
 
     async def show(self):
         while True:
-            # print('show: state={}'.format(self.state))
-            if self.state == self.SHOW_SERIAL_NUMBER:
-                serial = system.get_serial_number()
-                result = await ux_show_text_as_ur(title='Serial Num.', qr_text=serial, qr_type=QRType.QR, msg=serial,
-                    right_btn='NEXT') # If right_btn is specified, then RESIZE doesn't appear/work, which is fine here
-                if result == 'x':
-                    return
-                else:
-                    self.goto(self.KEYPAD_TEST)
-
-            elif self.state == self.KEYPAD_TEST:
+            if self.state == self.KEYPAD_TEST:
                 # print('Keypad Test!')
                 result = await ux_keypad_test()
                 if result == 'x':
@@ -119,6 +109,14 @@ class SelfTestUX(UXStateMachine):
                     result = await ux_show_story('This test will exercise the read/write features of the microSD card.', title='microSD Test', right_btn='START', center=True, center_vertically=True)
                     if result == 'x':
                         self.goto_prev()
+                        continue
+
+                    if await microsd_test():
+                        self.goto(self.TESTS_COMPLETE)
+
+            elif self.state == self.TESTS_COMPLETE:
+                    result = await ux_show_story('All tests complete!', title='Complete', right_btn='SHUTDOWN', center=True, center_vertically=True)
+                    if result == 'x':
+                        self.goto_prev()
                     else:
-                        await microsd_test()
-                        return
+                        system.shutdown()
