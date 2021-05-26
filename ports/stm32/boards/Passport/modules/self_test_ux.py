@@ -36,7 +36,9 @@ async def microsd_test():
                         return False
 
                     os.remove(filename)
-                    await ux_show_story('microSD card is working properly!', title='microSD Test', center=True, center_vertically=True)
+                    result = await ux_show_story('microSD card is working properly!', title='microSD Test', center=True, center_vertically=True)
+                    if result == 'x':
+                        return False
                     return True
 
         except CardMissingError:
