@@ -21,7 +21,7 @@ import common
 from common import settings, system, noise, dis
 from utils import (UXStateMachine, imported, pretty_short_delay, xfp2str, to_str,
                    truncate_string_to_width, set_next_addr, scan_for_address, get_accounts, run_chooser,
-                   make_account_name_num, is_valid_address, save_next_addr)
+                   make_account_name_num, is_valid_address, save_next_addr, needs_microsd)
 from wallets.utils import get_export_mode, get_addr_type_from_address, get_deriv_path_from_addr_type_and_acct
 from ux import (the_ux, ux_confirm, ux_enter_pin,
                 ux_enter_text, ux_scan_qr_code, ux_shutdown,
@@ -31,23 +31,16 @@ from data_codecs.qr_type import QRType
 import trezorcrypto
 from seed_check_ux import SeedCheckUX
 
-async def needs_microsd():
-    # Standard msg shown if no SD card detected when we need one.
-    return await ux_show_story("Please insert a microSD card.", title='MicroSD', center=True, center_vertically=True)
-
 async def about_info(*a):
     from common import system
     from display import FontTiny
     from utils import swab32
 
     while True:
-        serial = system.get_serial_number()
         my_xfp = settings.get('xfp', 0)
         xpub = settings.get('xpub', None)
 
-        msg = '''Serial Number:
-{serial}
-
+        msg = '''
 Master Fingerprint:
 {xfp}
 
@@ -55,8 +48,7 @@ Reversed Fingerprint:
 {rev_xfp}
 
 Master XPUB:
-{xpub}'''.format(serial=serial,
-                 xfp=xfp2str(my_xfp) if my_xfp else '<No Seed Yet>',
+{xpub}'''.format(xfp=xfp2str(my_xfp) if my_xfp else '<No Seed Yet>',
                  rev_xfp=xfp2str(swab32(my_xfp)) if my_xfp else '<No Seed Yet>',
                  xpub=xpub if xpub != None else '<No Seed Yet>')
 
@@ -622,7 +614,7 @@ async def create_new_seed(*a):
 
 Experienced users can always view and record the 24-word seed in the Advanced settings menu.''', title='Backup')
         if ch == 'x':
-            if await ux_confirm("Are you sure you want to cancel the backup?\n\nWithout a microSD backup or the seed phrase, you won't be able to recover your funds"):
+            if await ux_confirm("Are you sure you want to cancel the backup?\n\nWithout a microSD backup or the seed phrase, you won't be able to recover your funds."):
                 # Go back to the outer loop and show the selection again
                 break
 
@@ -1019,7 +1011,7 @@ async def file_picker(msg, suffix=None, min_size=None, max_size=None, taster=Non
     # - escape: allow these chars to skip picking process
     from menu import MenuSystem, MenuItem
     import uos
-    from utils import get_filesize
+    from utils import get_filesize, folder_exists
 
     system.turbo(True)
 
@@ -1035,6 +1027,10 @@ async def file_picker(msg, suffix=None, min_size=None, max_size=None, taster=Non
                     folder_path = [folder_path]
 
                 for path in folder_path:
+                    # If the folder doesn't exist, skip it (e.g., if /sd/backups/ doesn't exist)
+                    if not folder_exists(path):
+                        continue
+
                     files = uos.ilistdir(path)
                     for fn, ftype, *var in files:
                         # print("fn={} ftype={} var={}  suffix={}".format(fn, ftype, var, suffix))
@@ -1943,6 +1939,10 @@ async def test_read_flash_cache(*a):
 async def toggle_screenshot_mode(*a):
     import common
     common.screenshot_mode_enabled = not common.screenshot_mode_enabled
+
+    if common.screenshot_mode_enabled:
+        await ux_show_story('Press and release the aA1 key in the lower right corner of the keypad to save a screenshot to the microSD card.\n\nIf no microSD is inserted, nothing will happen.',
+            title='Screenshots', center=True, center_vertically=True)
     # print('common.screenshot_mode_enabled={}'.format(common.screenshot_mode_enabled))
 
 async def toggle_snapshot_mode(*a):

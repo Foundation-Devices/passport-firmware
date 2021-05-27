@@ -494,6 +494,17 @@ def file_exists(path):
     except:
         return False
 
+def folder_exists(path):
+    import os
+    from stat import S_ISDIR
+
+    try:
+        s = os.stat(path)
+        mode = s[0]
+        return S_ISDIR(mode)
+    except OSError as e:
+        return False
+
 # Derive addresses from the specified path until we find the address or have tried max_to_check addresses
 # If single sig, we need `path`.
 # If multisig, we need `ms_wallet`, but not `path`
@@ -650,6 +661,10 @@ def is_new_wallet_in_progress():
     ap = settings.get('wallet_prog', None)
     return ap != None
 
+def is_screenshot_mode_enabled():
+    from common import screenshot_mode_enabled
+    return screenshot_mode_enabled
+
 async def do_rename_account(acct_num, new_name):
     from common import settings
     from export import auto_backup
@@ -757,5 +772,10 @@ def is_alphanumeric_qr(buf):
             return False
 
     return True
+
+async def needs_microsd():
+    from ux import ux_show_story
+    # Standard msg shown if no SD card detected when we need one.
+    return await ux_show_story("Please insert a microSD card.", title='MicroSD', center=True, center_vertically=True)
 
 # EOF

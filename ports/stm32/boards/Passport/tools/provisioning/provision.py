@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2021 Foundation Devices, Inc. <hello@foundationdevices.com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
@@ -33,10 +34,6 @@ TELNET_CMD_LINE = ['telnet', 'localhost', '4444']
 telnet_proc = None
 
 
-# FACTORY SETTINGS
-DIAGNOSTIC_MODE = False    # Set to True to get more menu options
-
-
 def connect_to_telnet():
     # Connect
     global tn
@@ -45,6 +42,27 @@ def connect_to_telnet():
     # We still see the commands we send echoed from the remote side, but they are not also echoed locally now.
     tn.write(b'' + telnetlib.IAC + telnetlib.DONT + telnetlib.ECHO)
 
+def banner(s):
+    divider = '=' * len(s)
+    print(divider)
+    print(s)
+    print(divider)
+
+# def poll_for_device():
+#     attempts_remaining = 10
+#     print('Waiting for device to be ready...')
+#     while attempts_remaining > 0:
+#         print('  {}...'.format(attempts_remaining))
+#         result = init_device()
+#         if result:
+#             print('Device Ready!')
+#             return True
+#
+#         time.sleep(1)
+#         attempts_remaining -= 1
+#
+#     print('Timeout! Device did not respond.')
+#     return False
 
 # Numato 32 channel GPIO board over USB serial:
 #
@@ -103,19 +121,42 @@ def wait_for_prompt(timeout=None):
     else:
         return True
 
+
+MAX_ATTEMPTS = 10
+
 # Put device into halt state, and discard all unread data to get ready for a new command
 def init_device(timeout=None):
-    r = tn.read_very_eager()
-    # print('Halting device...')
-    tn.write(b'reset halt\r')
-    return wait_for_prompt(timeout)
+    attempts_remaining = MAX_ATTEMPTS
+    if not tn:
+        print('Connecting to OpenOCD...')
+
+    while attempts_remaining > 0:
+        if not tn:
+            connect_to_telnet()
+
+        if tn:
+            r = tn.read_very_eager()
+            # print('Halting device...')
+            tn.write(b'reset halt\r')
+            result = wait_for_prompt(timeout)
+            if result:
+                if attempts_remaining < MAX_ATTEMPTS:
+                    banner('Connected to device!')
+                return True
+
+        print('  {}...'.format(attempts_remaining))
+        time.sleep(1)
+        attempts_remaining -= 1
+
+    banner('Timeout! Device did not respond.')
+    return False
 
 def random_fn_ext(l):
     import os, binascii
     return binascii.b2a_hex(os.urandom(l)).decode('utf-8')
 
 def provision_device(flash_bootloader=False, flash_firmware=False, with_secrets=False):
-    init_device()
+    if not init_device(): return
 
     # Check to see if the device was already provisioned - it will have data in its secrets
     if flash_bootloader and not with_secrets:
@@ -183,7 +224,7 @@ def provision_device(flash_bootloader=False, flash_firmware=False, with_secrets=
     print('Complete!')
 
 def write_supply_chain_secret():
-    init_device()
+    if not init_device(): return
 
     # Write the supply chain secret
     print('Setting Supply Chain Validation Secret...')
@@ -196,19 +237,15 @@ def write_supply_chain_secret():
     tn.write(bytes(cmd, 'utf-8'))
     wait_for_prompt()
 
-def test_device_connection():
-    tn.read_very_eager()
-    device_found = init_device(timeout=5)
-    if device_found:
-        print('Passport is connected and responding to commands.')
-    else:
-        print('===================================================================')
-        print('Unable to connect to device (Error or timeout connecting to device)')
-        print('===================================================================')
+# def test_device_connection():
+#     # tn.read_very_eager()
+#     device_found = init_device(timeout=5)
+#     if device_found:
+#         print('Passport is connected and responding to commands.')
 
 def read_supply_chain_secret(do_init=True):
     if do_init:
-        init_device()
+        if not init_device(): return
 
     # Read the supply chain secret to make sure the device is ready for provisioning
     tn.write(bytes('mdb {} 32\r'.format(hex(SUPPLY_CHAIN_SECRET_ADDRESS)), 'utf-8'))
@@ -235,7 +272,7 @@ def is_already_provisioned(secrets):
     return any(map(lambda b: b != 0xFF, secrets))
 
 def get_secrets():
-    init_device()
+    if not init_device(): return []
 
     cmd = bytes('mdb {} 256\r'.format(hex(BL_NVROM_BASE)), 'utf-8')
     tn.write(cmd)
@@ -266,7 +303,7 @@ def save_secrets():
         print('\nUnable to read secrets from device!')
 
 def reset_device():
-    init_device()
+    if not init_device(): return
 
     print('Resetting Device...')
     tn.write(b'reset\r')
@@ -274,7 +311,7 @@ def reset_device():
     print('Done.')
 
 def erase_all_flash():
-    init_device()
+    if not init_device(): return
 
     print('Erasing all internal flash (bootloader, secrets, firmware, user settings)...')
     tn.write(b'flash erase_address 0x8000000 0x200000\r')
@@ -298,9 +335,14 @@ def erase_all_flash():
 #
 
 def main():
+    DIAGNOSTIC_MODE = False
+    if len(sys.argv) > 1:
+        if sys.argv[1] == '--diag':
+            DIAGNOSTIC_MODE = True
+
     if DIAGNOSTIC_MODE:
         options = [
-            '[1] Test Device Connection',
+            '[1] Connect to Test Device',
             '[2] Provision Device',
             '[3] Update Bootloader Only (with secrets.bin)',
             '[4] Update Firmware Only',
@@ -314,7 +356,7 @@ def main():
         ]
     else:
         options = [
-            '[1] Test Device Connection',
+            '[1] Connect to Test Device',
             '[2] Provision Device',
             '[3] Print Secrets',
             '[4] Reset Device',
@@ -331,8 +373,7 @@ def main():
 
         if DIAGNOSTIC_MODE:
             if selection == 0:
-                connect_to_telnet()
-                test_device_connection()
+                init_device()
             elif selection == 1:
                 provision_device(flash_bootloader=True, flash_firmware=True)
             elif selection == 2:
@@ -355,8 +396,7 @@ def main():
                 exit = True
         else:
             if selection == 0:
-                connect_to_telnet()
-                test_device_connection()
+                init_device()
             elif selection == 1:
                 provision_device(flash_bootloader=True, flash_firmware=True)
             elif selection == 2:

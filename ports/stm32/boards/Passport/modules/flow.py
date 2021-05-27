@@ -19,7 +19,7 @@ from public_constants import AF_P2WPKH
 from multisig import make_multisig_menu
 from wallets.utils import has_export_mode
 from export import view_backup_password
-from utils import is_new_wallet_in_progress, get_accounts
+from utils import is_new_wallet_in_progress, get_accounts, is_screenshot_mode_enabled
 from new_wallet import pair_new_wallet
 from ie import show_browser
 
@@ -184,5 +184,7 @@ ExtrasMenu = [
     # MenuItem('Developer Menu', menu=DeveloperMenu),
     MenuItem('Snakamoto', f=play_snake),
     MenuItem('Stacking Sats', f=play_stacking_sats),
-    MenuItem('Internet Browser', f=show_browser)
+    MenuItem('Internet Browser', f=show_browser),
+    MenuItem('Enable Screenshots', f=toggle_screenshot_mode, predicate=lambda: not is_screenshot_mode_enabled()),
+    MenuItem('Disable Screenshots', f=toggle_screenshot_mode, predicate=is_screenshot_mode_enabled)
 ]
