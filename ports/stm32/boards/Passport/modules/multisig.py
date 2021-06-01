@@ -11,6 +11,7 @@
 #
 import stash, chains, ustruct, ure, uio, sys
 import trezorcrypto
+import tcc
 from ubinascii import hexlify as b2a_hex
 from utils import xfp2str, str2xfp, cleanup_deriv_path, keypath_to_str, str_to_keypath
 from ux import ux_show_story, ux_confirm, ux_enter_text
@@ -1006,7 +1007,7 @@ class MultisigWallet:
 
         for k, v in xpubs_list:
             xfp, *path = ustruct.unpack_from('<%dI' % (len(k)//4), k, 0)
-            xpub = trezorcrypto.codecs.b58_encode(v)
+            xpub = tcc.codecs.b58_encode(v)
             is_mine = cls.check_xpub(xfp, xpub, keypath_to_str(path, skip=0),
                                                         expect_chain, my_xfp, xpubs)
             if is_mine:
@@ -1036,7 +1037,7 @@ class MultisigWallet:
 
         for k, v in xpubs_list:
             xfp, *path = ustruct.unpack_from('<%dI' % (len(k)//4), k, 0)
-            xpub = trezorcrypto.codecs.b58_encode(v)
+            xpub = tcc.codecs.b58_encode(v)
 
             # cleanup and normalize xpub
             tmp = []
