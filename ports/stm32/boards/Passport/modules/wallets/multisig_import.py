@@ -7,7 +7,7 @@
 # (c) Copyright 2018 by Coinkite Inc. This file is part of Coldcard <coldcardwallet.com>
 # and is covered by GPLv3 license found in COPYING.
 #
-# multisig_import.py - Multsig config import
+# multisig_import.py - Multisig config import
 #
 
 from ux import ux_scan_qr_code, ux_show_story

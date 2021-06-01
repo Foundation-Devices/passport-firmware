@@ -10,7 +10,7 @@ from .multisig_import import read_multisig_config_from_microsd
 CaravanWallet = {
     'label': 'Caravan',
     'sig_types': [
-        {'id':'multisig', 'label':'Multsig', 'addr_type': None, 'create_wallet': create_multisig_json_wallet,
+        {'id':'multisig', 'label':'Multisig', 'addr_type': None, 'create_wallet': create_multisig_json_wallet,
          'import_microsd': read_multisig_config_from_microsd}
     ],
     'export_modes': [

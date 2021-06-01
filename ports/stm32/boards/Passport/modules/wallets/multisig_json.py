@@ -7,7 +7,7 @@
 # (c) Copyright 2018 by Coinkite Inc. This file is part of Coldcard <coldcardwallet.com>
 # and is covered by GPLv3 license found in COPYING.
 #
-# multisig_json.py - Multsig export format
+# multisig_json.py - Multisig export format
 #
 
 import stash

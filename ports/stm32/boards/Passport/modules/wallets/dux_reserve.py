@@ -14,7 +14,7 @@ DuxReserveWallet = {
     'label': 'Dux Reserve',
     'sig_types': [
         {'id':'single-sig', 'label':'Single-sig', 'addr_type': AF_P2WPKH, 'create_wallet': create_generic_json_wallet},
-        {'id':'multisig', 'label':'Multsig', 'addr_type': None, 'create_wallet': create_multisig_json_wallet,
+        {'id':'multisig', 'label':'Multisig', 'addr_type': None, 'create_wallet': create_multisig_json_wallet,
          'import_microsd': read_multisig_config_from_microsd}
     ],
     'export_modes': [

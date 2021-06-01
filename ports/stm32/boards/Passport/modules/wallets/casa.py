@@ -50,7 +50,7 @@ wallet system that is ready to handle the funds at that address!
 CasaWallet = {
     'label': 'Casa',
     'sig_types': [
-        {'id':'multisig', 'label':'Multsig', 'addr_type': None, 'create_wallet': create_casa_export,
+        {'id':'multisig', 'label':'Multisig', 'addr_type': None, 'create_wallet': create_casa_export,
          'import_microsd': read_multisig_config_from_microsd}
     ],
     'export_modes': [
