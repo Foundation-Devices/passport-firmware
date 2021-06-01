@@ -37,6 +37,7 @@ async def about_info(*a):
     from utils import swab32
 
     while True:
+        serial = system.get_serial_number()
         my_xfp = settings.get('xfp', 0)
         xpub = settings.get('xpub', None)
 
@@ -48,9 +49,13 @@ Reversed Fingerprint:
 {rev_xfp}
 
 Master XPUB:
-{xpub}'''.format(xfp=xfp2str(my_xfp) if my_xfp else '<No Seed Yet>',
+{xpub}
+
+Serial Number:
+{serial}'''.format(xfp=xfp2str(my_xfp) if my_xfp else '<No Seed Yet>',
                  rev_xfp=xfp2str(swab32(my_xfp)) if my_xfp else '<No Seed Yet>',
-                 xpub=xpub if xpub != None else '<No Seed Yet>')
+                 xpub=xpub if xpub != None else '<No Seed Yet>',
+                 serial=serial)
 
         result = await ux_show_story(msg, center=True, center_vertically=True, font=FontTiny, right_btn='REGULATORY')
         if result == 'y':
@@ -638,9 +643,9 @@ If you'd like to enter "car" for example, type 2-2-7 and select "car" from the d
     if result == 'x':
         return
 
-    fake_it = False
+    fake_it = True
     if fake_it:
-        pass
+        mnemonic = 'fabric humor guess asset day palace wealth spare trend seek focus empower hair advance myself defy grain inhale market noodle right need joke scatter'
     else:
         from seed_entry_ux import SeedEntryUX
         seed_phrase_entry = SeedEntryUX(seed_len=item.arg)
