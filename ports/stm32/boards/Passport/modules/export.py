@@ -547,7 +547,7 @@ async def write_complete_backup(words, auto_backup=False, is_first_backup=False)
         except Exception as e:
             # includes CardMissingError
             import sys
-            sys.print_exception(e)
+            # sys.print_exception(e)
             # catch any error
             if not auto_backup:
                 ch = await ux_show_story('Unable to write backup. Please insert a formatted microSD card.\n\n' +
