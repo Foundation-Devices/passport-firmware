@@ -919,20 +919,16 @@ async def sign_psbt_buf(psbt_buf):
 
         gc.collect()
 
-        from ur1.encode_ur import encode_ur
         from ux import DisplayURCode
         from data_codecs.qr_type import QRType
         from ubinascii import hexlify as b2a_hex
 
         signed_hex = b2a_hex(signed_bytes)
-        # lines = [signed_hex[i:i+100] for i in range(0, len(signed_hex), 100)]
-        # print('signed_bytes hex')
-        # for line in lines:
-        #     print(line)
 
         # print('last_scanned_qr_type={}'.format(last_scanned_qr_type))
-        # print('len(signed_hex)={}'.format(len(signed_hex)))
-        o = DisplayURCode('Signed Txn', signed_hex, last_scanned_qr_type or QRType.UR2, None, is_binary=True)
+
+        # Text format for UR1, but binary for UR2
+        o = DisplayURCode('Signed Txn', signed_bytes if last_scanned_qr_type == QRType.UR2 else signed_hex, last_scanned_qr_type or QRType.UR2, None, is_binary=True)
         result = await o.interact_bare()
         UserAuthorizedAction.cleanup()
 
