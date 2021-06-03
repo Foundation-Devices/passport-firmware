@@ -1173,6 +1173,12 @@ class DisplayURCode(UserInteraction):
         self.last_version = 0;
         self.qr_version_idx = (self.qr_version_idx + 1) % self.num_supported_sizes
 
+    def get_frame_delay(self):
+        if self.qr_version_idx == 0:
+            return 200
+        else:
+            return 250
+
     def render_qr(self, data):
         from utils import imported
 
@@ -1307,7 +1313,7 @@ class DisplayURCode(UserInteraction):
                 # Only need to check timer and advance part number if we have more than one part
                 # if len(self.parts) > 1:
                 # Show the next part after a short delay to control speed
-                await sleep_ms(200)
+                await sleep_ms(self.get_frame_delay())
                 self.render_id += 1
                 self.redraw()
                 continue
