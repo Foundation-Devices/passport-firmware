@@ -270,11 +270,8 @@ class VerifyAddressUX(UXStateMachine):
                 if address == None:
                     return
 
-                # Ensure lowercase
-                address = address.lower()
-
                 # Strip prefix if present
-                if address.startswith('bitcoin:'):
+                if address[0:8].lower() == 'bitcoin:':
                     address = address[8:]
 
                 if not is_valid_address(address):
