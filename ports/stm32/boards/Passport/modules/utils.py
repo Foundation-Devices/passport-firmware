@@ -511,30 +511,34 @@ def folder_exists(path):
 def find_address(path, start_address_idx, address, addr_type, ms_wallet, max_to_check=100, reverse=False):
     import stash
 
-    with stash.SensitiveValues() as sv:
-        if ms_wallet:
-            # NOTE: Can't easily reverse order here, so this is slightly less efficient
-            for (curr_idx, paths, curr_address, script) in ms_wallet.yield_addresses(start_address_idx, max_to_check):
-                # print('curr_idx={}: paths={} curr_address = {}'.format(curr_idx, paths, curr_address))
+    try:
+        with stash.SensitiveValues() as sv:
+            if ms_wallet:
+                # NOTE: Can't easily reverse order here, so this is slightly less efficient
+                for (curr_idx, paths, curr_address, script) in ms_wallet.yield_addresses(start_address_idx, max_to_check):
+                    # print('curr_idx={}: paths={} curr_address = {}'.format(curr_idx, paths, curr_address))
 
-                if curr_address == address:
-                    return (curr_idx, paths)  # NOTE: Paths are the full paths of the addresses of each signer
+                    if curr_address == address:
+                        return (curr_idx, paths)  # NOTE: Paths are the full paths of the addresses of each signer
 
-        else:
-            r = range(start_address_idx, start_address_idx + max_to_check)
-            if reverse:
-                r = reversed(r)
+            else:
+                r = range(start_address_idx, start_address_idx + max_to_check)
+                if reverse:
+                    r = reversed(r)
 
-            for curr_idx in r:
-                addr_path = '{}/0/{}'.format(path, curr_idx)  # Zero for non-change address
-                # print('addr_path={}'.format(addr_path))
-                node = sv.derive_path(addr_path)
-                # print('node={}'.format(node))
-                curr_address = sv.chain.address(node, addr_type)
-                # print('curr_idx={}: path={} addr_type={} curr_address = {}'.format(curr_idx, addr_path, addr_type, curr_address))
-                if curr_address == address:
-                    return (curr_idx, addr_path)
-    return (-1, None)
+                for curr_idx in r:
+                    addr_path = '{}/0/{}'.format(path, curr_idx)  # Zero for non-change address
+                    # print('addr_path={}'.format(addr_path))
+                    node = sv.derive_path(addr_path)
+                    # print('node={}'.format(node))
+                    curr_address = sv.chain.address(node, addr_type)
+                    # print('curr_idx={}: path={} addr_type={} curr_address = {}'.format(curr_idx, addr_path, addr_type, curr_address))
+                    if curr_address == address:
+                        return (curr_idx, addr_path)
+        return (-1, None)
+    except Exception as e:
+        # Any address handling exceptions result in no address found
+        return (-1, None)
 
 def get_accounts():
     from common import settings
