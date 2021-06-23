@@ -32,6 +32,6 @@ supported_software_wallets = [
     # GordianWallet,
     # LilyWallet,
     SparrowWallet,
-    SpecterWallet,
+    # SpecterWallet,
     WasabiWallet,
 ]
