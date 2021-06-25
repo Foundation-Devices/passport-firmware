@@ -121,28 +121,27 @@ Boston, MA 02109 USA"""
 #             font=FontTiny)
 
 async def rename_account(menu, label, item):
-    from export import auto_backup
     from utils import account_exists, do_rename_account
     from constants import MAX_ACCOUNT_NAME_LEN
 
     account = common.active_account
 
+    original_name = account.get('name')
+    new_name = original_name
+
     while True:
-        new_name = await ux_enter_text('Rename', label="Enter account name", initial_text=account.get('name'),
+        new_name = await ux_enter_text('Rename', label="Enter account name", initial_text=new_name,
             right_btn='RENAME', max_length=MAX_ACCOUNT_NAME_LEN)
 
-        if new_name == None:
-            # User selected BACK
+        if new_name == None or new_name == original_name:
+            # User selected BACK or selected RENAME with the same exact name
             return
 
         # See if an account with this name already exists
         if account_exists(new_name):
-            result = await ux_show_story('An account with the name "{}" already exists. Please choose a different name.'.format(new_name),
-                title='Duplicate', center=True, center_vertically=True, right_btn='RENAME')
-            if result == 'x':
-                self.goto_prev()
-            else:
-                continue
+            await ux_show_story('An account with the name "{}" already exists. Please choose a different name.'.format(new_name),
+                title='Duplicate', center=True, center_vertically=True, right_btn='EDIT')
+            continue
 
         # Get the accounts and replace the name and save it
         await do_rename_account(account.get('acct_num'), new_name)
@@ -640,9 +639,9 @@ If you'd like to enter "car" for example, type 2-2-7 and select "car" from the d
     if result == 'x':
         return
 
-    fake_it = True
+    fake_it = False
     if fake_it:
-        mnemonic = 'fabric humor guess asset day palace wealth spare trend seek focus empower hair advance myself defy grain inhale market noodle right need joke scatter'
+        pass
     else:
         from seed_entry_ux import SeedEntryUX
         seed_phrase_entry = SeedEntryUX(seed_len=item.arg)
@@ -1296,8 +1295,6 @@ async def import_multisig_from_qr(*a):
     system.turbo(False);
 
     if data != None:
-        # TOnly need to decode this for QR codes...from SD card it's already in bytes
-        data = data.decode('utf-8')
         await handle_import_multisig_config(data)
 
 async def handle_import_multisig_config(data):
@@ -1305,12 +1302,18 @@ async def handle_import_multisig_config(data):
     from export import offer_backup
     from utils import show_top_menu
 
+    # Coming from a UR code we need to decode from bytes
+    if isinstance(data, (bytes, bytearray)):
+        data = data.decode('utf-8')
+
     try:
+        common.is_new_wallet_a_duplicate = False
         possible_name = "ms"
         maybe_enroll_xpub(config=data, name=possible_name)
         await show_top_menu()  # wait for interaction with the enroll
 
-        await offer_backup()
+        if not common.is_new_wallet_a_duplicate:
+            await offer_backup()
     except Exception as e:
         await ux_show_story('Unable to import multisig configuration.\n\n'+str(e), title='Error')
 
