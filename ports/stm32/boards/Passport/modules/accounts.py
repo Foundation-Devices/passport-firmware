@@ -66,9 +66,6 @@ class NewAccountUX(UXStateMachine):
                 self.goto(self.ENTER_ACCOUNT_NAME)
 
             elif self.state == self.ENTER_ACCOUNT_NAME:
-                # Default the name to the label as a starting point for the user
-                self.account_name = ''
-
                 name = await ux_enter_text(
                     'Account Name',
                     label='New Account Name',
@@ -82,9 +79,10 @@ class NewAccountUX(UXStateMachine):
                 # See if an account with this name already exists
                 if account_exists(name):
                     result = await ux_show_story('An account with the name "{}" already exists. Please choose a different name.'.format(name),
-                        title='Duplicate', center=True, center_vertically=True, right_btn='RENAME')
+                        title='Duplicate', center=True, center_vertically=True, right_btn='EDIT')
                     if result == 'x':
                         self.goto_prev()
+                        continue
                     else:
                         self.account_name = name  # Start off with the name the user entered
                         continue
