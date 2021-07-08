@@ -936,7 +936,8 @@ async def sign_psbt_buf(psbt_buf):
 
     UserAuthorizedAction.active_request = ApproveTransaction(psbt_len, approved_cb=done)
 
-    # kill any menu stack, and put our thing at the top
+    # Kill any menu stack, and put our thing at the top - whatever async chain started off this signing process will
+    # now resume and complete, and then the following action will become active.
     abort_and_goto(UserAuthorizedAction.active_request)
 
 

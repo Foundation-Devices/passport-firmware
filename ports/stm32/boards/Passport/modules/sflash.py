@@ -15,10 +15,10 @@
 # - it wants to waste 4k on a buffer
 #
 # Layout for project:
-#   - 768 PSBT incoming (MAX_TXN_LEN)
-#   - 768 PSBT outgoing (MAX_TXN_LEN)
+#   - 917K PSBT incoming (MAX_TXN_LEN)
+#   - 917K PSBT outgoing (MAX_TXN_LEN)
 #   - The previous two regions are only used when signing PSBTs.
-#   - The same space is used to hold firmware updates.
+#   - The same space is also used to hold firmware updates.
 #   - 256k flash cache - similar to settings, but for UTXOs and wallet address cache
 #
 import machine

@@ -14,6 +14,7 @@
 
 import pyb
 import version
+import gc
 from files import CardMissingError, CardSlot
 # import main
 from uasyncio import sleep_ms
@@ -1356,11 +1357,18 @@ async def handle_psbt_data_format(data):
         try:
             from auth import sign_psbt_buf
 
+            gc.collect()
+            # print('Available RAM: psbt 1 = {}'.format(gc.mem_free()))
+
             # The data can be a string or may already be a bytes object
             if isinstance(data, bytes):
                 data_buf = data
             else:
                 data_buf = bytes(data, 'utf-8')
+
+            gc.collect()  # Try to avoid excessive fragmentation
+            # print('Available RAM: psbt 2 = {}'.format(gc.mem_free()))
+
             # print("data_buf={}".format(data_buf))
             system.show_busy_bar()
             dis.fullscreen('Analyzing...')

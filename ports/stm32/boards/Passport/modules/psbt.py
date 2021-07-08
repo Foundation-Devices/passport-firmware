@@ -1392,16 +1392,31 @@ class psbtObject(psbtProxy):
             for k in self.unknown:
                 wr(k[0], self.unknown[k], k[1:])
 
+        # import micropython
+        # print('======================================')
+        # micropython.mem_info(1)
+        # print('======================================')
+
         # sep between globals and inputs
         out_fd.write(b'\0')
 
         for idx, inp in enumerate(self.inputs):
+            # print('Input {}: free mem={}'.format(idx, gc.mem_free()))
             inp.serialize(out_fd, idx)
             out_fd.write(b'\0')
+            gc.collect()  # Give collector a chance to run to help avoid fragmentation
 
         for idx, outp in enumerate(self.outputs):
+            # print('Output {}: free mem={}'.format(idx, gc.mem_free()))
             outp.serialize(out_fd, idx)
             out_fd.write(b'\0')
+            gc.collect()  # Give collector a chance to run to help avoid fragmentation
+
+        # print('After serialize(): free mem={}'.format(gc.mem_free()))
+
+        # print('======================================')
+        # micropython.mem_info(1)
+        # print('======================================')
 
     def sign_it(self):
         # txn is approved. sign all inputs we can sign. add signatures

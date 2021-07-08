@@ -625,12 +625,12 @@ STATIC mp_obj_t mod_trezorcrypto_bip32_deserialize(mp_obj_t value, mp_obj_t vers
     HDNode hdnode;
     uint32_t fingerprint;
     if (_is_public) {
-      printf("Calling hdnode_deserialize_public()\n");
+      // printf("Calling hdnode_deserialize_public()\n");
       if (hdnode_deserialize_public(valueb.buf, _version, SECP256K1_NAME, &hdnode, &fingerprint) < 0) {
           mp_raise_ValueError("Failed to deserialize public");
       }
     } else {
-      printf("Calling hdnode_deserialize_private()\n");
+      // printf("Calling hdnode_deserialize_private()\n");
       if (hdnode_deserialize_private(valueb.buf, _version, SECP256K1_NAME, &hdnode, &fingerprint) < 0) {
           mp_raise_ValueError("Failed to deserialize private");
       }
