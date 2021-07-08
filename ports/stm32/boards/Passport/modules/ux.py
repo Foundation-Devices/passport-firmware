@@ -1180,9 +1180,9 @@ class DisplayURCode(UserInteraction):
             return 250
 
     def render_qr(self, data):
-        from utils import imported
+        from utils import imported, bytes_to_hex_str
 
-        # print('data: {}'.format(data))
+        # print('data: {}'.format(bytes_to_hex_str(data)))
 
         if self.last_render_id != self.render_id:
             self.last_render_id = self.render_id
@@ -1488,7 +1488,9 @@ async def ux_scan_qr_code(title):
 
                     # Set the last QRType so that signed transactions know what to encode as
                     common.last_scanned_qr_type = qr_decoder.get_data_format()
+                    common.last_scanned_ur_prefix = qr_decoder.get_ur_prefix()
                     # print('common.last_scanned_qr_type={}'.format(common.last_scanned_qr_type))
+                    # print('common.last_scanned_ur_prefix={}'.format(common.last_scanned_ur_prefix))
                     break
 
                 progress = '{} OF {}'.format(qr_decoder.received_parts(), qr_decoder.total_parts())
