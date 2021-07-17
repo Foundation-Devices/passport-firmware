@@ -34,7 +34,7 @@ class InvalidFragment(Exception):
 class URDecoder:
     def __init__(self):
         self.fountain_decoder = FountainDecoder()
-        self.expected_type = None
+        self._expected_type = None
         self.result = None
 
     @staticmethod
@@ -93,13 +93,13 @@ class URDecoder:
             raise InvalidSequenceComponent()
 
     def validate_part(self, type):
-        if self.expected_type == None:
+        if self._expected_type == None:
             if not is_ur_type(type):
                 return False
-            self.expected_type = type
+            self._expected_type = type
             return True
         else:
-            return type == self.expected_type
+            return type == self._expected_type
 
     def receive_part(self, str):
         try:
@@ -148,7 +148,7 @@ class URDecoder:
             return False
 
     def expected_type(self):
-        return self.expected_type
+        return self._expected_type
 
     def expected_part_count(self):
         return self.fountain_decoder.expected_part_count()

@@ -33,14 +33,12 @@ def string_to_bytes(s):
     return bytes(s, 'utf8')
 
 
-def is_ur_type(ch):
-    if 'a' <= ch and ch <= 'z':
-        return True
-    if '0' <= ch and ch <= '9':
-        return True
-    if ch == '-':
-        return True
-    return False
+def is_ur_type(type):
+	for ch in type:
+		if not (ch >= 'a' and ch <= 'z') and not(ch >= '0' and ch <= '9') and ch != '-':
+			return False
+
+	return True
 
 
 def partition(s, n):

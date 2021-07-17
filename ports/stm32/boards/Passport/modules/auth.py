@@ -905,7 +905,7 @@ async def sign_psbt_buf(psbt_buf):
 
     # Create a new BytesIO() to hold the result
     async def done(psbt):
-        from common import system, last_scanned_qr_type
+        from common import system, last_scanned_qr_type, last_scanned_ur_prefix
         system.hide_busy_bar()
         signed_bytes = None
         with BytesIO() as bfd:
@@ -928,13 +928,16 @@ async def sign_psbt_buf(psbt_buf):
         # print('last_scanned_qr_type={}'.format(last_scanned_qr_type))
 
         # Text format for UR1, but binary for UR2
-        o = DisplayURCode('Signed Txn', signed_bytes if last_scanned_qr_type == QRType.UR2 else signed_hex, last_scanned_qr_type or QRType.UR2, None, is_binary=True)
+        #     def __init__(self, title, qr_text, qr_type, qr_args=None, msg=None, left_btn='DONE', right_btn='RESIZE', is_binary=False):
+
+        o = DisplayURCode('Signed Txn', signed_bytes if last_scanned_qr_type == QRType.UR2 else signed_hex, last_scanned_qr_type or QRType.UR2, {'prefix': last_scanned_ur_prefix }, is_binary=True)
         result = await o.interact_bare()
         UserAuthorizedAction.cleanup()
 
     UserAuthorizedAction.active_request = ApproveTransaction(psbt_len, approved_cb=done)
 
-    # kill any menu stack, and put our thing at the top
+    # Kill any menu stack, and put our thing at the top - whatever async chain started off this signing process will
+    # now resume and complete, and then the following action will become active.
     abort_and_goto(UserAuthorizedAction.active_request)
 
 

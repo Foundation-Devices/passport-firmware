@@ -49,7 +49,7 @@ class UR2Decoder(DataDecoder):
         else:
             return None
 
-    def get_type(self):
+    def get_ur_prefix(self):
         return self.decoder.expected_type()
 
     def decode(self):
@@ -69,9 +69,13 @@ class UR2Decoder(DataDecoder):
         return QRType.UR2
 
 class UR2Encoder(DataEncoder):
-    def __init__(self, _args):
+    def __init__(self, args):
         self.qr_sizes = [280, 100, 70]
         self.type = None
+        if isinstance(args, dict):
+            self.prefix = args['prefix'] or 'bytes'
+        else:
+            self.prefix = 'bytes'
 
     def get_num_supported_sizes(self):
         return len(self.qr_sizes)
@@ -87,7 +91,7 @@ class UR2Encoder(DataEncoder):
         # print('UR2: data={}'.format(to_str(data)))
         encoder.encodeBytes(data)
         # TODO: Need to change this interface most likely to allow for different types like crypto-psbt
-        ur_obj = UR("bytes", encoder.get_bytes())
+        ur_obj = UR(self.prefix, encoder.get_bytes())
         self.ur_encoder = UREncoder(ur_obj, max_fragment_len)
 
     # UR2.0's next_part() returns the initial pieces split into max_fragment_len bytes, but then switches over to
@@ -104,9 +108,14 @@ class UR2Sampler(DataSampler):
     # Return True if it matches or False if not
     @classmethod
     def sample(cls, data):
-        r = re.compile('^ur:[a-z\d-]+\/(\d)+-(\d)+\/')
-        m = r.match(data.lower())
-        return m != None
+        try:
+            # Rather than try a complex regex here, we just let the decoder try to decode and if it fails.
+            # it must not be UR2.
+            decoder = URDecoder()
+            result = decoder.receive_part(data)
+            return result
+        except e:
+            return False
 
     # Number of bytes required to successfully recognize this format
     @classmethod

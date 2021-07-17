@@ -44,8 +44,8 @@ class UR1Decoder(DataDecoder):
     def get_error(self):
         return self.error
 
-    def get_type(self):
-        return self.decoder.expected_type()
+    def get_ur_prefix(self):
+        return 'bytes'  # TODO: Get the type from the UR1 decoder
 
     def decode(self):
         from common import system
@@ -112,7 +112,7 @@ class UR1Sampler(DataSampler):
     # Return True if it matches or False if not
     @classmethod
     def sample(cls, data):
-        r = re.compile('^ur:bytes/(\d)+of(\d)+/')
+        r = re.compile('^ur:bytes/')  # Don't look for the n of m count anymore
         m = r.match(data.lower())
         return m != None
 
