@@ -596,7 +596,7 @@ def get_next_address_range(range, max_size):
     return ((high, high + max_size), max_size)
 
 async def scan_for_address(acct_num, address, addr_type, deriv_path, ms_wallet):
-    from common import system
+    from common import system, dis
     from ux import ux_show_story
 
     # print('Address to verify = {}'.format(address))
@@ -610,12 +610,15 @@ async def scan_for_address(acct_num, address, addr_type, deriv_path, ms_wallet):
     # Setup the initial ranges
     a = get_next_addr(acct_num, addr_type)
 
+    first_time = True
     low_range, low_size = get_prev_address_range((a, a), NUM_TO_CHECK // 2)
     high_range, high_size = get_next_address_range((a, a), NUM_TO_CHECK - low_size)
 
     while True:
         # See if the address is valid
         system.show_busy_bar()
+
+        dis.fullscreen('Searching Addresses...')
 
         addr_idx = -1
 
@@ -649,9 +652,21 @@ async def scan_for_address(acct_num, address, addr_type, deriv_path, ms_wallet):
             return addr_idx
         else:
             # Address was not found in that batch of 100, so offer to keep searching
-            result = await ux_show_story('''The scanned address was not yet found.
+            msg = 'Searched {} addresses:\n\n'.format(NUM_TO_CHECK)
 
-Do you want to continue searching addresses?''', title='Not Found', left_btn='BACK', right_btn='CONTINUE',
+            if first_time:
+                msg += '{}-{}\n'.format(low_range[0], high_range[1] - 1)
+                first_time = False
+            else:
+                if low_size > 0:
+                    msg += '{}-{}\n'.format(low_range[0], low_range[1] - 1)
+
+                # Add the upper range
+                msg += '{}-{}\n'.format(high_range[0], high_range[1] - 1)
+
+            msg += '\nDo you want to keep searching?'
+
+            result = await ux_show_story(msg, title='Not Found', left_btn='NO', right_btn='YES',
                 center=True, center_vertically=True)
             if result == 'x':
                 return -1
