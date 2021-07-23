@@ -255,7 +255,7 @@ class VerifyAddressUX(UXStateMachine):
                     await run_chooser(self.sig_type_chooser, 'Type', show_checks=False)
                     if self.sig_type == None:
                         if not self.goto_prev():
-                            # Nothing to return back to, so we must have skipped one or more steps...were' done
+                            # Nothing to return back to, so we must have skipped one or more steps...we're done
                             return
                         continue
 
@@ -279,7 +279,7 @@ class VerifyAddressUX(UXStateMachine):
                                                  right_btn='SCAN', center=True, center_vertically=True)
                     if result == 'x':
                         if not self.goto_prev():
-                            # Nothing to return back to, so we must have skipped one or more steps...were' done
+                            # Nothing to return back to, so we must have skipped one or more steps...we're done
                             return
                     continue
 
@@ -295,8 +295,15 @@ class VerifyAddressUX(UXStateMachine):
                     # Remember where to start from next time
                     save_next_addr(self.acct_num, addr_type, addr_idx)
 
-                    dis.fullscreen('Address Verified')
-                    await sleep_ms(1000)
+                    result = await ux_show_story('''{}
+
+Verified at index {}'''.format(address, addr_idx), title='Verify Address', left_btn='BACK',
+                                                 right_btn='CONTINUE', center=True, center_vertically=True)
+                    if result == 'x':
+                        if not self.goto_prev():
+                            # Nothing to return back to, so we must have skipped one or more steps...were' done
+                            return
+
                     return
                 else:
                     # User asked to stop searching
