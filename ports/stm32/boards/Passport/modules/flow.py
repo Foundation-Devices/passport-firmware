@@ -116,6 +116,7 @@ from noise_source import NoiseSource
 DeveloperMenu = [
     # MenuItem('Settings Error 2', f=generate_settings_error2),
     # MenuItem('Settings Error', f=generate_settings_error),
+    MenuItem('Set Last Addr', f=set_last_verified_addr),
     MenuItem('Clear OVC', f=clear_ovc),
     MenuItem('Test UR1', f=test_ur1),
     MenuItem('Reset Device', f=reset_device),

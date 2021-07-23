@@ -221,9 +221,9 @@ class Settings:
             self.loop.call_later_ms(250, self.write_out())
 
     def set(self, kn, v):
-        if self.curr_dict.get(kn, '!~$~!') != v:  # So that None can be set
+        # print('Settings: Set {} to {}'.format(kn, to_str(v)))
+        if isinstance(v, dict) or self.curr_dict.get(kn, '!~$~!') != v:  # So that None can be set
             self.curr_dict[kn] = v
-            # print('Settings: Set {} to {}'.format(kn, to_str(v)))
             self.changed()
 
     def remove(self, kn):

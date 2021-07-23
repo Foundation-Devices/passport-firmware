@@ -2027,3 +2027,9 @@ async def clear_ovc(*a):
     from history import OutptValueCache
     from common import flash_cache
     OutptValueCache.clear()
+
+async def set_last_verified_addr(*a):
+    from utils import save_next_addr
+    from public_constants import AF_P2WPKH
+
+    save_next_addr(0, AF_P2WPKH, 76)
