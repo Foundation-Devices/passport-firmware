@@ -24,8 +24,6 @@
 #include "uECC.h"
 #endif /* USE_CRYPTO */
 
-#define EXTENSION   "-key"
-
 static char *firmware;
 static char *version;
 static bool help;
@@ -320,7 +318,7 @@ char *remove_ext(char* str) {
 
     // How much to copy?
     last_ext = strrchr (str, '.');
-    if (last_ext != NULL)
+    if (last_ext == NULL)
     {
         len = strlen(str);
     }
@@ -328,7 +326,7 @@ char *remove_ext(char* str) {
     {
         len = last_ext - str;
     }
-    
+
     ret_str = malloc(len + 1);
     if (ret_str == NULL)
     {
@@ -336,29 +334,31 @@ char *remove_ext(char* str) {
     }
 
     strncpy (ret_str, str, len);
+    ret_str[len] = '\0';
     return ret_str;
 }
 
 char *remove_unsigned(char *str) {
-    int str_len;
+    int len;
     char *ret_str;
     char *needle = strstr(str, "-unsigned");
 
     if (needle == NULL)
     {
-        str_len = strlen(str);
+        len = strlen(str);
     }
     else
     {
-        str_len = needle - str;
+        len = needle - str;
     }
 
-    ret_str = malloc(str_len + 1);
+    ret_str = malloc(len + 1);
     if (ret_str == NULL)
     {
         return NULL;
     }
-    strncpy(ret_str, str, str_len);
+    strncpy(ret_str, str, len);
+    ret_str[len] = '\0';
     return ret_str;
 }
 
@@ -423,7 +423,6 @@ static void sign_firmware(
     char *file;
     char *final_file;
     char *tmp;
-    char *filename_key;
     passport_firmware_header_t *hdrptr;
     uint8_t *fwptr;
     uint8_t fw_hash[HASH_LEN];
@@ -489,7 +488,7 @@ static void sign_firmware(
     if (file == NULL)
     {
         free(file);
-        printf("insufficient memory\n");
+        printf("insufficient memory (ext)\n");
         return;
     }
 
@@ -497,26 +496,25 @@ static void sign_firmware(
     free(file);
     if (final_file == NULL)
     {
-        printf("insufficient memory\n");
+        printf("insufficient memory (unsigned)\n");
         return;
     }
 
-    output = (char *)calloc(1, strlen(fw) + strlen(EXTENSION) + 6);
+    output = (char *)calloc(1, strlen(path) + 1 + strlen(final_file) + 14);
     if (output == NULL)
     {
-        printf("insufficient memory\n");
+        printf("insufficient memory (output)\n");
         return;
     }
 
-    if (working_key == 255)
+    if (working_key == FW_USER_KEY)
     {
-        filename_key = "-user";
+        sprintf(output, "%s/%s-key-user.bin", path, final_file);
     }
     else
     {
-        sprintf(filename_key, "%02d", working_key);
+        sprintf(output, "%s/%s-key%02d.bin", path, final_file, working_key);
     }
-    sprintf(output, "%s/%s%s%s.bin", path, final_file, EXTENSION, filename_key);
     free(final_file);
 
     if (debug_log_level)
@@ -561,9 +559,19 @@ static void sign_firmware(
             goto out;
         }
 #ifdef USE_CRYPTO
+        else if (hdrptr->signature.pubkey1 == FW_USER_KEY)
+        {
+            printf("This firmware was already signed by a user private key.\n");
+            goto out;
+        }
         else if (hdrptr->signature.pubkey1 == working_key)
         {
-            printf("Existing header found but specified key matches the first public key\n");
+            printf("This firmware was already signed by key%02d (same key cannot sign twice).\n", working_key);
+            goto out;
+        }
+        else if (working_key == FW_USER_KEY)
+        {
+            printf("Cannot sign firmware with a user private key after signing with a Foundation private key.\n");
             goto out;
         }
 
@@ -684,6 +692,7 @@ static void sign_firmware(
     if (debug_log_level)
         printf("done\n");
 
+    printf("Wrote signed firmware to: %s\n", output);
 out:
     free(fwbuf);
     free(output);
