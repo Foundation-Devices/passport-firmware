@@ -24,7 +24,7 @@
 #include "uECC.h"
 #endif /* USE_CRYPTO */
 
-#define EXTENSION   "-signed"
+#define EXTENSION   "-key"
 
 static char *firmware;
 static char *version;
@@ -311,6 +311,85 @@ out:
     return public_key;
 }
 
+char *remove_ext(char* str) {
+    char *ret_str;
+    char *last_ext;
+    uint8_t len;
+
+    if (str == NULL) return NULL;
+
+    // How much to copy?
+    last_ext = strrchr (str, '.');
+    if (last_ext != NULL)
+    {
+        len = strlen(str);
+    }
+    else
+    {
+        len = last_ext - str - 1;
+    }
+    
+    ret_str = malloc(len + 1);
+    if (ret_str == NULL)
+    {
+        return NULL;
+    }
+
+    strncpy (ret_str, str, len + 1);
+    return ret_str;
+}
+
+char *remove_unsigned(char *str) {
+    int str_len;
+    char *ret_str;
+    char *needle = strstr(str, "-unsigned");
+
+    if (needle == NULL)
+    {
+        str_len = strlen(str);
+    }
+    else
+    {
+        str_len = needle - str;
+    }
+
+    ret_str = malloc(str_len + 1);
+    if (ret_str == NULL)
+    {
+        return NULL;
+    }
+    strncpy(ret_str, str, str_len + 1);
+    return ret_str;
+}
+
+bool is_valid_version(char *version) {
+    int fields;
+    int version_major;
+    int version_minor;
+    int version_rev;
+    char left_over;
+
+    fields = sscanf(version, "%u.%u.%u%c", &version_major, &version_minor, &version_rev, &left_over);
+
+    if (fields != 3)
+    {
+        return false;
+    }
+
+    // Version major is restricted to only 0-9 while others are 0-99
+    // Max version number string is 7 + null terminator
+    if (version_major > 9 || version_major < 0 ||
+        version_minor > 99 || version_minor < 0 ||
+        version_rev > 99 || version_rev < 0)
+    {
+        return false;
+    }
+    else
+    {
+        return true;
+    }
+}
+
 int find_public_key(
     uint8_t *key
 )
@@ -341,6 +420,7 @@ static void sign_firmware(
     char *path;
     char *filename;
     char *file;
+    char *final_file;
     char *tmp;
     passport_firmware_header_t *hdrptr;
     uint8_t *fwptr;
@@ -403,10 +483,19 @@ static void sign_firmware(
         return;
     }
 
-    file = strtok(filename, ".");
+    file = remove_ext(filename);
     if (file == NULL)
     {
-        printf("strtok() failed\n");
+        free(file);
+        printf("insufficient memory\n");
+        return;
+    }
+
+    final_file = remove_unsigned(file);
+    free(file);
+    if (final_file == NULL)
+    {
+        printf("insufficient memory\n");
         return;
     }
 
@@ -417,7 +506,8 @@ static void sign_firmware(
         return;
     }
 
-    sprintf(output, "%s/%s%s.bin", path, file, EXTENSION);
+    sprintf(output, "%s/%s%s%02d.bin", path, final_file, EXTENSION, working_key);
+    free(final_file);
 
     if (debug_log_level)
         printf("Reading %s...", fw);
@@ -477,7 +567,12 @@ static void sign_firmware(
         /* No existing header...confirm that the user specified a version */
         if (version == NULL)
         {
-            printf("version not specified\n");
+            printf("Version not specified\n");
+            goto out;
+        }
+
+        if (!is_valid_version(version)) {
+            printf("Incorrect version number. Correct format: <0-9>.<0-99>.<0-99> (e.g., 1.12.34)\n");
             goto out;
         }
 
