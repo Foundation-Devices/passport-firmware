@@ -22,7 +22,7 @@ import common
 from common import settings, system, noise, dis
 from utils import (UXStateMachine, imported, pretty_short_delay, xfp2str, to_str,
                    truncate_string_to_width, set_next_addr, scan_for_address, get_accounts, run_chooser,
-                   make_account_name_num, is_valid_address, save_next_addr, needs_microsd)
+                   make_account_name_num, is_valid_address, save_next_addr, needs_microsd, format_btc_address)
 from wallets.utils import get_export_mode, get_addr_type_from_address, get_deriv_path_from_addr_type_and_acct
 from ux import (the_ux, ux_confirm, ux_enter_pin,
                 ux_enter_text, ux_scan_qr_code, ux_shutdown,
@@ -290,14 +290,15 @@ class VerifyAddressUX(UXStateMachine):
                 deriv_path = get_deriv_path_from_addr_type_and_acct(addr_type, self.acct_num, is_multisig)
 
                 # Scan addresses to see if it's valid
-                addr_idx = await scan_for_address(self.acct_num, address, addr_type, deriv_path, self.multisig_wallet)
+                addr_idx, is_change = await scan_for_address(self.acct_num, address, addr_type, deriv_path, self.multisig_wallet)
                 if addr_idx >= 0:
                     # Remember where to start from next time
-                    save_next_addr(self.acct_num, addr_type, addr_idx)
+                    save_next_addr(self.acct_num, addr_type, addr_idx, is_change)
+                    address = format_btc_address(address, addr_type)
 
                     result = await ux_show_story('''{}
 
-Verified at index {}'''.format(address, addr_idx), title='Verify Address', left_btn='BACK',
+Found at index: {}\nType: {}'''.format(address, addr_idx, 'Change' if is_change == 1 else 'Receive'), title='Verified', left_btn='BACK',
                                                  right_btn='CONTINUE', center=True, center_vertically=True)
                     if result == 'x':
                         if not self.goto_prev():
@@ -2032,4 +2033,4 @@ async def set_last_verified_addr(*a):
     from utils import save_next_addr
     from public_constants import AF_P2WPKH
 
-    save_next_addr(0, AF_P2WPKH, 76)
+    save_next_addr(0, AF_P2WPKH, 76, False)

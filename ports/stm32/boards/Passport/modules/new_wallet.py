@@ -24,7 +24,8 @@ from utils import (
     scan_for_address,
     save_next_addr,
     make_account_name_num,
-    get_accounts)
+    get_accounts,
+    format_btc_address)
 from wallets.constants import *
 from uasyncio import sleep_ms
 from constants import DEFAULT_ACCOUNT_ENTRY
@@ -714,16 +715,24 @@ Generate a new receive address in {} and scan the QR code on the next page.'''.f
                 self.infer_wallet_info(address=address)
 
                 # Scan addresses to see if it's valid
-                addr_idx = await scan_for_address(self.acct_num, address, self.addr_type, self.deriv_path, self.multisig_wallet)
+                addr_idx, is_change = await scan_for_address(self.acct_num, address, self.addr_type, self.deriv_path, self.multisig_wallet)
                 if addr_idx >= 0:
                     # Found it!
                     self.verified = True
 
                     # Remember where to start from next time
-                    save_next_addr(self.acct_num, self.addr_type, addr_idx)
+                    save_next_addr(self.acct_num, self.addr_type, addr_idx, is_change)
+                    address = format_btc_address(address, self.addr_type)
 
-                    dis.fullscreen('Address Verified')
-                    await sleep_ms(1000)
+                    result = await ux_show_story('''{}
+
+Found at index: {}\nType: {}'''.format(address, addr_idx, 'Change' if is_change == 1 else 'Receive'), title='Verified', left_btn='BACK',
+                                                 right_btn='CONTINUE', center=True, center_vertically=True)
+                    if result == 'x':
+                        if not self.goto_prev():
+                            # Nothing to return back to, so we must have skipped one or more steps...were' done
+                            return
+
                     self.goto(self.CONFIRMATION)
                     continue
                 else:
