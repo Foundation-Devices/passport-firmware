@@ -24,6 +24,10 @@
 #include "uECC.h"
 #endif /* USE_CRYPTO */
 
+// This is the maximum length of "-key" + "-user", "00", "01", "02", or "03"
+// Also, + 1 for the folder "/"
+#define KEY_NAME_MAX_LENGTH 15
+
 static char *firmware;
 static char *version;
 static bool help;
@@ -500,7 +504,7 @@ static void sign_firmware(
         return;
     }
 
-    output = (char *)calloc(1, strlen(path) + 1 + strlen(final_file) + 14);
+    output = (char *)calloc(1, strlen(path) + strlen(final_file) + KEY_NAME_MAX_LENGTH);
     if (output == NULL)
     {
         printf("insufficient memory (output)\n");
