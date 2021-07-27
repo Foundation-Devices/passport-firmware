@@ -326,7 +326,7 @@ char *remove_ext(char* str) {
     }
     else
     {
-        len = last_ext - str - 1;
+        len = last_ext - str;
     }
     
     ret_str = malloc(len + 1);
@@ -335,7 +335,7 @@ char *remove_ext(char* str) {
         return NULL;
     }
 
-    strncpy (ret_str, str, len + 1);
+    strncpy (ret_str, str, len);
     return ret_str;
 }
 
@@ -358,20 +358,20 @@ char *remove_unsigned(char *str) {
     {
         return NULL;
     }
-    strncpy(ret_str, str, str_len + 1);
+    strncpy(ret_str, str, str_len);
     return ret_str;
 }
 
 bool is_valid_version(char *version) {
-    int fields;
+    int num_matched;
     int version_major;
     int version_minor;
     int version_rev;
     char left_over;
 
-    fields = sscanf(version, "%u.%u.%u%c", &version_major, &version_minor, &version_rev, &left_over);
+    num_matched = sscanf(version, "%u.%u.%u%c", &version_major, &version_minor, &version_rev, &left_over);
 
-    if (fields != 3)
+    if (num_matched != 3)
     {
         return false;
     }
@@ -386,6 +386,7 @@ bool is_valid_version(char *version) {
     }
     else
     {
+        sprintf(version, "%d.%d.%d", version_major, version_minor, version_rev);
         return true;
     }
 }
@@ -422,6 +423,7 @@ static void sign_firmware(
     char *file;
     char *final_file;
     char *tmp;
+    char *filename_key;
     passport_firmware_header_t *hdrptr;
     uint8_t *fwptr;
     uint8_t fw_hash[HASH_LEN];
@@ -499,14 +501,22 @@ static void sign_firmware(
         return;
     }
 
-    output = (char *)calloc(1, strlen(fw) + strlen(EXTENSION) + 1);
+    output = (char *)calloc(1, strlen(fw) + strlen(EXTENSION) + 6);
     if (output == NULL)
     {
         printf("insufficient memory\n");
         return;
     }
 
-    sprintf(output, "%s/%s%s%02d.bin", path, final_file, EXTENSION, working_key);
+    if (working_key == 255)
+    {
+        filename_key = "-user";
+    }
+    else
+    {
+        sprintf(filename_key, "%02d", working_key);
+    }
+    sprintf(output, "%s/%s%s%s.bin", path, final_file, EXTENSION, filename_key);
     free(final_file);
 
     if (debug_log_level)
