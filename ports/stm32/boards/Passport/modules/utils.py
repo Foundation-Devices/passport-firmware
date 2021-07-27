@@ -18,6 +18,9 @@ import common
 
 B2A = lambda x: str(b2a_hex(x), 'ascii')
 
+RECEIVE_ADDR = 0
+CHANGE_ADDR = 1
+
 class imported:
     # Context manager that temporarily imports
     # a list of modules.
@@ -508,7 +511,7 @@ def folder_exists(path):
 # Derive addresses from the specified path until we find the address or have tried max_to_check addresses
 # If single sig, we need `path`.
 # If multisig, we need `ms_wallet`, but not `path`
-def find_address(path, start_address_idx, address, addr_type, ms_wallet, max_to_check=100, reverse=False):
+def find_address(path, start_address_idx, address, addr_type, ms_wallet, is_change, max_to_check=100, reverse=False):
     import stash
 
     try:
@@ -527,10 +530,9 @@ def find_address(path, start_address_idx, address, addr_type, ms_wallet, max_to_
                     r = reversed(r)
 
                 for curr_idx in r:
-                    addr_path = '{}/0/{}'.format(path, curr_idx)  # Zero for non-change address
+                    addr_path = '{}/{}/{}'.format(path, is_change, curr_idx)  # Zero for non-change address
                     # print('addr_path={}'.format(addr_path))
                     node = sv.derive_path(addr_path)
-                    # print('node={}'.format(node))
                     curr_address = sv.chain.address(node, addr_type)
                     # print('curr_idx={}: path={} addr_type={} curr_address = {}'.format(curr_idx, addr_path, addr_type, curr_address))
                     if curr_address == address:
@@ -572,19 +574,25 @@ def account_exists(name):
     return False
 
 
-def get_next_addr(acct_num, addr_type):
+def make_next_addr_key(acct_num, addr_type, is_change):
+    return '{}/{}{}'.format(acct_num, addr_type, '/1' if is_change else '')
+
+def get_next_addr(acct_num, addr_type, is_change):
     from common import settings
     next_addrs = settings.get('next_addrs', {})
-    key = '{}/{}'.format(acct_num, addr_type)
+    key = make_next_addr_key(acct_num, addr_type, is_change)
     return next_addrs.get(key, 0)
 
 # Save the next address to use for the specific account and address type
-def save_next_addr(acct_num, addr_type, addr_idx):
+def save_next_addr(acct_num, addr_type, addr_idx, is_change, force_update=False):
     from common import settings
     next_addrs = settings.get('next_addrs', {})
-    key = '{}/{}'.format(acct_num, addr_type)
-    next_addrs[key] = addr_idx
-    settings.set('next_addrs', next_addrs)
+    key = make_next_addr_key(acct_num, addr_type, is_change)
+
+    # Only save the found index if it's newer
+    if next_addrs.get(key, -1) < addr_idx or force_update:
+        next_addrs[key] = addr_idx
+        settings.set('next_addrs', next_addrs)
 
 def get_prev_address_range(range, max_size):
     low, high = range
@@ -605,75 +613,81 @@ async def scan_for_address(acct_num, address, addr_type, deriv_path, ms_wallet):
 
     # We always check this many addresses, but we split them 50/50 until we reach 0 on the low end,
     # then we use the rest for the high end.
-    NUM_TO_CHECK = 100
+    NUM_TO_CHECK = 50
 
     # Setup the initial ranges
-    a = get_next_addr(acct_num, addr_type)
+    a = [get_next_addr(acct_num, addr_type, False), get_next_addr(acct_num, addr_type, True)]
 
-    first_time = True
-    low_range, low_size = get_prev_address_range((a, a), NUM_TO_CHECK // 2)
-    high_range, high_size = get_next_address_range((a, a), NUM_TO_CHECK - low_size)
+    low_range = [(a[RECEIVE_ADDR], a[RECEIVE_ADDR]), (a[CHANGE_ADDR], a[CHANGE_ADDR])]
+    high_range = [(a[RECEIVE_ADDR], a[RECEIVE_ADDR]), (a[CHANGE_ADDR], a[CHANGE_ADDR])]
+    low_size = [0, 0]
+    high_size = [0, 0]
 
     while True:
-        # See if the address is valid
-        system.show_busy_bar()
+        # Try next batch of addresses
+        for is_change in range(0, 2):
+            low_range[is_change], low_size[is_change] = get_prev_address_range(low_range[is_change], NUM_TO_CHECK // 2)
+            high_range[is_change], high_size[is_change] = get_next_address_range(high_range[is_change], NUM_TO_CHECK - low_size[is_change])
 
+        # See if the address is valid
+        addr_idx = -1
+        is_change = 0
+
+        system.show_busy_bar()
         dis.fullscreen('Searching Addresses...')
 
-        addr_idx = -1
+        for is_change in range(0, 2):
+            # Check downwards
+            if low_size[is_change] > 0:
+                # print('Check low range')
+                (addr_idx, path_info) = find_address(
+                    deriv_path,
+                    low_range[is_change][0],
+                    address,
+                    addr_type,
+                    ms_wallet,
+                    is_change,
+                    max_to_check=low_size[is_change],
+                    reverse=True)
 
-        # Check downwards
-        if low_size > 0:
-            # print('Check low range')
-            (addr_idx, path_info) = find_address(
-                deriv_path,
-                low_range[0],
-                address,
-                addr_type,
-                ms_wallet,
-                max_to_check=low_size,
-                reverse=True)
+            # Exit if already found
+            if addr_idx >= 0:
+                break
 
-        if addr_idx < 0:
             # Check upwards
             # print('Check high range')
             (addr_idx, path_info) = find_address(
                 deriv_path,
-                high_range[0],
+                high_range[is_change][0],
                 address,
                 addr_type,
                 ms_wallet,
-                max_to_check=high_size)
+                is_change,
+                max_to_check=high_size[is_change])
+
+            if addr_idx >= 0:
+                break
 
         system.hide_busy_bar()
 
         # Was the address found?
         if addr_idx >= 0:
-            return addr_idx
+            return addr_idx, True if is_change else False
         else:
             # Address was not found in that batch of 100, so offer to keep searching
-            msg = 'Searched {} addresses:\n\n'.format(NUM_TO_CHECK)
+            msg = 'Addresses Checked:\n\n'
 
-            if first_time:
-                msg += '{}-{}\n'.format(low_range[0], high_range[1] - 1)
-                first_time = False
-            else:
-                if low_size > 0:
-                    msg += '{}-{}\n'.format(low_range[0], low_range[1] - 1)
+            # Build a merged range for receive and one for change addresses
+            merged_range = []
+            for is_change in range(0, 2):
+                msg += '{}: {}-{}\n'.format('Change' if is_change == 1 else 'Receive', low_range[is_change][0], high_range[is_change][1] - 1)
 
-                # Add the upper range
-                msg += '{}-{}\n'.format(high_range[0], high_range[1] - 1)
-
-            msg += '\nDo you want to keep searching?'
+            msg += '\nContinue searching?'
 
             result = await ux_show_story(msg, title='Not Found', left_btn='NO', right_btn='YES',
                 center=True, center_vertically=True)
             if result == 'x':
-                return -1
-
-            # Try next batch of addresses
-            low_range, low_size = get_prev_address_range(low_range, NUM_TO_CHECK // 2)
-            high_range, high_size = get_next_address_range(high_range, NUM_TO_CHECK - low_size)
+                return -1, False
 
 def is_new_wallet_in_progress():
     from common import settings
@@ -796,5 +810,15 @@ async def needs_microsd():
     from ux import ux_show_story
     # Standard msg shown if no SD card detected when we need one.
     return await ux_show_story("Please insert a microSD card.", title='MicroSD', center=True, center_vertically=True)
+
+def format_btc_address(address, addr_type):
+    from public_constants import AF_P2WPKH
+
+    if addr_type == AF_P2WPKH:
+        width = 14
+    else:
+        width = 16
+
+    return '\n'.join([address[i:i+width] for i in range(0, len(address), width)])
 
 # EOF
