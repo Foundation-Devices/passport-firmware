@@ -24,7 +24,9 @@
 #include "uECC.h"
 #endif /* USE_CRYPTO */
 
-#define EXTENSION   "-signed"
+// This is the maximum length of "-key" + "-user", "00", "01", "02", or "03"
+// Also, + 1 for the folder "/"
+#define KEY_NAME_MAX_LENGTH 15
 
 static char *firmware;
 static char *version;
@@ -311,6 +313,88 @@ out:
     return public_key;
 }
 
+char *remove_ext(char* str) {
+    char *ret_str;
+    char *last_ext;
+    uint8_t len;
+
+    if (str == NULL) return NULL;
+
+    // How much to copy?
+    last_ext = strrchr (str, '.');
+    if (last_ext == NULL)
+    {
+        len = strlen(str);
+    }
+    else
+    {
+        len = last_ext - str;
+    }
+
+    ret_str = malloc(len + 1);
+    if (ret_str == NULL)
+    {
+        return NULL;
+    }
+
+    strncpy (ret_str, str, len);
+    ret_str[len] = '\0';
+    return ret_str;
+}
+
+char *remove_unsigned(char *str) {
+    int len;
+    char *ret_str;
+    char *needle = strstr(str, "-unsigned");
+
+    if (needle == NULL)
+    {
+        len = strlen(str);
+    }
+    else
+    {
+        len = needle - str;
+    }
+
+    ret_str = malloc(len + 1);
+    if (ret_str == NULL)
+    {
+        return NULL;
+    }
+    strncpy(ret_str, str, len);
+    ret_str[len] = '\0';
+    return ret_str;
+}
+
+bool is_valid_version(char *version) {
+    int num_matched;
+    int version_major;
+    int version_minor;
+    int version_rev;
+    char left_over;
+
+    num_matched = sscanf(version, "%u.%u.%u%c", &version_major, &version_minor, &version_rev, &left_over);
+
+    if (num_matched != 3)
+    {
+        return false;
+    }
+
+    // Version major is restricted to only 0-9 while others are 0-99
+    // Max version number string is 7 + null terminator
+    if (version_major > 9 || version_major < 0 ||
+        version_minor > 99 || version_minor < 0 ||
+        version_rev > 99 || version_rev < 0)
+    {
+        return false;
+    }
+    else
+    {
+        sprintf(version, "%d.%d.%d", version_major, version_minor, version_rev);
+        return true;
+    }
+}
+
 int find_public_key(
     uint8_t *key
 )
@@ -341,6 +425,7 @@ static void sign_firmware(
     char *path;
     char *filename;
     char *file;
+    char *final_file;
     char *tmp;
     passport_firmware_header_t *hdrptr;
     uint8_t *fwptr;
@@ -403,21 +488,38 @@ static void sign_firmware(
         return;
     }
 
-    file = strtok(filename, ".");
+    file = remove_ext(filename);
     if (file == NULL)
     {
-        printf("strtok() failed\n");
+        free(file);
+        printf("insufficient memory (ext)\n");
         return;
     }
 
-    output = (char *)calloc(1, strlen(fw) + strlen(EXTENSION) + 1);
+    final_file = remove_unsigned(file);
+    free(file);
+    if (final_file == NULL)
+    {
+        printf("insufficient memory (unsigned)\n");
+        return;
+    }
+
+    output = (char *)calloc(1, strlen(path) + strlen(final_file) + KEY_NAME_MAX_LENGTH);
     if (output == NULL)
     {
-        printf("insufficient memory\n");
+        printf("insufficient memory (output)\n");
         return;
     }
 
-    sprintf(output, "%s/%s%s.bin", path, file, EXTENSION);
+    if (working_key == FW_USER_KEY)
+    {
+        sprintf(output, "%s/%s-key-user.bin", path, final_file);
+    }
+    else
+    {
+        sprintf(output, "%s/%s-key%02d.bin", path, final_file, working_key);
+    }
+    free(final_file);
 
     if (debug_log_level)
         printf("Reading %s...", fw);
@@ -461,9 +563,19 @@ static void sign_firmware(
             goto out;
         }
 #ifdef USE_CRYPTO
+        else if (hdrptr->signature.pubkey1 == FW_USER_KEY)
+        {
+            printf("This firmware was already signed by a user private key.\n");
+            goto out;
+        }
         else if (hdrptr->signature.pubkey1 == working_key)
         {
-            printf("Existing header found but specified key matches the first public key\n");
+            printf("This firmware was already signed by key%02d (same key cannot sign twice).\n", working_key);
+            goto out;
+        }
+        else if (working_key == FW_USER_KEY)
+        {
+            printf("Cannot sign firmware with a user private key after signing with a Foundation private key.\n");
             goto out;
         }
 
@@ -477,7 +589,12 @@ static void sign_firmware(
         /* No existing header...confirm that the user specified a version */
         if (version == NULL)
         {
-            printf("version not specified\n");
+            printf("Version not specified\n");
+            goto out;
+        }
+
+        if (!is_valid_version(version)) {
+            printf("Incorrect version number. Correct format: <0-9>.<0-99>.<0-99> (e.g., 1.12.34)\n");
             goto out;
         }
 
@@ -579,6 +696,7 @@ static void sign_firmware(
     if (debug_log_level)
         printf("done\n");
 
+    printf("Wrote signed firmware to: %s\n", output);
 out:
     free(fwbuf);
     free(output);
