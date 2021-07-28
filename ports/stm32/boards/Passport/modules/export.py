@@ -23,7 +23,8 @@ import version
 from ubinascii import hexlify as b2a_hex
 from ubinascii import unhexlify as a2b_hex
 from uio import StringIO
-from utils import imported, xfp2str, get_bytewords_for_buf, to_str, run_chooser, ensure_folder_exists, file_exists, is_dir, get_accounts
+from utils import (imported, xfp2str, get_bytewords_for_buf, to_str, run_chooser, ensure_folder_exists, file_exists,
+    is_dir, get_accounts, get_backups_folder_path)
 from ux import ux_confirm, ux_show_story
 from common import noise
 
@@ -472,12 +473,6 @@ async def view_backup_password(*a):
     ch = await ux_show_story(msg, title='Password', sensitive=True, right_btn='OK')
     stash.blank_object(msg)
 
-def get_backups_folder_path(card):
-    # from common import settings
-    # xfp = xfp2str(settings.get('xfp', 0))
-    # return '{}/backups-{}'.format(card.get_sd_root(), xfp)
-    return '{}/backups'.format(card.get_sd_root())
-
 async def write_complete_backup(words, auto_backup=False, is_first_backup=False):
     # Just do the writing
     from common import dis, pa, settings, system
@@ -516,6 +511,8 @@ async def write_complete_backup(words, auto_backup=False, is_first_backup=False)
         filesize = len(body)+10
 
     while True:
+        base_filename = ''
+
         try:
             with CardSlot() as card:
                 backups_path = get_backups_folder_path(card)
@@ -523,7 +520,8 @@ async def write_complete_backup(words, auto_backup=False, is_first_backup=False)
 
                 # Make a unique filename
                 while True:
-                    fname = '{}/passport-backup-{}.7z'.format(backups_path, backup_num)
+                    base_filename = 'passport-backup-{}.7z'.format(backup_num)
+                    fname = '{}/{}'.format(backups_path, base_filename)
 
                     # Ensure filename doesn't already exist
                     if not file_exists(fname):
@@ -564,9 +562,9 @@ async def write_complete_backup(words, auto_backup=False, is_first_backup=False)
         backup_num += 1
         settings.set('backup_num', backup_num)
 
-        if not auto_backup:
-            dis.fullscreen('Backup Successful!')
-            await sleep_ms(2000)
+        if not auto_backup:  # /backups/passport-backup-3.7z
+            await ux_show_story('Saved backup to\n\n{}\n\nin /backups folder.'.format(base_filename),
+                title='Success', left_btn='NEXT', center=True, center_vertically=True)
 
             if await ux_confirm('Do you want to make an additional backup?\n\nIf so, insert another microSD card.',
                                 title='Backup'):
