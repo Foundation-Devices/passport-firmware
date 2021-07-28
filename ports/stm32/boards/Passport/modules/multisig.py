@@ -775,9 +775,9 @@ class MultisigWallet:
 
         try:
             name = str(name, 'ascii')
-            assert 1 <= len(name) <= 20
+            name = name[:MAX_MULTISIG_NAME_LEN]
         except:
-            raise AssertionError('Name must be ascii, 1..20 long')
+            raise AssertionError('Name must be ASCII, and 1 to 20 characters long.')
 
         assert 1 <= M <= N <= MAX_SIGNERS, 'M/N range'
         assert N == len(xpubs), 'wrong # of xpubs, expect %d' % N
