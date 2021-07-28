@@ -302,7 +302,7 @@ Found at index: {}\nType: {}'''.format(address, addr_idx, 'Change' if is_change 
                                                  right_btn='CONTINUE', center=True, center_vertically=True)
                     if result == 'x':
                         if not self.goto_prev():
-                            # Nothing to return back to, so we must have skipped one or more steps...were' done
+                            # Nothing to return back to, so we must have skipped one or more steps...we're done
                             return
 
                     return
