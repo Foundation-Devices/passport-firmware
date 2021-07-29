@@ -599,10 +599,8 @@ def word_wrap(ln, font):
         line_width = 0
         first_non_space = 0
 
-        # Skip leading spaces
-        while ln[sp].isspace():
-            sp += 1
-            first_non_space = sp
+        # Strip out leading and trailing spaces
+        ln = ln.strip()
 
         while sp < len(ln):
             ch = ln[sp]
