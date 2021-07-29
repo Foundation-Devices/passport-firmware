@@ -593,16 +593,14 @@ def word_wrap(ln, font):
     max_width = Display.WIDTH - LEFT_MARGIN - \
         RIGHT_MARGIN - Display.SCROLLBAR_WIDTH
 
+    # Strip out leading and trailing spaces
+    ln = ln.strip()
+
     while ln:
         sp = 0
         last_space = 0
         line_width = 0
         first_non_space = 0
-
-        # Skip leading spaces
-        while ln[sp].isspace():
-            sp += 1
-            first_non_space = sp
 
         while sp < len(ln):
             ch = ln[sp]
