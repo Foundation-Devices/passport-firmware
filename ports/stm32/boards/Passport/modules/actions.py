@@ -927,7 +927,7 @@ async def verify_microsd_backup(*A):
 
     with imported('export') as exp:
         fn = await file_picker('Select the backup to verify.',
-            suffix='.7z', max_size=exp.MAX_BACKUP_FILE_SIZE, folder_path=get_backups_folder_path())
+            suffix='.7z', max_size=exp.MAX_BACKUP_FILE_SIZE, folder_path=get_backups_folder_path(card))
 
         if fn:
             # do a limited CRC-check over encrypted file
@@ -965,7 +965,7 @@ async def restore_microsd_backup(*A):
 
     # Choose a backup file -- must be in 7z format
     fn = await file_picker('Select the backup to restore and then enter the six-word password.',
-        suffix='.7z', max_size=10000, folder_path=get_backups_folder_path())
+        suffix='.7z', max_size=10000, folder_path=get_backups_folder_path(card))
 
     if fn:
         with imported('export') as exp:
@@ -1991,7 +1991,7 @@ async def test_folders(*a):
 
     try:
         with CardSlot() as card:
-            path = get_backups_folder_path()
+            path = get_backups_folder_path(card)
             try:
                 print('Creating backups')
                 uos.mkdir(path)
