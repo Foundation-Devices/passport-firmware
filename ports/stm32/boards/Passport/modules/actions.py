@@ -1991,7 +1991,7 @@ async def test_folders(*a):
 
     try:
         with CardSlot() as card:
-            path = get_backups_folder_path()
+            path = get_backups_folder_path(card)
             try:
                 print('Creating backups')
                 uos.mkdir(path)
