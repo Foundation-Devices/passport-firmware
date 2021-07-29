@@ -562,7 +562,7 @@ async def write_complete_backup(words, auto_backup=False, is_first_backup=False)
         backup_num += 1
         settings.set('backup_num', backup_num)
 
-        if not auto_backup:  # /backups/passport-backup-3.7z
+        if not auto_backup:
             await ux_show_story('Saved backup to\n\n{}\n\nin /backups folder.'.format(base_filename),
                 title='Success', left_btn='NEXT', center=True, center_vertically=True)
 

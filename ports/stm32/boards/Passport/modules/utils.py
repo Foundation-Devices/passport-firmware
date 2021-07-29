@@ -822,9 +822,6 @@ def format_btc_address(address, addr_type):
     return '\n'.join([address[i:i+width] for i in range(0, len(address), width)])
 
 def get_backups_folder_path(card):
-    # from common import settings
-    # xfp = xfp2str(settings.get('xfp', 0))
-    # return '{}/backups-{}'.format(card.get_sd_root(), xfp)
     return '{}/backups'.format(card.get_sd_root())
 
 # EOF
