@@ -22,7 +22,7 @@ import common
 from common import settings, system, noise, dis
 from utils import (UXStateMachine, imported, pretty_short_delay, xfp2str, to_str,
                    truncate_string_to_width, set_next_addr, scan_for_address, get_accounts, run_chooser,
-                   make_account_name_num, is_valid_address, save_next_addr, needs_microsd, format_btc_address, get_backups_folder_path)
+                   make_account_name_num, is_valid_address, save_next_addr, needs_microsd, format_btc_address)
 from wallets.utils import get_export_mode, get_addr_type_from_address, get_deriv_path_from_addr_type_and_acct
 from ux import (the_ux, ux_confirm, ux_enter_pin,
                 ux_enter_text, ux_scan_qr_code, ux_shutdown,
@@ -927,7 +927,7 @@ async def verify_microsd_backup(*A):
 
     with imported('export') as exp:
         fn = await file_picker('Select the backup to verify.',
-            suffix='.7z', max_size=exp.MAX_BACKUP_FILE_SIZE, folder_path=get_backups_folder_path())
+            suffix='.7z', max_size=exp.MAX_BACKUP_FILE_SIZE, folder_path='/sd/backups')
 
         if fn:
             # do a limited CRC-check over encrypted file
@@ -965,7 +965,7 @@ async def restore_microsd_backup(*A):
 
     # Choose a backup file -- must be in 7z format
     fn = await file_picker('Select the backup to restore and then enter the six-word password.',
-        suffix='.7z', max_size=10000, folder_path=get_backups_folder_path())
+        suffix='.7z', max_size=10000, folder_path='/sd/backups')
 
     if fn:
         with imported('export') as exp:
