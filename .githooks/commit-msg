@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+TEAM_PREFIX='PASS1'
+commit_regex="($TEAM_PREFIX-[0-9]+:\ )"
+
+if ! `grep -iqE "$commit_regex" "$1"`; then
+    echo "=========================================================================================" >&2
+    echo "Aborting commit. Your commit message must start with a Linear issue ID, colon then space." >&2
+    echo "Example: '$TEAM_PREFIX-123: '                     (To commit anyway, use the --no-verify option)" >&2
+    echo "=========================================================================================" >&2
+    exit 1
+fi
