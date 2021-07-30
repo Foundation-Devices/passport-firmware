@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 TEAM_PREFIX='PASS1'
-commit_regex="($TEAM_PREFIX-[0-9]+:\ )"
+commit_regex="^($TEAM_PREFIX-[0-9]+:\ )"
 
 if ! `grep -iqE "$commit_regex" "$1"`; then
     echo "=========================================================================================" >&2
