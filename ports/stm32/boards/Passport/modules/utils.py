@@ -821,9 +821,18 @@ def format_btc_address(address, addr_type):
     else:
         width = 16
 
-    return '\n'.join([address[i:i+width] for i in range(0, len(address), width)])
+    return split_to_lines(address, width)
 
 def get_backups_folder_path(card):
     return '{}/backups'.format(card.get_sd_root())
+
+def is_all_zero(buf):
+    for b in buf:
+        if b != 0:
+            return False
+    return True
+
+def split_to_lines(s, width):
+    return '\n'.join([s[i:i+width] for i in range(0, len(s), width)])
 
 # EOF
