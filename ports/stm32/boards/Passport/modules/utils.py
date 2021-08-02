@@ -675,14 +675,14 @@ async def scan_for_address(acct_num, address, addr_type, deriv_path, ms_wallet):
             return addr_idx, True if is_change else False
         else:
             # Address was not found in that batch of 100, so offer to keep searching
-            msg = 'Address Not Found.\n\nPassport checked '
+            msg = 'Address Not Found\n\nPassport checked '
 
             # Build a merged range for receive and one for change addresses
             merged_range = []
             for is_change in range(0, 2):
                 msg += '{} addresses {}-{}{}'.format(
                     'change' if is_change == 1 else 'receive', low_range[is_change][0], high_range[is_change][1] - 1,
-                    '.' if is_change == 1 else ', and ')
+                    '.' if is_change == 1 else ' and ')
 
             msg += '\n\nContinue searching?'
 
