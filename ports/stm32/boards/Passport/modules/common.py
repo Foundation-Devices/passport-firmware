@@ -67,3 +67,6 @@ is_new_wallet_a_duplicate = False
 # The QRTYpe of the last QR code that was scanned
 last_scanned_qr_type = None
 last_scanned_ur_prefix = None
+
+# Cached Developer PubKey
+cached_pubkey = None

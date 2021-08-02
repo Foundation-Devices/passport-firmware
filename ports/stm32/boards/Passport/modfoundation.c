@@ -1388,6 +1388,18 @@ System_get_user_firmware_pubkey(mp_obj_t self, mp_obj_t pubkey)
     return mp_const_false;
 }
 
+/// def is_user_firmware_installed(self) -> None
+///     '''
+///     Check if user firmware is installed or not
+///     '''
+STATIC mp_obj_t
+System_is_user_firmware_installed(mp_obj_t self)
+{
+    passport_firmware_header_t* fwhdr = (passport_firmware_header_t*)FW_HDR;
+
+    return (fwhdr->signature.pubkey1 == FW_USER_KEY && fwhdr->signature.pubkey2 == 0) ? mp_const_true : mp_const_false;
+}
+
 /// def System_supply_chain_challenge(self, challenge, response) -> None
 ///     '''
 ///    Perform the supply chain challenge (HMAC)
@@ -1572,6 +1584,7 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_3(System_sha256_obj, System_sha256);
 STATIC MP_DEFINE_CONST_FUN_OBJ_2(System_validate_firmware_header_obj, System_validate_firmware_header);
 STATIC MP_DEFINE_CONST_FUN_OBJ_2(System_set_user_firmware_pubkey_obj, System_set_user_firmware_pubkey);
 STATIC MP_DEFINE_CONST_FUN_OBJ_2(System_get_user_firmware_pubkey_obj, System_get_user_firmware_pubkey);
+STATIC MP_DEFINE_CONST_FUN_OBJ_1(System_is_user_firmware_installed_obj, System_is_user_firmware_installed);
 STATIC MP_DEFINE_CONST_FUN_OBJ_3(System_supply_chain_challenge_obj, System_supply_chain_challenge);
 STATIC MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(System_hmac_sha256_obj, 4, 4, System_hmac_sha256);
 STATIC MP_DEFINE_CONST_FUN_OBJ_3(System_verify_supply_chain_server_signature_obj, System_verify_supply_chain_server_signature);
@@ -1603,6 +1616,7 @@ STATIC const mp_rom_map_elem_t System_locals_dict_table[] = {
     { MP_ROM_QSTR(MP_QSTR_validate_firmware_header), MP_ROM_PTR(&System_validate_firmware_header_obj) },
     { MP_ROM_QSTR(MP_QSTR_set_user_firmware_pubkey), MP_ROM_PTR(&System_set_user_firmware_pubkey_obj) },
     { MP_ROM_QSTR(MP_QSTR_get_user_firmware_pubkey), MP_ROM_PTR(&System_get_user_firmware_pubkey_obj) },
+    { MP_ROM_QSTR(MP_QSTR_is_user_firmware_installed), MP_ROM_PTR(&System_is_user_firmware_installed_obj) },
     { MP_ROM_QSTR(MP_QSTR_supply_chain_challenge), MP_ROM_PTR(&System_supply_chain_challenge_obj) },
     { MP_ROM_QSTR(MP_QSTR_verify_supply_chain_server_signature), MP_ROM_PTR(&System_verify_supply_chain_server_signature_obj) },
     { MP_ROM_QSTR(MP_QSTR_hmac_sha256), MP_ROM_PTR(&System_hmac_sha256_obj) },

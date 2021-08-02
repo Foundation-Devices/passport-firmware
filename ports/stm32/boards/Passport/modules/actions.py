@@ -22,7 +22,8 @@ import common
 from common import settings, system, noise, dis
 from utils import (UXStateMachine, imported, pretty_short_delay, xfp2str, to_str,
                    truncate_string_to_width, set_next_addr, scan_for_address, get_accounts, run_chooser,
-                   make_account_name_num, is_valid_address, save_next_addr, needs_microsd, format_btc_address)
+                   make_account_name_num, is_valid_address, save_next_addr, needs_microsd, format_btc_address,
+                   is_all_zero, bytes_to_hex_str, split_to_lines)
 from wallets.utils import get_export_mode, get_addr_type_from_address, get_deriv_path_from_addr_type_and_acct
 from ux import (the_ux, ux_confirm, ux_enter_pin,
                 ux_enter_text, ux_scan_qr_code, ux_shutdown,
@@ -1396,53 +1397,14 @@ async def handle_psbt_data_format(data):
 
     return False
 
-async def import_user_firmware_pubkey(*a):
-    from common import system, dis
-    from ubinascii import hexlify
-
-    result = await ux_show_story('''Passport allows you to compile your own firmware version and sign it \
-with your private key.
-
-To enable this, you must first import your corresponding public key.
-
-On the next screen, you can select your public key and import it into Passport.''', title='Import PubKey')
-    if result == 'x':
-        return
-
-    fn = await file_picker('Select public key file (*-pub.bin)', suffix='-pub.bin')
-    if fn == None:
-        return
-
-    system.turbo(True)
-    with CardSlot() as card:
-        with open(fn, 'rb') as fd:
-            fd.seek(24)  # Skip the header
-            pubkey = fd.read(64)  # Read the pubkey
-
-            # print('pubkey = {}'.format(hexlify(pubkey)))
-
-            result = system.set_user_firmware_pubkey(pubkey)
-            if result:
-                dis.fullscreen('Successfully Imported!')
-            else:
-                dis.fullscreen('Unable to Import')
-            await sleep_ms(1000)
-            # print('system.set_user_firmware_pubkey() = {}'.format(result))
-    system.turbo(False)
-
-
-async def read_user_firmware_pubkey(*a):
-    from common import system
-    from ubinascii import hexlify
-
+def read_user_firmware_pubkey():
     pubkey = bytearray(64)
 
     system.turbo(True)
     result = system.get_user_firmware_pubkey(pubkey)
-    # print('system.get_user_firmware_pubkey() = {}'.format(result))
-    # print('  len={} pubkey = {}'.format(len(pubkey), hexlify(pubkey)))
     system.turbo(False)
 
+    return result, pubkey
 
 async def enter_passphrase(menu, label, item):
     import sys
@@ -1458,7 +1420,6 @@ async def enter_passphrase(menu, label, item):
         return
 
     # Applying the passphrase takes a bit of time so show message
-    from common import dis
     dis.fullscreen("Applying Passphrase...")
 
     system.show_busy_bar()
@@ -2040,3 +2001,85 @@ async def set_last_verified_addr(*a):
     from public_constants import AF_P2WPKH
 
     save_next_addr(0, AF_P2WPKH, 76, False)
+
+def clear_cached_pubkey():
+    common.cached_pubkey = None
+
+async def install_user_firmware_pubkey(*a):
+    from ubinascii import hexlify
+
+    result = await ux_show_story('''Passport allows you to compile your own firmware version and sign it \
+with your private key.
+
+To enable this, you must first import your corresponding public key.
+
+On the next screen, you can select your public key and import it into Passport.''', title='Import PubKey')
+    if result == 'x':
+        return
+
+    fn = await file_picker('Select public key file (*-pub.bin)', suffix='-pub.bin')
+    if fn == None:
+        return
+
+    system.turbo(True)
+    with CardSlot() as card:
+        with open(fn, 'rb') as fd:
+            fd.seek(24)  # Skip the header
+            pubkey = fd.read(64)  # Read the pubkey
+
+            # print('pubkey = {}'.format(hexlify(pubkey)))
+
+            result = system.set_user_firmware_pubkey(pubkey)
+            if result:
+                await ux_show_story('Successfully Installed!',
+                        title='Install',
+                        center=True,
+                        center_vertically=True)
+            else:
+                await ux_show_story('Unable to Install.',
+                title='Install',
+                center=True,
+                center_vertically=True)
+            clear_cached_pubkey()
+
+            # print('system.set_user_firmware_pubkey() = {}'.format(result))
+    system.turbo(False)
+
+async def view_user_firmware_pubkey(*a):
+    pubkey_result, pubkey = read_user_firmware_pubkey()
+    if pubkey_result:
+        pubkey = bytes_to_hex_str(pubkey)
+        pubkey = split_to_lines(pubkey, 16)
+    else:
+        pubkey = 'Unable to read Developer PubKey'
+
+    result = await ux_show_story(pubkey,
+                            title='View PubKey',
+                            center=True,
+                            center_vertically=True)
+    if result == 'x':
+        return
+
+async def remove_user_firmware_pubkey(*a):
+    if system.is_user_firmware_installed():
+        await ux_show_story('You must install official Foundation firmware before you can remove the Developer PubKey.',
+                            title='Remove',
+                            center=True,
+                            center_vertically=True)
+        return
+
+    pubkey = bytearray(64)
+    # Confirm the user knows the potential consequences
+    if await ux_confirm('Are you sure you want to remove the Developer PubKey?', title='Remove'):
+        result = system.set_user_firmware_pubkey(pubkey)
+        if result:
+            await ux_show_story('Successfully Removed PubKey!',
+                                title='Remove',
+                                center=True,
+                                center_vertically=True)
+        else:
+            await ux_show_story('Unable to Remove PubKey',
+                            title='Remove',
+                            center=True,
+                            center_vertically=True)
+        clear_cached_pubkey()

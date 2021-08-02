@@ -45,13 +45,26 @@ def has_secrets():
     from common import pa
     return not pa.is_secret_blank()
 
+def has_pubkey():
+    if common.cached_pubkey == None:
+        result, common.cached_pubkey = read_user_firmware_pubkey()
+        if not result:
+            return False
+    return not is_all_zero(common.cached_pubkey)
+
+DeveloperPubkeyMenu = [
+    MenuItem('Install PubKey', predicate=lambda: not has_pubkey(), f=install_user_firmware_pubkey),
+    MenuItem('View PubKey', predicate=has_pubkey, f=view_user_firmware_pubkey),
+    MenuItem('Remove PubKey', predicate=has_pubkey, f=remove_user_firmware_pubkey)
+]
+
 AdvancedMenu = [
     MenuItem('Change PIN', f=change_pin),
     MenuItem('Passphrase', menu_title='Passphrase', chooser=enable_passphrase_chooser),
     MenuItem('Sign Text File', predicate=has_secrets, f=sign_message_on_sd),
     MenuItem('MicroSD Settings', menu=SDCardMenu),
     MenuItem('View Seed Words', f=view_seed_words, predicate=lambda: settings.get('words', True)),
-    MenuItem('Developer PubKey', f=import_user_firmware_pubkey),
+    MenuItem('Developer PubKey', menu=DeveloperPubkeyMenu, menu_title='Developer'),
     MenuItem('Erase Passport', f=erase_wallet, arg=True)
 ]
 
