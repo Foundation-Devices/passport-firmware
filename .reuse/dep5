@@ -3,7 +3,7 @@ Upstream-Name: Passport
 Upstream-Contact: hello@foundationdevices.com
 Source: https://git.example.com/FoundationDevices/passport
 
-Files: ACKNOWLEDGEMENTS *.md docs/* drivers/* examples/* extmod/* lib/* py/* tests/* tools/* .gitattributes .gitignore .gitmodules .travis.yml logo/* mpy-cross/*
+Files: MP-ACKNOWLEDGEMENTS *.md docs/* drivers/* examples/* extmod/* lib/* py/* tests/* tools/* .gitattributes .gitignore .gitmodules .travis.yml logo/* mpy-cross/*
 Copyright: Copyright (c) 2016-2020 Damien P. George (http://micropython.org/)
 License: MIT
 
@@ -17,3 +17,6 @@ License: MIT
 Copyright: 020 Foundation Devices, Inc.  <hello@foundationdevices.com>
 License: GPL-3.0-or-later
 
+Files: SECURITY/*.png
+Copyright: 020 Foundation Devices, Inc.  <hello@foundationdevices.com>
+License: GPL-3.0-or-later
