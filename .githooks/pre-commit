@@ -1,4 +1,6 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2021 Foundation Devices, Inc. <hello@foundationdevices.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 RESULTS=$(find . -name '*.py' -exec grep -H fake_it[\ ]*=[\ ]*True {} +)
 LEN=`expr length "$RESULTS"`
