@@ -723,11 +723,16 @@ Generate a new receive address in {} and scan the QR code on the next page.'''.f
                     # Remember where to start from next time
                     save_next_addr(self.acct_num, self.addr_type, addr_idx, is_change)
                     address = format_btc_address(address, self.addr_type)
+                    result = await ux_show_story('''Address Verified!
 
-                    result = await ux_show_story('''{}
+{}
 
-Found at index: {}\nType: {}'''.format(address, addr_idx, 'Change' if is_change == 1 else 'Receive'), title='Verified', left_btn='BACK',
-                                                 right_btn='CONTINUE', center=True, center_vertically=True)
+This is a {} address at index {}.'''.format(address, 'change' if is_change == 1 else 'receive',  addr_idx),
+                        title='Verify',
+                        left_btn='BACK',
+                        right_btn='CONTINUE',
+                        center=True,
+                        center_vertically=True)
                     if result == 'x':
                         if not self.goto_prev():
                             # Nothing to return back to, so we must have skipped one or more steps...were' done
