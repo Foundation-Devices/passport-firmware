@@ -1855,13 +1855,13 @@ async def test_derive_addresses(*a):
     chain = chains.current_chain()
 
     addrs = []
-    path = "m/84'/0'/{account}'/{change}/{idx}"
+    path = "m/84'/{coin_type}'/{account}'/{change}/{idx}"
 
     system.turbo(True)
     start_time = utime.ticks_ms()
     with stash.SensitiveValues() as sv:
         for idx in range(n):
-            subpath = path.format(account=0, change=0, idx=idx)
+            subpath = path.format(coin_type=chain.b44_cointype, account=0, change=0, idx=idx)
             node = sv.derive_path(subpath, register=False)
             addr = chain.address(node, AF_P2WPKH)
             addrs.append(addr)

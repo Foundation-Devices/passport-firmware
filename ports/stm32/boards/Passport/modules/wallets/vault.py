@@ -4,6 +4,7 @@
 # vault.py - Export format used by some wallets
 #
 
+import chains
 import stash
 import ujson
 from utils import xfp2str, to_str
@@ -14,8 +15,10 @@ from public_constants import AF_CLASSIC, AF_P2WPKH, AF_P2WPKH_P2SH
 def create_vault_export(sw_wallet=None, addr_type=None, acct_num=0, multisig=False, legacy=False):
     from common import settings, system
 
+    chain = chains.current_chain()
+
     (fw_version, _, _, _) = system.get_software_info()
-    acct_path = "84'/0'/{acct}'".format(acct=acct_num)
+    acct_path = "84'/{coin_type}'/{acct}'".format(coin_type=chain.b44_cointype,acct=acct_num)
     master_xfp = xfp2str(settings.get('xfp'))
 
     with stash.SensitiveValues() as sv:

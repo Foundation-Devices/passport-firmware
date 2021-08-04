@@ -20,15 +20,14 @@ from common import settings, system
 def create_wasabi_export(sw_wallet=None, addr_type=None, acct_num=0, multisig=False, legacy=False):
     # Generate the data for a JSON file which Wasabi can open directly as a new wallet.
 
-    btc = chains.BitcoinMain
+    chain = chains.current_chain()
 
     with stash.SensitiveValues() as sv:
-        acct_path = "m/84'/0'/{acct}'".format(acct=acct_num)
+        acct_path = "m/84'/{coin_type}'/{acct}'".format(coin_type=chain.b44_cointype,acct=acct_num)
         node = sv.derive_path(acct_path)
         xfp = xfp2str(settings.get('xfp'))
-        xpub = btc.serialize_public(node, AF_CLASSIC)
+        xpub = chain.serialize_public(node, AF_CLASSIC)
 
-    chain = chains.current_chain()
     assert chain.ctype in {'BTC', 'TBTC'}, "Only Bitcoin supported"
 
     (fw_version, _, _, _) = system.get_software_info()
