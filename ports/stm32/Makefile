@@ -234,7 +234,7 @@ DRIVERS_SRC_C = $(addprefix drivers/,\
 	)
 
 SRC_C = \
-	main.c \
+$(sort main.c \
 	stm32_it.c \
 	usbd_conf.c \
 	usbd_desc.c \
@@ -301,8 +301,8 @@ SRC_C = \
 	accel.c \
 	servo.c \
 	dac.c \
-	adc.c \
-	$(wildcard $(BOARD_DIR)/*.c)
+	adc.c) \
+	$(sort $(wildcard $(BOARD_DIR)/*.c))
 
 SRC_O = \
 	$(STARTUP_FILE) \
