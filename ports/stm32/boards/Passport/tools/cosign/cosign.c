@@ -11,18 +11,13 @@
 #include <unistd.h>
 #include <libgen.h>
 #include <time.h>
-
-#ifdef USE_CRYPTO
 #include <openssl/bio.h>
 #include <openssl/ec.h>
-#endif /* USE_CRYPTO */
 
 #include "fwheader.h"
 #include "hash.h"
-#ifdef USE_CRYPTO
 #include "firmware-keys.h"
 #include "uECC.h"
-#endif /* USE_CRYPTO */
 
 // This is the maximum length of "-key" + "-user", "00", "01", "02", or "03"
 // Also, + 1 for the folder "/"
@@ -34,11 +29,10 @@ static bool help;
 static bool debug_log_level;
 static bool extract_signature;
 static uint8_t header[FW_HEADER_SIZE];
-#ifdef USE_CRYPTO
 static char *key;
 
 extern EC_KEY *PEM_read_bio_ECPrivateKey(BIO *bp, EC_KEY **key, void *cb, void *u);
-#endif /* USE_CRYPTO */
+
 static void usage(
     char *name
 )
@@ -47,9 +41,7 @@ static void usage(
     printf("\t-d: debug logging\n"
            "\t-f <firmware file>: full path to firmware file to sign\n"
            "\t-h: this message\n"
-#ifdef USE_CRYPTO
            "\t-k <private key file>\n"
-#endif /* USE_CRYPTO */
            "\t-v <version>: firmware version\n"
           );
     exit(1);
@@ -62,11 +54,7 @@ static void process_args(
 {
     int c = 0;
 
-#ifdef USE_CRYPTO
     while ((c = getopt(argc, argv, "dhf:v:k:x")) != -1)
-#else
-    while ((c = getopt(argc, argv, "dhf:v:x")) != -1)
-#endif /* USE_CRYPTO */
     {
         switch (c)
         {
@@ -76,11 +64,9 @@ static void process_args(
             case 'v':
                 version = optarg;
             break;
-#ifdef USE_CRYPTO
             case 'k':
                 key = optarg;
             break;
-#endif /* USE_CRYPTO */
             case 'd':
                 debug_log_level = true;
             break;
@@ -131,7 +117,7 @@ out:
     fclose(fp);
     return ret;
 }
-#ifdef USE_CRYPTO
+
 static uint8_t *read_private_key(
     char *key
 )
@@ -366,14 +352,6 @@ char *remove_unsigned(char *str) {
     return ret_str;
 }
 
-bool is_foundation_signature(uint32_t key) {
-    // Current key must be 0, 1, 2 or 3.
-    if (key >= 0 && key <= 3) 
-        return true;
-    else
-        return false;
-}
-
 bool is_valid_version(char *version) {
     int num_matched;
     int version_major;
@@ -416,12 +394,10 @@ int find_public_key(
     }
     return -1;
 }
-#endif /* USE_CRYPTO */
+
 static void sign_firmware(
     char *fw,
-#ifdef USE_CRYPTO
     char *key,
-#endif /* USE_CRYPTO */
     char *version
 )
 {
@@ -551,7 +527,6 @@ static void sign_firmware(
             printf("Existing header found but FW length invalid\n");
             goto out;
         }
-#ifdef USE_CRYPTO
         else if (hdrptr->signature.pubkey1 == FW_USER_KEY)
         {
             printf("This firmware was already signed by a user private key.\n");
@@ -569,7 +544,6 @@ static void sign_firmware(
         }
 
         hdrptr->signature.pubkey2 = working_key;
-#endif /* USE_CRYPTO */
         working_signature = hdrptr->signature.signature2;
         fwptr = fwbuf + FW_HEADER_SIZE;
 
@@ -614,9 +588,7 @@ static void sign_firmware(
 
         strcpy((char *)hdrptr->info.fwversion, version);
         hdrptr->info.fwlength = fwlen;
-#ifdef USE_CRYPTO
         hdrptr->signature.pubkey1 = working_key;
-#endif /* USE_CRYPTO */
         working_signature = hdrptr->signature.signature1;
         fwptr = fwbuf;
     }
@@ -648,7 +620,6 @@ static void sign_firmware(
         printf("\n");
     }
 
-#ifdef USE_CRYPTO
     /* Encrypt the hash here... */
     rc = uECC_sign(private_key,
                    fw_hash, sizeof(fw_hash),
@@ -670,10 +641,7 @@ static void sign_firmware(
             goto out;
         }
     }
-#else
-    memset(working_signature, 0, SIGNATURE_LEN);
-    memcpy(working_signature, fw_hash, HASH_LEN);
-#endif /* USE_CRYPTO */
+
     if (debug_log_level)
     {
         printf("signature: ");
@@ -789,11 +757,7 @@ int main(int argc, char *argv[])
     if (extract_signature)
         dump_firmware_signature(firmware);
     else
-#ifdef USE_CRYPTO
         sign_firmware(firmware, key, version);
-#else
-        sign_firmware(firmware, version);
-#endif /* USE_CRYPTO */
 
     exit(0);
 }
