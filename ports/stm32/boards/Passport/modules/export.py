@@ -520,7 +520,7 @@ async def write_complete_backup(words, auto_backup=False, is_first_backup=False)
                 ensure_folder_exists(backups_path)
 
                 # Make a unique filename
-                while True:                
+                while True:
                     base_filename = '{}-backup-{}.7z'.format(xfp, backup_num)
                     fname = '{}/{}'.format(backups_path, base_filename)
 
@@ -531,7 +531,7 @@ async def write_complete_backup(words, auto_backup=False, is_first_backup=False)
                     # Ooops...that exists, so increment and try again
                     backup_num += 1
 
-                print('Saving to fname={}'.format(fname))
+                # print('Saving to fname={}'.format(fname))
 
                 # Do actual write
                 with open(fname, 'wb') as fd:

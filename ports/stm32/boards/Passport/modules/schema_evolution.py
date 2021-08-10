@@ -30,6 +30,8 @@ async def handle_schema_evolutions(update_from_to):
             continue
 
         elif from_version == '1.0.6' and to_version == '1.0.7':
+            # This no longer used, so clean it out
+            settings.remove('backup_num')
             # Handle evolutions
             from_version = to_version
             continue
