@@ -302,7 +302,7 @@ SRC_C = \
 	servo.c \
 	dac.c \
 	adc.c \
-	$(wildcard $(BOARD_DIR)/*.c)
+	$(sort $(wildcard $(BOARD_DIR)/*.c))
 
 SRC_O = \
 	$(STARTUP_FILE) \
