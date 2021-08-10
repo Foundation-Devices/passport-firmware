@@ -491,10 +491,14 @@ def ensure_folder_exists(path):
         return
 
 def file_exists(path):
+    import os
+    from stat import S_ISREG
+
     try:
-        with open(fname, 'wb') as fd:
-            return True
-    except:
+        s = os.stat(path)
+        mode = s[0]
+        return S_ISREG(mode)
+    except OSError as e:
         return False
 
 def folder_exists(path):
