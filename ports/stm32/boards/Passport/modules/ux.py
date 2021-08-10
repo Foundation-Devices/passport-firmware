@@ -168,6 +168,7 @@ class KeyInputHandler:
         from common import keypad
         keypad.clear_keys()
 
+    # Reset internal state so that all pending kcodes and repeats are forgotten.
     def reset(self):
         self.time_pressed = {}
         self.kcode_state = 0
