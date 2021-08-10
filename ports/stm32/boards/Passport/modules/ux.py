@@ -168,6 +168,13 @@ class KeyInputHandler:
         from common import keypad
         keypad.clear_keys()
 
+    # Reset internal state so that all pending kcodes and repeats are forgotten.
+    def reset(self):
+        self.time_pressed = {}
+        self.kcode_state = 0
+        self.kcode_last_time_pressed = 0
+        self.repeat_active = False
+
     # New input function to be used in place of PressRelease and ux_press_release, ux_all_up and ux_poll_once.
     async def get_event(self):
         from common import keypad

@@ -277,6 +277,7 @@ class MenuSystem:
                 ch = self.items[idx]
 
                 await ch.activate(self, idx)
+                self.input.reset()
 
     async def interact(self):
         # Only public entry point: do stuff.
