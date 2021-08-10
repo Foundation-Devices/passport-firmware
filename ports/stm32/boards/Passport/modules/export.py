@@ -485,7 +485,7 @@ async def write_complete_backup(words, auto_backup=False, is_first_backup=False)
     body = render_backup_contents().encode()
 
     backup_num = 1
-    xfp = xfp2str(settings.get('xfp'))
+    xfp = xfp2str(settings.get('xfp')).lower()
     # print('XFP: {}'.format(xfp))
 
     gc.collect()
