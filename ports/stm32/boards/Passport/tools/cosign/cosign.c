@@ -11,18 +11,13 @@
 #include <unistd.h>
 #include <libgen.h>
 #include <time.h>
-
-#ifdef USE_CRYPTO
 #include <openssl/bio.h>
 #include <openssl/ec.h>
-#endif /* USE_CRYPTO */
 
 #include "fwheader.h"
 #include "hash.h"
-#ifdef USE_CRYPTO
 #include "firmware-keys.h"
 #include "uECC.h"
-#endif /* USE_CRYPTO */
 
 // This is the maximum length of "-key" + "-user", "00", "01", "02", or "03"
 // Also, + 1 for the folder "/"
@@ -34,11 +29,10 @@ static bool help;
 static bool debug_log_level;
 static bool extract_signature;
 static uint8_t header[FW_HEADER_SIZE];
-#ifdef USE_CRYPTO
 static char *key;
 
 extern EC_KEY *PEM_read_bio_ECPrivateKey(BIO *bp, EC_KEY **key, void *cb, void *u);
-#endif /* USE_CRYPTO */
+
 static void usage(
     char *name
 )
@@ -47,9 +41,7 @@ static void usage(
     printf("\t-d: debug logging\n"
            "\t-f <firmware file>: full path to firmware file to sign\n"
            "\t-h: this message\n"
-#ifdef USE_CRYPTO
            "\t-k <private key file>\n"
-#endif /* USE_CRYPTO */
            "\t-v <version>: firmware version\n"
           );
     exit(1);
@@ -62,11 +54,7 @@ static void process_args(
 {
     int c = 0;
 
-#ifdef USE_CRYPTO
     while ((c = getopt(argc, argv, "dhf:v:k:x")) != -1)
-#else
-    while ((c = getopt(argc, argv, "dhf:v:x")) != -1)
-#endif /* USE_CRYPTO */
     {
         switch (c)
         {
@@ -76,11 +64,9 @@ static void process_args(
             case 'v':
                 version = optarg;
             break;
-#ifdef USE_CRYPTO
             case 'k':
                 key = optarg;
             break;
-#endif /* USE_CRYPTO */
             case 'd':
                 debug_log_level = true;
             break;
@@ -131,7 +117,7 @@ out:
     fclose(fp);
     return ret;
 }
-#ifdef USE_CRYPTO
+
 static uint8_t *read_private_key(
     char *key
 )
@@ -408,12 +394,10 @@ int find_public_key(
     }
     return -1;
 }
-#endif /* USE_CRYPTO */
+
 static void sign_firmware(
     char *fw,
-#ifdef USE_CRYPTO
     char *key,
-#endif /* USE_CRYPTO */
     char *version
 )
 {
@@ -431,18 +415,16 @@ static void sign_firmware(
     uint8_t *fwptr;
     uint8_t fw_hash[HASH_LEN];
     uint8_t *working_signature;
-#ifdef USE_CRYPTO
     int rc;
     uint8_t working_key = 0;
     uint8_t *private_key;
     uint8_t *public_key;
-#endif /* USE_CRYPTO */
+
     if (fw == NULL)
     {
         printf("firmware not specified\n");
         return;
     }
-#ifdef USE_CRYPTO
     if (key == NULL)
     {
         printf("private key not specified\n");
@@ -471,7 +453,7 @@ static void sign_firmware(
     }
     else
         working_key = rc;
-#endif /* USE_CRYPTO */
+
     tmp = strdup(fw);
 
     filename = basename(tmp);
@@ -511,16 +493,6 @@ static void sign_firmware(
         return;
     }
 
-    if (working_key == FW_USER_KEY)
-    {
-        sprintf(output, "%s/%s-key-user.bin", path, final_file);
-    }
-    else
-    {
-        sprintf(output, "%s/%s-key%02d.bin", path, final_file, working_key);
-    }
-    free(final_file);
-
     if (debug_log_level)
         printf("Reading %s...", fw);
     fwlen = read_file(fw, &fwbuf);
@@ -531,13 +503,6 @@ static void sign_firmware(
     }
     if (debug_log_level)
         printf("done\n");
-
-    fp = fopen(output, "wb");
-    if (fp == NULL)
-    {
-        printf("failed to open %s\n", output);
-        goto out;
-    }
 
     /*
      * Test for an existing header in the firwmare. If one exists that
@@ -562,7 +527,6 @@ static void sign_firmware(
             printf("Existing header found but FW length invalid\n");
             goto out;
         }
-#ifdef USE_CRYPTO
         else if (hdrptr->signature.pubkey1 == FW_USER_KEY)
         {
             printf("This firmware was already signed by a user private key.\n");
@@ -580,9 +544,11 @@ static void sign_firmware(
         }
 
         hdrptr->signature.pubkey2 = working_key;
-#endif /* USE_CRYPTO */
         working_signature = hdrptr->signature.signature2;
         fwptr = fwbuf + FW_HEADER_SIZE;
+
+        // Generate output filename
+        sprintf(output, "%s/passport-fw-%s.bin", path, hdrptr->info.fwversion);
     }
     else
     {
@@ -596,6 +562,16 @@ static void sign_firmware(
         if (!is_valid_version(version)) {
             printf("Incorrect version number. Correct format: <0-9>.<0-99>.<0-99> (e.g., 1.12.34)\n");
             goto out;
+        }
+
+        // Generate output filename
+        if (working_key == FW_USER_KEY)
+        {
+            sprintf(output, "%s/%s-key-user.bin", path, final_file);
+        }
+        else
+        {
+            sprintf(output, "%s/%s-key%02d.bin", path, final_file, working_key);
         }
 
         hdrptr = (passport_firmware_header_t *)header;
@@ -612,11 +588,17 @@ static void sign_firmware(
 
         strcpy((char *)hdrptr->info.fwversion, version);
         hdrptr->info.fwlength = fwlen;
-#ifdef USE_CRYPTO
         hdrptr->signature.pubkey1 = working_key;
-#endif /* USE_CRYPTO */
         working_signature = hdrptr->signature.signature1;
         fwptr = fwbuf;
+    }
+    
+    free(final_file);
+    fp = fopen(output, "wb");
+    if (fp == NULL)
+    {
+        printf("failed to open %s\n", output);
+        goto out;
     }
 
     if (debug_log_level)
@@ -638,7 +620,6 @@ static void sign_firmware(
         printf("\n");
     }
 
-#ifdef USE_CRYPTO
     /* Encrypt the hash here... */
     rc = uECC_sign(private_key,
                    fw_hash, sizeof(fw_hash),
@@ -660,10 +641,7 @@ static void sign_firmware(
             goto out;
         }
     }
-#else
-    memset(working_signature, 0, SIGNATURE_LEN);
-    memcpy(working_signature, fw_hash, HASH_LEN);
-#endif /* USE_CRYPTO */
+
     if (debug_log_level)
     {
         printf("signature: ");
@@ -701,7 +679,8 @@ out:
     free(fwbuf);
     free(output);
     free(tmp);
-    fclose(fp);
+    if (fp != NULL)
+        fclose(fp);
 }
 
 static void dump_firmware_signature(
@@ -779,11 +758,7 @@ int main(int argc, char *argv[])
     if (extract_signature)
         dump_firmware_signature(firmware);
     else
-#ifdef USE_CRYPTO
         sign_firmware(firmware, key, version);
-#else
-        sign_firmware(firmware, version);
-#endif /* USE_CRYPTO */
 
     exit(0);
 }
