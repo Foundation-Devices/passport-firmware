@@ -548,7 +548,7 @@ static void sign_firmware(
         fwptr = fwbuf + FW_HEADER_SIZE;
 
         // Generate output filename
-        sprintf(output, "%s/passport-fw-%s.bin", path, version);
+        sprintf(output, "%s/passport-fw-%s.bin", path, hdrptr->info.fwversion);
     }
     else
     {
@@ -679,7 +679,8 @@ out:
     free(fwbuf);
     free(output);
     free(tmp);
-    fclose(fp);
+    if (fp != NULL)
+        fclose(fp);
 }
 
 static void dump_firmware_signature(
