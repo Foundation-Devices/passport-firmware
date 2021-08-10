@@ -65,6 +65,7 @@ AdvancedMenu = [
     MenuItem('MicroSD Settings', menu=SDCardMenu),
     MenuItem('View Seed Words', f=view_seed_words, predicate=lambda: settings.get('words', True)),
     MenuItem('Developer PubKey', menu=DeveloperPubkeyMenu, menu_title='Developer'),
+    MenuItem('Testnet', chooser=chain_chooser),
     MenuItem('Erase Passport', f=erase_wallet, arg=True)
 ]
 

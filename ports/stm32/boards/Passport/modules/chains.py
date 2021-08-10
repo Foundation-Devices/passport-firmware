@@ -195,6 +195,7 @@ class BitcoinMain(ChainsBase):
     ctype = 'BTC'
     name = 'Bitcoin'
     core_name = 'Bitcoin Core'
+    menu_name = 'Bitcoin Mainnet'
 
     slip132 = {
         AF_CLASSIC:     Slip132Version(0x0488B21E, 0x0488ADE4, 'x'),
@@ -215,7 +216,7 @@ class BitcoinMain(ChainsBase):
 class BitcoinTestnet(BitcoinMain):
     ctype = 'TBTC'
     name = 'Bitcoin Testnet'
-    menu_name = 'Testnet: BTC'
+    menu_name = 'Bitcoin Testnet'
 
     slip132 = {
         AF_CLASSIC:     Slip132Version(0x043587cf, 0x04358394, 't'),

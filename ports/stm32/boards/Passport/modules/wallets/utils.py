@@ -4,6 +4,7 @@
 # utils.py - Wallet utils
 #
 
+import chains
 import common
 from common import settings
 from public_constants import AF_CLASSIC, AF_P2SH, AF_P2WPKH_P2SH, AF_P2WSH_P2SH, AF_P2WPKH, AF_P2WSH
@@ -94,16 +95,16 @@ def get_deriv_fmt_from_address(address, is_multisig):
     # Map the address prefix to a standard derivation path and insert the account number
     if is_multisig:
         if address[0] == '3':
-            return "m/48'/0'/{acct}'/1'"
+            return "m/48'/{coin_type}'/{acct}'/1'"
         elif address[0] == 'b' and address[1] == 'c' and address[2] == '1':
-            return "m/48'/0'/{acct}'/2'"
+            return "m/48'/{coin_type}'/{acct}'/2'"
     else:
         if address[0] == '1':
-            return "m/44'/0'/{acct}'"
+            return "m/44'/{coin_type}'/{acct}'"
         elif address[0] == '3':
-            return "m/49'/0'/{acct}'"
+            return "m/49'/{coin_type}'/{acct}'"
         elif address[0] == 'b' and address[1] == 'c' and address[2] == '1':
-            return "m/84'/0'/{acct}'"
+            return "m/84'/{coin_type}'/{acct}'"
 
     return None
 
@@ -113,33 +114,35 @@ def get_deriv_fmt_from_addr_type(addr_type, is_multisig):
     # Map the address prefix to a standard derivation path and insert the account number
     if is_multisig:
         if addr_type == AF_P2WSH_P2SH:
-            return "m/48'/0'/{acct}'/1'"
+            return "m/48'/{coin_type}'/{acct}'/1'"
         elif addr_type == AF_P2WSH:
-            return "m/48'/0'/{acct}'/2'"
+            return "m/48'/{coin_type}'/{acct}'/2'"
     else:
         if addr_type == AF_CLASSIC:
-            return "m/44'/0'/{acct}'"
+            return "m/44'/{coin_type}'/{acct}'"
         elif addr_type == AF_P2WPKH_P2SH:
-            return "m/49'/0'/{acct}'"
+            return "m/49'/{coin_type}'/{acct}'"
         elif addr_type == AF_P2WPKH:
-            return "m/84'/0'/{acct}'"
+            return "m/84'/{coin_type}'/{acct}'"
 
     return None
 
 def get_deriv_path_from_addr_type_and_acct(addr_type, acct_num, is_multisig):
+    chain = chains.current_chain()
     # print('get_deriv_path_from_addr_type_and_acct(): addr_type={} acct={} is_multisig={}'.format(addr_type, acct_num, is_multisig))
     fmt = get_deriv_fmt_from_addr_type(addr_type, is_multisig)
     if fmt != None:
-        return fmt.format(acct=acct_num)
+        return fmt.format(coin_type=chain.b44_cointype,acct=acct_num)
 
     return None
 
 # For single sig only
 def get_deriv_path_from_address_and_acct(address, acct, is_multisig):
+    chain = chains.current_chain()
     # print('get_deriv_path_from_address_and_acct(): address={} acct={} is_multisig={}'.format(address, acct, is_multisig))
     fmt = get_deriv_fmt_from_address(address, is_multisig)
     if fmt != None:
-        return fmt.format(acct=acct)
+        return fmt.format(coin_type=chain.b44_cointype,acct=acct)
 
     return None
 
