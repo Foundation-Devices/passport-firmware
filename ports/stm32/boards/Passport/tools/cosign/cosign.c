@@ -366,6 +366,14 @@ char *remove_unsigned(char *str) {
     return ret_str;
 }
 
+bool is_foundation_signature(uint32_t key) {
+    // Current key must be 0, 1, 2 or 3.
+    if (key >= 0 && key <= 3) 
+        return true;
+    else
+        return false;
+}
+
 bool is_valid_version(char *version) {
     int num_matched;
     int version_major;
@@ -431,18 +439,16 @@ static void sign_firmware(
     uint8_t *fwptr;
     uint8_t fw_hash[HASH_LEN];
     uint8_t *working_signature;
-#ifdef USE_CRYPTO
     int rc;
     uint8_t working_key = 0;
     uint8_t *private_key;
     uint8_t *public_key;
-#endif /* USE_CRYPTO */
+
     if (fw == NULL)
     {
         printf("firmware not specified\n");
         return;
     }
-#ifdef USE_CRYPTO
     if (key == NULL)
     {
         printf("private key not specified\n");
@@ -471,7 +477,7 @@ static void sign_firmware(
     }
     else
         working_key = rc;
-#endif /* USE_CRYPTO */
+
     tmp = strdup(fw);
 
     filename = basename(tmp);
@@ -511,16 +517,6 @@ static void sign_firmware(
         return;
     }
 
-    if (working_key == FW_USER_KEY)
-    {
-        sprintf(output, "%s/%s-key-user.bin", path, final_file);
-    }
-    else
-    {
-        sprintf(output, "%s/%s-key%02d.bin", path, final_file, working_key);
-    }
-    free(final_file);
-
     if (debug_log_level)
         printf("Reading %s...", fw);
     fwlen = read_file(fw, &fwbuf);
@@ -531,13 +527,6 @@ static void sign_firmware(
     }
     if (debug_log_level)
         printf("done\n");
-
-    fp = fopen(output, "wb");
-    if (fp == NULL)
-    {
-        printf("failed to open %s\n", output);
-        goto out;
-    }
 
     /*
      * Test for an existing header in the firwmare. If one exists that
@@ -583,6 +572,9 @@ static void sign_firmware(
 #endif /* USE_CRYPTO */
         working_signature = hdrptr->signature.signature2;
         fwptr = fwbuf + FW_HEADER_SIZE;
+
+        // Generate output filename
+        sprintf(output, "%s/passport-fw-%s.bin", path, version);
     }
     else
     {
@@ -596,6 +588,16 @@ static void sign_firmware(
         if (!is_valid_version(version)) {
             printf("Incorrect version number. Correct format: <0-9>.<0-99>.<0-99> (e.g., 1.12.34)\n");
             goto out;
+        }
+
+        // Generate output filename
+        if (working_key == FW_USER_KEY)
+        {
+            sprintf(output, "%s/%s-key-user.bin", path, final_file);
+        }
+        else
+        {
+            sprintf(output, "%s/%s-key%02d.bin", path, final_file, working_key);
         }
 
         hdrptr = (passport_firmware_header_t *)header;
@@ -617,6 +619,14 @@ static void sign_firmware(
 #endif /* USE_CRYPTO */
         working_signature = hdrptr->signature.signature1;
         fwptr = fwbuf;
+    }
+    
+    free(final_file);
+    fp = fopen(output, "wb");
+    if (fp == NULL)
+    {
+        printf("failed to open %s\n", output);
+        goto out;
     }
 
     if (debug_log_level)
