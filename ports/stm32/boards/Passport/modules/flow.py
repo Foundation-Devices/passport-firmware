@@ -52,6 +52,11 @@ def has_pubkey():
             return False
     return not is_all_zero(common.cached_pubkey)
 
+PassphraseMenu = [
+    MenuItem('Enter at Startup', menu_title='Enter at Startup', chooser=enable_passphrase_chooser),
+    MenuItem('Set Passphrase', menu_title='Set Passphrase', f=enter_passphrase, arg='Passphrase')
+]
+
 DeveloperPubkeyMenu = [
     MenuItem('Install PubKey', predicate=lambda: not has_pubkey(), f=install_user_firmware_pubkey),
     MenuItem('View PubKey', predicate=has_pubkey, f=view_user_firmware_pubkey),
@@ -60,7 +65,7 @@ DeveloperPubkeyMenu = [
 
 AdvancedMenu = [
     MenuItem('Change PIN', f=change_pin),
-    MenuItem('Passphrase', menu_title='Passphrase', chooser=enable_passphrase_chooser),
+    MenuItem('Passphrase', menu_title='Passphrase', menu=PassphraseMenu),
     MenuItem('Sign Text File', predicate=has_secrets, f=sign_message_on_sd),
     MenuItem('MicroSD Settings', menu=SDCardMenu),
     MenuItem('View Seed Words', f=view_seed_words, predicate=lambda: settings.get('words', True)),
