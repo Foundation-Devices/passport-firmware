@@ -53,8 +53,8 @@ def has_pubkey():
     return not is_all_zero(common.cached_pubkey)
 
 PassphraseMenu = [
-    MenuItem('Enter at Startup', menu_title='Enter at Startup', chooser=enable_passphrase_chooser),
-    MenuItem('Set Passphrase', menu_title='Set Passphrase', f=enter_passphrase, arg='Passphrase')
+    MenuItem('Set Passphrase', menu_title='Set Passphrase', f=enter_passphrase, arg='Passphrase'),
+    MenuItem('Enter at Startup', menu_title='Enter at Startup', chooser=enable_passphrase_chooser)
 ]
 
 DeveloperPubkeyMenu = [
