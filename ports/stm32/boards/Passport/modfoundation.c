@@ -1276,7 +1276,7 @@ System_validate_firmware_header(mp_obj_t self, mp_obj_t header)
     // New header
     passport_firmware_header_t* new_fwhdr = (passport_firmware_header_t*)header_info.buf;
 
-    mp_obj_t tuple[3];
+    mp_obj_t tuple[4];
 
     bool is_valid = verify_header(header_info.buf);
 
@@ -1303,7 +1303,10 @@ System_validate_firmware_header(mp_obj_t self, mp_obj_t header)
             vstr_add_strn(&vstr, (const char*)new_fwhdr->info.fwdate, strlen((const char*)new_fwhdr->info.fwdate));
             tuple[2] = mp_obj_new_str_from_vstr(&mp_type_str, &vstr);
 
-            return mp_obj_new_tuple(3, tuple);
+            // Is this user-signed firmware?
+            tuple[3] = (new_fwhdr->signature.pubkey1 == FW_USER_KEY) ? mp_const_true : mp_const_false;
+
+            return mp_obj_new_tuple(4, tuple);
         }
     } else {
         // Invalid header
@@ -1317,7 +1320,10 @@ System_validate_firmware_header(mp_obj_t self, mp_obj_t header)
         vstr_add_strn(&vstr, (const char*)msg, strlen(msg));
         tuple[2] = mp_obj_new_str_from_vstr(&mp_type_str, &vstr);
 
-        return mp_obj_new_tuple(3, tuple);
+        // No header = no user signed firmware
+        tuple[3] = mp_const_false;
+
+        return mp_obj_new_tuple(4, tuple);
     }
 
     // is_valid
@@ -1329,7 +1335,10 @@ System_validate_firmware_header(mp_obj_t self, mp_obj_t header)
     // No error message
     tuple[2] = mp_const_none;
 
-    return mp_obj_new_tuple(3, tuple);
+    // Is this user-signed firmware?
+    tuple[3] = (new_fwhdr->signature.pubkey1 == FW_USER_KEY) ? mp_const_true : mp_const_false;
+
+    return mp_obj_new_tuple(4, tuple);
 }
 
 /// def System_set_user_firmware_pubkey(self, pubkey) -> None
