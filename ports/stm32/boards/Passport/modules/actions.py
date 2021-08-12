@@ -381,7 +381,7 @@ async def update_firmware(*a):
                 pubkey_result, pubkey = read_user_firmware_pubkey()
                 if not pubkey_result or is_all_zero(pubkey):
                     system.turbo(False)
-                    await ux_show_story('Cannot install user-signed firmware while no user-signed key installed.\n\n', title='Error', left_btn='BACK', right_btn='OK', center=True, center_vertically=True)
+                    await ux_show_story('Cannot install non-Foundation firmware with no Developer PubKey installed.\n\n', title='Error', left_btn='BACK', right_btn='OK', center=True, center_vertically=True)
                     return
 
             system.turbo(False)
