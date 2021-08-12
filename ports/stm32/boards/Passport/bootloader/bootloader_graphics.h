@@ -8,9 +8,9 @@
 #include <stdint.h>
 
 typedef struct _Image {
-    int16_t width;
-    int16_t height;
-    int16_t byte_width;
+    int16_t  width;
+    int16_t  height;
+    int16_t  byte_width;
     uint8_t* data;
 } Image;
 

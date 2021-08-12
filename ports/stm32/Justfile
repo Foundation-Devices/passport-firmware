@@ -51,6 +51,10 @@ clean:
 # Misc. Commands
 #
 
+# Launch OCD, run a command and then exit
+run-ocd-command command:
+    sudo /usr/local/bin/openocd -f stlink.cfg -c "adapter speed 1000; transport select hla_swd" -f stm32h7x.cfg -c "init; reset halt; {{command}}" -c "exit"
+
 # Build all Python graphics
 graphics-py:
     just -f boards/Passport/graphics/py/Justfile build
@@ -88,18 +92,18 @@ hash filepath:
 
     # SHA256
     sha=`shasum -b -a 256 {{filepath}} | sed -rn 's/^(.*) .*$/\1/p'`
-    echo -e "\nSHA256: $sha"
-    echo -e "(shasum -b -a 256 $filename)\n"
+    echo -e "\n\`SHA256: $sha\`"
+    echo -e "\`(shasum -b -a 256 $filename)\`\n"
 
     # MD5
     md5=`mdsum {{filepath}} | sed -rn 's/^(.*) .*$/\1/p'`
-    echo "MD5: $md5"
-    echo -e "(md5 $filename or mdsum $filename)\n"
+    echo "\`MD5: $md5\`"
+    echo -e "\`(md5 $filename or mdsum $filename)\`\n"
 
     # Build Hash
     build_hash=`cosign -f {{filepath}} -x | sed -rn 's/^FW Build Hash:    (.*)$/\1/p'`
-    echo -e "Build Hash: $build_hash"
-    echo -e "(Developers Only)\n"
+    echo -e "\`Build Hash: $build_hash\`"
+    echo -e "\`(Developers Only)\`\n"
 
 # Run all tests
 test:
@@ -123,7 +127,3 @@ fmt-c:
 
 # Format the project's source code under boards/Passport
 fmt: fmt-py fmt-c
-
-
-
-# Bootloader

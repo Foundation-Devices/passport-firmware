@@ -8,12 +8,13 @@ run-ocd-command command:
 
 
 # Build the bootloader (debug, release, locked or production)
+# TODO: Need to handle {{rel}} for locked and production, which should look in release folder for binary
 build rel="release":
     @echo "\nBuilding Bootloader..."
     make {{rel}}
 
     @echo "\nAppending secrets to the end..."
-    add-secrets -b arm/release/bootloader.bin -s secrets
+    add-secrets -b arm/{{rel}}/bootloader.bin -s secrets
 
     @echo "\nBootloader Build Complete"
 
