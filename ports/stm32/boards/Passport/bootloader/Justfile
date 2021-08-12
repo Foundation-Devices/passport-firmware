@@ -1,0 +1,38 @@
+# SPDX-FileCopyrightText: 2021 Foundation Devices, Inc. <hello@foundationdevices.com>
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Launch OCD, run a command and then exit
+run-ocd-command command:
+    cd ../../../; sudo /usr/local/bin/openocd -f stlink.cfg -c "adapter speed 1000; transport select hla_swd" -f stm32h7x.cfg -c "init; reset halt; {{command}}" -c "exit"
+
+
+# Build the bootloader (debug, release, locked or production)
+build rel="release":
+    @echo "\nBuilding Bootloader..."
+    make {{rel}}
+
+    @echo "\nAppending secrets to the end..."
+    add-secrets -b arm/release/bootloader.bin -s secrets
+
+    @echo "\nBootloader Build Complete"
+
+# Clean the bootloader build
+clean:
+    @echo "Cleaning Bootloader..."
+    make clean
+    @echo "Bootloader Clean Complete"
+
+# Build and flash the bootloader with the secrets appended to the end
+flash rel="release": (build rel)
+    just run-ocd-command "flash write_image erase boards/Passport/bootloader/arm/{{rel}}/bootloader-secrets.bin 0x8000000"
+    just reset
+
+# Build and flash the bootloader with no secrets (use to setup a new Secure Element)
+flash-raw rel="release": (build rel)
+    just run-ocd-command "flash write_image erase boards/Passport/bootloader/arm/{{rel}}/bootloader.bin 0x8000000"
+    just reset
+
+# Reset the Passport
+reset:
+    just run-ocd-command "reset"

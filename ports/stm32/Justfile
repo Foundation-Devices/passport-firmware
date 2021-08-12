@@ -4,7 +4,7 @@
 
 # Install dependencies.
 deps:
-    @echo "TBD"
+    @echo "Not sure we will need this if all deps are setup via Dockerfile"
 
 # Initialize development environment
 init: deps
@@ -17,53 +17,6 @@ lint-code:
 # Lint all of the project
 lint: lint-code
     reuse lint
-
-#
-# Bootloader Commands
-#
-
-# release, debug, locked and production are possible values
-default_rel := 'release'
-
-# Build the bootloader (debug, release, locked or production)
-build-bl rel=default_rel:
-    @echo "\nBuilding Bootloader..."
-    @cd boards/Passport/bootloader; make {{rel}}
-
-    @echo "\nAppending secrets to the end..."
-    @cd boards/Passport/bootloader; add-secrets -b arm/release/bootloader.bin -s secrets
-
-    @echo "\nBootloader Build Complete"
-
-# Clean the bootloader build
-clean-bl:
-    @echo "Cleaning Bootloader..."
-    @cd boards/Passport/bootloader; make clean
-    @echo "Bootloader Clean Complete"
-
-# Launch OCD, run a command and then exit
-run-ocd-command command:
-    sudo /usr/local/bin/openocd -f stlink.cfg -c "adapter speed 1000; transport select hla_swd" -f stm32h7x.cfg -c "init; reset halt; {{command}}" -c "exit"
-
-# Flash the release bootloader with the secrets appended to the end
-flash-bl rel=default_rel: (build-bl rel)
-    just run-ocd-command "flash write_image erase boards/Passport/bootloader/arm/{{rel}}/bootloader-secrets.bin 0x8000000"
-    just reset
-
-# Flash the release bootloader with no secrets -- use to init. a new Secure Element
-flash-bl-raw rel=default_rel: (build-bl rel)
-    just run-ocd-command "flash write_image erase boards/Passport/bootloader/arm/{{rel}}/bootloader.bin 0x8000000"
-    just reset
-
-# Get the username for use below
-user := `whoami`
-
-# Read the "ROM Secrets" from Passport and save them to a file
-save-secrets filename="boards/Passport/bootloader/secrets":
-    just run-ocd-command "dump_image {{filename}} 0x0801FF00 256"
-    # Running OCD as sudo makes the output file be owned by root, so switch it back to the user
-    sudo chown {{user}}:{{user}} {{filename}}
-
 
 #
 # Firmware Commands
@@ -90,13 +43,43 @@ flash-foundation version="1.0.0":
     just run-ocd-command "flash write_image erase ../../releases/passport-fw-{{version}}.bin 0x8020000"
     just reset
 
+# Clean the firmware build
+clean:
+    make BOARD=Passport clean
+
+#
+# Misc. Commands
+#
+
+# Build all Python graphics
+graphics-py:
+    just -f boards/Passport/graphics/py/Justfile build
+
+# Build all C graphics (firmware & bootloader)
+graphics-c:
+    just -f boards/Passport/graphics/c/Justfile build
+
+graphics: graphics-py graphics-c
+
 # Reset the Passport
 reset:
     just run-ocd-command "reset"
 
-# Clean the firmware build
-clean:
-    make BOARD=Passport clean
+# Get the username for use below
+user := `whoami`
+
+# Read the "ROM Secrets" from Passport and save them to a file
+save-secrets filename="boards/Passport/bootloader/secrets":
+    just run-ocd-command "dump_image {{filename}} 0x0801FF00 256"
+    # Running OCD as sudo makes the output file be owned by root, so switch it back to the user
+    sudo chown {{user}}:{{user}} {{filename}}
+
+secrets:
+    #!/usr/bin/env bash
+    # The last bit below redirects stderr to stdout, which the backticks capture into the variable `secrets`
+    secrets=`just run-ocd-command "mdb 0x0801FF00 256" 2>&1`
+    secrets=`echo "$secrets" | tail -n 8`
+    echo -e "Passport ROM Secrets:\n$secrets"
 
 # Calculate all hashes and format it all for GitHub release notes
 hash filepath:
@@ -122,7 +105,7 @@ hash filepath:
 test:
     @echo "TBD"
 
-# Format the project's source code
+# Format the project's .py files under boards/Passport/modules
 fmt-py:
     #!/usr/bin/env bash
     pushd boards/Passport/modules
@@ -130,6 +113,7 @@ fmt-py:
     autopep8 --max-line-length=120 --in-place $files_to_fmt
     popd
 
+# Format the project's .c and .h files under boards/Passport/
 fmt-c:
     #!/usr/bin/env bash
     pushd boards/Passport
@@ -137,6 +121,7 @@ fmt-c:
     clang-format-5.0 -i --style=file $files_to_fmt
     popd
 
+# Format the project's source code under boards/Passport
 fmt: fmt-py fmt-c
 
 

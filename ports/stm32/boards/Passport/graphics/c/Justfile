@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: 2021 Foundation Devices, Inc. <hello@foundationdevices.com>
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Build all C graphics and copy files to main source folders
+build:
+    make
+    cp firmware_graphics.* ../../
+    cp bootloader_graphics.* ../../bootloader/
