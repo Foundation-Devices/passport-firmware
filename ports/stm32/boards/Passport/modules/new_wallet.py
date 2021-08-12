@@ -25,7 +25,9 @@ from utils import (
     save_next_addr,
     make_account_name_num,
     get_accounts,
-    format_btc_address)
+    format_btc_address,
+    is_valid_btc_address,
+    do_address_verify)
 from wallets.constants import *
 from uasyncio import sleep_ms
 from constants import DEFAULT_ACCOUNT_ENTRY
@@ -682,8 +684,9 @@ Generate a new receive address in {} and scan the QR code on the next page.'''.f
 
             elif self.state == self.SCAN_RX_ADDRESS:
                 # Scan the address to be verified - should be a normal QR code
-                system.turbo(True);
+                system.turbo(True)
                 address = await ux_scan_qr_code('Verify Address')
+                system.turbo(False)
 
                 if address == None:
                     # User backed out without scanning an address
@@ -699,56 +702,30 @@ Generate a new receive address in {} and scan the QR code on the next page.'''.f
                             self.goto_prev()
                     continue
 
-                # Strip prefix if present
-                if address[0:8].lower() == 'bitcoin:':
-                    address = address[8:]
-
-                if not is_valid_address(address):
-                    result = await ux_show_story('That is not a valid Bitcoin address.', title='Error', left_btn='BACK',
-                                                 right_btn='SCAN', center=True, center_vertically=True)
-                    if result == 'x':
-                        if not self.goto_prev():
-                            return
+                address, is_valid_btc = await is_valid_btc_address(address)
+                if is_valid_btc == False:
+                    if not self.goto_prev():
+                        return
                     continue
 
                 # Use address to nail down deriv_path and addr_type, if not yet known
                 self.infer_wallet_info(address=address)
 
-                # Scan addresses to see if it's valid
-                addr_idx, is_change = await scan_for_address(self.acct_num, address, self.addr_type, self.deriv_path, self.multisig_wallet)
-                if addr_idx >= 0:
-                    # Found it!
-                    self.verified = True
-
-                    # Remember where to start from next time
-                    save_next_addr(self.acct_num, self.addr_type, addr_idx, is_change)
-                    address = format_btc_address(address, self.addr_type)
-                    result = await ux_show_story('''Address Verified!
-
-{}
-
-This is a {} address at index {}.'''.format(address, 'change' if is_change == 1 else 'receive',  addr_idx),
-                        title='Verify',
-                        left_btn='BACK',
-                        right_btn='CONTINUE',
-                        center=True,
-                        center_vertically=True)
-                    if result == 'x':
-                        if not self.goto_prev():
-                            # Nothing to return back to, so we must have skipped one or more steps...were' done
-                            return
-
-                    self.goto(self.CONFIRMATION)
-                    continue
-                else:
+                result = do_address_verify(self.acct_num, address, self.addr_type, self.deriv_path, self.multisig_wallet)
+                if result == False:
                     result = await ux_show_story('Do you want to SKIP address verification or SCAN another address?', title='Not Found', left_btn='SKIP',
                                                  right_btn='SCAN', center=True, center_vertically=True)
                     if result == 'x':
                         # Skipping address scan
                         self.infer_wallet_info(ms_wallet=self.multisig_wallet)
                         self.goto(self.CONFIRMATION)
-
-                    # else loop around and scan again
+                else:
+                    # Address was found!
+                    self.verified = True
+                    self.goto(self.CONFIRMATION)
+                    continue
+            
+                # else loop around and scan again
 
             elif self.state == self.SHOW_RX_ADDRESSES_VERIFICATION_INTRO:
                 msg = self.get_custom_text('show_receive_addr', '''Next, let's check that {name} was paired successfully.

@@ -23,7 +23,7 @@ from common import settings, system, noise, dis
 from utils import (UXStateMachine, imported, pretty_short_delay, xfp2str, to_str,
                    truncate_string_to_width, set_next_addr, scan_for_address, get_accounts, run_chooser,
                    make_account_name_num, is_valid_address, save_next_addr, needs_microsd, format_btc_address,
-                   is_all_zero, bytes_to_hex_str, split_to_lines)
+                   is_all_zero, bytes_to_hex_str, split_to_lines, is_valid_btc_address, do_address_verify)
 from wallets.utils import get_export_mode, get_addr_type_from_address, get_deriv_path_from_addr_type_and_acct
 from ux import (the_ux, ux_confirm, ux_enter_pin,
                 ux_enter_text, ux_scan_qr_code, ux_shutdown,
@@ -268,21 +268,15 @@ class VerifyAddressUX(UXStateMachine):
                 # Scan the address to be verified - should be a normal QR code
                 system.turbo(True);
                 address = await ux_scan_qr_code('Verify Address')
+                system.turbo(False)
                 if address == None:
                     return
 
-                # Strip prefix if present
-                if address[0:8].lower() == 'bitcoin:':
-                    address = address[8:]
-
-                if not is_valid_address(address):
-                    result = await ux_show_story('That is not a valid Bitcoin address.', title='Error', left_btn='BACK',
-                                                 right_btn='SCAN', center=True, center_vertically=True)
-                    if result == 'x':
-                        if not self.goto_prev():
-                            # Nothing to return back to, so we must have skipped one or more steps...we're done
-                            return
-                    continue
+                address, is_valid_btc = await is_valid_btc_address(address)
+                if is_valid_btc == False:
+                    if not self.goto_prev():
+                        return
+                    continue   
 
                 # Get the address type from the address
                 is_multisig = self.sig_type == 'multisig'
@@ -290,29 +284,10 @@ class VerifyAddressUX(UXStateMachine):
                 addr_type = get_addr_type_from_address(address, is_multisig)
                 deriv_path = get_deriv_path_from_addr_type_and_acct(addr_type, self.acct_num, is_multisig)
 
-                # Scan addresses to see if it's valid
-                addr_idx, is_change = await scan_for_address(self.acct_num, address, addr_type, deriv_path, self.multisig_wallet)
-                if addr_idx >= 0:
-                    # Remember where to start from next time
-                    save_next_addr(self.acct_num, addr_type, addr_idx, is_change)
-                    address = format_btc_address(address, addr_type)
-
-                    result = await ux_show_story('''Address Verified!
-
-{}
-
-This is a {} address at index {}.'''.format(address, 'change' if is_change == 1 else 'receive',  addr_idx),
-                        title='Verify',
-                        left_btn='BACK',
-                        right_btn='CONTINUE',
-                        center=True,
-                        center_vertically=True)
-                    if result == 'x':
-                        if not self.goto_prev():
-                            # Nothing to return back to, so we must have skipped one or more steps...we're done
-                            return
-
-                    return
+                result = await do_address_verify(self.acct_num, address, addr_type, deriv_path, self.multisig_wallet)
+                if result == 'x':
+                    if not self.goto_prev():
+                        return
                 else:
                     # User asked to stop searching
                     return
