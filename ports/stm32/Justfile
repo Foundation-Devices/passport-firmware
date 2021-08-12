@@ -123,10 +123,21 @@ test:
     @echo "TBD"
 
 # Format the project's source code
-fmt:
-    # just -f src/bootloader/Justfile fmt
-    # just -f src/firmware/Justfile fmt
-    @echo "TBD"
+fmt-py:
+    #!/usr/bin/env bash
+    pushd boards/Passport/modules
+    files_to_fmt=`find . -path ./trezor-firmware -prune -false -o -name '*.py'`
+    autopep8 --max-line-length=120 --in-place $files_to_fmt
+    popd
+
+fmt-c:
+    #!/usr/bin/env bash
+    pushd boards/Passport
+    files_to_fmt=`find . -path ./trezor-firmware -prune -false -o -name '*.[c|h]'`
+    clang-format-5.0 -i --style=file $files_to_fmt
+    popd
+
+fmt: fmt-py fmt-c
 
 
 
