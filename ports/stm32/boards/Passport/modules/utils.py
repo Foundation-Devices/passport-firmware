@@ -695,6 +695,48 @@ async def scan_for_address(acct_num, address, addr_type, deriv_path, ms_wallet):
             if result == 'x':
                 return -1, False
 
+async def is_valid_btc_address(address):
+    from ux import ux_show_story
+
+    # Strip prefix if present
+    if address[0:8].lower() == 'bitcoin:':
+        address = address[8:]
+
+    if not is_valid_address(address):
+        await ux_show_story('That is not a valid Bitcoin address.', title='Error', left_btn='BACK',
+             right_btn='SCAN', center=True, center_vertically=True)
+        return address, False
+    else:
+        return address, True
+
+async def do_address_verify(acct_num, address, addr_type, deriv_path, multisig_wallet):
+    from common import system
+    from ux import ux_show_story
+
+    system.turbo(True)
+    # Scan addresses to see if it's valid
+    addr_idx, is_change = await scan_for_address(acct_num, address, addr_type, deriv_path, multisig_wallet)
+    if addr_idx >= 0:
+        # Remember where to start from next time
+        save_next_addr(acct_num, addr_type, addr_idx, is_change)
+        address = format_btc_address(address, addr_type)
+        result = await ux_show_story('''Address Verified!
+
+{}
+
+This is a {} address at index {}.'''.format(address, 'change' if is_change == 1 else 'receive',  addr_idx),
+                        title='Verify',
+                        left_btn='BACK',
+                        right_btn='CONTINUE',
+                        center=True,
+                        center_vertically=True)
+        system.turbo(False)
+        return True
+    else:
+        system.turbo(False)
+        return 
+
+
 def is_new_wallet_in_progress():
     from common import settings
     ap = settings.get('wallet_prog', None)
