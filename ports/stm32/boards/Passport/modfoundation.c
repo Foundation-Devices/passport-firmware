@@ -1304,7 +1304,7 @@ System_validate_firmware_header(mp_obj_t self, mp_obj_t header)
             tuple[2] = mp_obj_new_str_from_vstr(&mp_type_str, &vstr);
 
             // Is this user-signed firmware?
-            tuple[3] = (new_fwhdr->signature.pubkey1 == FW_USER_KEY) ? mp_const_true : mp_const_false;
+            tuple[3] = mp_const_false;
 
             return mp_obj_new_tuple(4, tuple);
         }
