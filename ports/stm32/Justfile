@@ -1,0 +1,129 @@
+# SPDX-FileCopyrightText: 2021 Foundation Devices, Inc. <hello@foundationdevices.com>
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Install dependencies.
+deps:
+    @echo "Not sure we will need this if all deps are setup via Dockerfile"
+
+# Initialize development environment
+init: deps
+    git config core.hooksPath .githooks
+
+# Lint only the code of the project
+lint-code:
+    @echo "TBD"
+
+# Lint all of the project
+lint: lint-code
+    reuse lint
+
+#
+# Firmware Commands
+#
+
+build:
+    make BOARD=Passport
+
+# Sign current firmware build with the user.pem key and set specified version
+sign version="1.0.0": build
+    @echo "\nAdding user signature...\n"
+    @cosign -f build-Passport/firmware.bin -k ~/bin/keys/user.pem -v {{version}} > /dev/null
+
+    @cosign -f build-Passport/firmware-key-user.bin -x
+    @echo "\nSigning Complete!"
+
+# Build, sign and flash the firmware with the specified version
+flash version="1.0.0": (sign version)
+    just run-ocd-command "flash write_image erase build-Passport/firmware-key-user.bin 0x8020000"
+    just reset
+
+# Install a recent Foundation-signed build
+flash-foundation version="1.0.0":
+    just run-ocd-command "flash write_image erase ../../releases/passport-fw-{{version}}.bin 0x8020000"
+    just reset
+
+# Clean the firmware build
+clean:
+    make BOARD=Passport clean
+
+#
+# Misc. Commands
+#
+
+# Launch OCD, run a command and then exit
+run-ocd-command command:
+    sudo /usr/local/bin/openocd -f stlink.cfg -c "adapter speed 1000; transport select hla_swd" -f stm32h7x.cfg -c "init; reset halt; {{command}}" -c "exit"
+
+# Build all Python graphics
+graphics-py:
+    just -f boards/Passport/graphics/py/Justfile build
+
+# Build all C graphics (firmware & bootloader)
+graphics-c:
+    just -f boards/Passport/graphics/c/Justfile build
+
+graphics: graphics-py graphics-c
+
+# Reset the Passport
+reset:
+    just run-ocd-command "reset"
+
+# Get the username for use below
+user := `whoami`
+
+# Read the "ROM Secrets" from Passport and save them to a file
+save-secrets filename="boards/Passport/bootloader/secrets":
+    just run-ocd-command "dump_image {{filename}} 0x0801FF00 256"
+    # Running OCD as sudo makes the output file be owned by root, so switch it back to the user
+    sudo chown {{user}}:{{user}} {{filename}}
+
+secrets:
+    #!/usr/bin/env bash
+    # The last bit below redirects stderr to stdout, which the backticks capture into the variable `secrets`
+    secrets=`just run-ocd-command "mdb 0x0801FF00 256" 2>&1`
+    secrets=`echo "$secrets" | tail -n 8`
+    echo -e "Passport ROM Secrets:\n$secrets"
+
+# Calculate all hashes and format it all for GitHub release notes
+hash filepath:
+    #!/usr/bin/env bash
+    filename=`basename {{filepath}}`
+
+    # SHA256
+    sha=`shasum -b -a 256 {{filepath}} | sed -rn 's/^(.*) .*$/\1/p'`
+    echo -e "\n\`SHA256: $sha\`"
+    echo -e "\`(shasum -b -a 256 $filename)\`\n"
+
+    # MD5
+    md5=`mdsum {{filepath}} | sed -rn 's/^(.*) .*$/\1/p'`
+    echo "\`MD5: $md5\`"
+    echo -e "\`(md5 $filename or mdsum $filename)\`\n"
+
+    # Build Hash
+    build_hash=`cosign -f {{filepath}} -x | sed -rn 's/^FW Build Hash:    (.*)$/\1/p'`
+    echo -e "\`Build Hash: $build_hash\`"
+    echo -e "\`(Developers Only)\`\n"
+
+# Run all tests
+test:
+    @echo "TBD"
+
+# Format the project's .py files under boards/Passport/modules
+fmt-py:
+    #!/usr/bin/env bash
+    pushd boards/Passport/modules
+    files_to_fmt=`find . -path ./trezor-firmware -prune -false -o -name '*.py'`
+    autopep8 --max-line-length=120 --in-place $files_to_fmt
+    popd
+
+# Format the project's .c and .h files under boards/Passport/
+fmt-c:
+    #!/usr/bin/env bash
+    pushd boards/Passport
+    files_to_fmt=`find . -path ./trezor-firmware -prune -false -o -name '*.[c|h]'`
+    clang-format-5.0 -i --style=file $files_to_fmt
+    popd
+
+# Format the project's source code under boards/Passport
+fmt: fmt-py fmt-c
