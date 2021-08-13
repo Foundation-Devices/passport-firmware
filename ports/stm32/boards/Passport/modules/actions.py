@@ -1394,7 +1394,7 @@ async def enter_passphrase(menu, label, item):
     from constants import MAX_PASSPHRASE_LENGTH
 
     title = item.arg
-    passphrase = await ux_enter_text(title, label="Enter a Passphrase", max_length=MAX_PASSPHRASE_LENGTH)
+    passphrase = await ux_enter_text(title, label="Enter Passphrase", max_length=MAX_PASSPHRASE_LENGTH)
 
     # print("Chosen passphrase = {}".format(passphrase))
 
