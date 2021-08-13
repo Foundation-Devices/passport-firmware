@@ -346,11 +346,18 @@ async def update_firmware(*a):
                 return
 
             # Validate the header
-            is_valid, version, error_msg = system.validate_firmware_header(header)
+            is_valid, version, error_msg, is_user_signed = system.validate_firmware_header(header)
             if not is_valid:
                 system.turbo(False)
                 await ux_show_story('Firmware header is invalid.\n\n{}'.format(error_msg), title='Error', left_btn='BACK', right_btn='OK', center=True, center_vertically=True)
                 return
+
+            if is_user_signed:
+                pubkey_result, pubkey = read_user_firmware_pubkey()
+                if not pubkey_result or is_all_zero(pubkey):
+                    system.turbo(False)
+                    await ux_show_story('Install a Developer PubKey before loading non-Foundation firmware.\n\n', title='Error', left_btn='BACK', right_btn='OK', center=True, center_vertically=True)
+                    return
 
             system.turbo(False)
 
