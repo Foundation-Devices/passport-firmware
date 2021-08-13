@@ -547,18 +547,24 @@ class NewWalletUX(UXStateMachine):
 
             elif self.state == self.EXPORT_TO_MICROSD:
                 from files import CardSlot
+                from utils import xfp2str
 
                 data = self.prepare_to_export()
                 data_hash = bytearray(32)
                 system.sha256(data, data_hash)
+                fname = ''
 
                 # Write the data to SD with the filename the wallet prefers
                 filename_pattern = self.export_mode['filename_pattern_multisig'] if self.is_multisig() else self.export_mode['filename_pattern']
                 try:
                     with CardSlot() as card:
                         # Make a filename with the option of injecting the sd path, hash of the data, acct num, random number
-                        fname = filename_pattern.format(sd=card.get_sd_root(), hash=data_hash, acct=self.acct_num, random=random_hex(8))
-                        # print('Saving to fname={}'.format(fname))
+                        fname = filename_pattern.format(sd=card.get_sd_root(),
+                                                        hash=data_hash,
+                                                        acct=self.acct_num,
+                                                        random=random_hex(8),
+                                                        xfp=xfp2str(settings.get('xfp')).lower())
+                        print('Saving to fname={}'.format(fname))
 
                         # Write the data
                         with open(fname, 'wb') as fd:
@@ -581,7 +587,13 @@ class NewWalletUX(UXStateMachine):
                 self.exported = True
                 self.save_new_wallet_progress()
 
-                dis.fullscreen('Saved to microSD')
+                # dis.fullscreen('Saved to microSD')
+                base_filename = fname.split(card.get_sd_root() + '/', 1)[1]
+                result = await ux_show_story('Saved file to your microSD card.\n{}'.format(base_filename),
+                                            title='Success',
+                                            left_btn='NEXT',
+                                            center=True,
+                                            center_vertically=True)
                 await sleep_ms(1000)
 
                 # If multisig, we need to import the quorum/config info first, else go right to validating the first

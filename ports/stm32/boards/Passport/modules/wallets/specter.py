@@ -19,6 +19,6 @@ SpecterWallet = {
     ],
     'export_modes': [
         # {'id': 'qr', 'label': 'QR Code', 'qr_type': QRType.UR1},
-        {'id': 'microsd', 'label': 'microSD', 'filename_pattern': '{sd}/passport-specter.json', 'filename_pattern_multisig': '{sd}/passport-specter-multisig.json'}
+        {'id': 'microsd', 'label': 'microSD', 'filename_pattern': '{sd}/{xfp}-specter.json', 'filename_pattern_multisig': '{sd}/{xfp}-specter-multisig.json'}
     ]
 }
