@@ -2,6 +2,9 @@
 
 This document describes how to develop for Passport.
 
+## Operating System
+While Passport may compile on other Linux distributions, the instructions below are based on **Ubuntu 18.04**, which is also what is used for official Passport builds.
+
 ## Installation
 
 ### Get the Source Code
