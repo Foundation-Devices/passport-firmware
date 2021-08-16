@@ -18,7 +18,7 @@ SpecterWallet = {
          'import_qr': read_multisig_config_from_qr, 'import_microsd': read_multisig_config_from_microsd}
     ],
     'export_modes': [
-        # {'id': 'qr', 'label': 'QR Code', 'qr_type': QRType.UR1},
+        {'id': 'qr', 'label': 'QR Code', 'qr_type': QRType.UR2},
         {'id': 'microsd', 'label': 'microSD', 'filename_pattern': '{sd}/passport-specter.json', 'filename_pattern_multisig': '{sd}/passport-specter-multisig.json'}
     ]
 }
