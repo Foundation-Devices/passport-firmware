@@ -19,7 +19,7 @@ Several tools are required for building and debugging Passport.
 
 #### Cross-Compiler Toolchain
     sudo apt install gcc-arm-none-eabi
-    cd ~/passport
+    cd ~/passport-firmware
     make -C mpy-cross
 
 #### Autotools and USB
@@ -51,7 +51,7 @@ You will need several shell windows or tabs open to interact with the various to
 ### Build Window
 
 #### Building the Main Firmare
-In one shell, make sure that you `cd` to the root `stm32` source folder, e.g., `cd ~/passport/ports/stm32`:
+In one shell, make sure that you `cd` to the root `stm32` source folder, e.g., `cd ~/passport-firmware/ports/stm32`:
 
     make BOARD=Passport
 
