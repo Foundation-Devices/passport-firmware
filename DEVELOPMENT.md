@@ -8,11 +8,11 @@ While Passport may compile on other Linux distributions, the instructions below 
 ## Installation
 
 ### Get the Source Code
-The instructions below assume you are installing into your home folder at `~/passport`.  You can choose
+The instructions below assume you are installing into your home folder at `~/passport-firmware`.  You can choose
 to install to a different folder, and just update command paths appropriately.
 
     cd ~/
-    git clone git@github.com:Foundation-Devices/passport.git
+    git clone git@github.com:Foundation-Devices/passport-firmware.git
 
 ### Install Dependencies
 Several tools are required for building and debugging Passport.
