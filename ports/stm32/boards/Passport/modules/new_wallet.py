@@ -541,7 +541,10 @@ class NewWalletUX(UXStateMachine):
                 # If multisig, we need to import the quorum/config info first, else go right to validating the first
                 # receive address from the wallet.
                 if self.is_multisig():
-                    self.goto(self.IMPORT_MULTISIG_CONFIG_FROM_QR, save_curr=False)
+                    if self.export_mode['mulitsig_config_export_mode'] == EXPORT_MODE_QR:
+                        self.goto(self.IMPORT_MULTISIG_CONFIG_FROM_QR, save_curr=False)
+                    else:
+                        self.goto(self.IMPORT_MULTISIG_CONFIG_FROM_MICROSD, save_curr=False)   
                 else:
                     self.goto_address_verification_method(save_curr=False)
 
@@ -598,7 +601,10 @@ class NewWalletUX(UXStateMachine):
                 # If multisig, we need to import the quorum/config info first, else go right to validating the first
                 # receive address from the wallet.
                 if self.is_multisig():
-                    self.goto(self.IMPORT_MULTISIG_CONFIG_FROM_MICROSD, save_curr=False)
+                    if self.export_mode['mulitsig_config_export_mode'] == EXPORT_MODE_QR:
+                        self.goto(self.IMPORT_MULTISIG_CONFIG_FROM_QR, save_curr=False)
+                    else:
+                        self.goto(self.IMPORT_MULTISIG_CONFIG_FROM_MICROSD, save_curr=False)   
                 else:
                     self.goto_address_verification_method(save_curr=False)
 
@@ -831,11 +837,11 @@ Compare them with the addresses shown on the next screen to make sure they match
                 if self.is_multisig():
                     if not self.multisig_wallet:
                         # Need to import the multisig wallet
-                        if self.export_mode['id'] == 'qr':
-                            self.goto(self.IMPORT_MULTISIG_CONFIG_FROM_QR)
+                        if self.export_mode['mulitsig_config_export_mode'] == EXPORT_MODE_QR:
+                            self.goto(self.IMPORT_MULTISIG_CONFIG_FROM_QR, save_curr=False)
                         else:
-                            self.goto(self.IMPORT_MULTISIG_CONFIG_FROM_MICROSD)
-                        continue
+                            self.goto(self.IMPORT_MULTISIG_CONFIG_FROM_MICROSD, save_curr=False)
+                    continue
 
                 if not self.verified:
                     self.goto(self.SCAN_RX_ADDRESS)

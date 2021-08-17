@@ -48,6 +48,6 @@ WasabiWallet = {
         {'id':'single-sig', 'label':'Single-sig', 'addr_type': AF_P2WPKH, 'create_wallet': create_wasabi_export},
     ],
     'export_modes': [
-        {'id': 'microsd', 'label': 'microSD', 'filename_pattern': '{sd}/{xfp}-wasabi.json', 'filename_pattern_multisig': '{sd}/{xfp}-wasabi-multisig.json'}
+        {'id': 'microsd', 'label': 'microSD', 'filename_pattern': '{sd}/{xfp}-wasabi.json', 'filename_pattern_multisig': '{sd}/{xfp}-wasabi-multisig.json' 'mulitsig_config_export_mode': 'microsd'}
     ]
 }

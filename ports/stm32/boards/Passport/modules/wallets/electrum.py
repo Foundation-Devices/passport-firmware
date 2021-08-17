@@ -136,6 +136,6 @@ ElectrumWallet = {
         #  'import_microsd': read_multisig_config_from_microsd}
     ],
     'export_modes': [
-        {'id': 'microsd', 'label': 'microSD', 'filename_pattern': '{sd}/{xfp}-electrum.json', 'filename_pattern_multisig': '{sd}/{xfp}-electrum-multisig.json'}
+        {'id': 'microsd', 'label': 'microSD', 'filename_pattern': '{sd}/{xfp}-electrum.json', 'filename_pattern_multisig': '{sd}/{xfp}-electrum-multisig.json', 'mulitsig_config_export_mode': 'microsd'}
     ]
 }
