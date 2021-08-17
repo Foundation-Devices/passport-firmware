@@ -36,5 +36,7 @@ flash_cache_buf = _alloc(16 * 1024)
 tmp_buf = _alloc(1024)
 psbt_tmp256 = _alloc(256)
 viewfinder_buf = _alloc((VIEWFINDER_WIDTH*VIEWFINDER_HEIGHT) // 8)
+framebuffer_addr = _alloc(4) # Address of the frmebuffer memory so we can read it from OCD
+
 
 assert _start <= SRAM4_END

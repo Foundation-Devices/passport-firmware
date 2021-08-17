@@ -42,10 +42,10 @@ class Display:
 
     def __init__(self):
         # Setup frame buffer, in show we will call scrn.update(self.dis) to show the buffer
-        self.scrn = LCD()
-
         self.dis = framebuf.FrameBuffer(bytearray(
             self.LINE_SIZE_BYTES * self.HEIGHT), self.FB_WIDTH, self.HEIGHT, framebuf.MONO_HLSB)
+
+        self.scrn = LCD(self.dis)
 
         self.backlight = Backlight()
 

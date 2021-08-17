@@ -55,6 +55,9 @@ clean:
 run-ocd-command command:
     sudo /usr/local/bin/openocd -f stlink.cfg -c "adapter speed 1000; transport select hla_swd" -f stm32h7x.cfg -c "init; reset halt; {{command}}" -c "exit"
 
+run-ocd-command-no-halt command:
+    sudo /usr/local/bin/openocd -f stlink.cfg -c "adapter speed 1000; transport select hla_swd" -f stm32h7x.cfg -c "init; {{command}}" -c "exit"
+
 # Build all Python graphics
 graphics-py:
     just -f boards/Passport/graphics/py/Justfile build
@@ -127,3 +130,41 @@ fmt-c:
 
 # Format the project's source code under boards/Passport
 fmt: fmt-py fmt-c
+
+# Convert a raw pixel map to a PNG
+convert-screenshot from_file to_file:
+    #!/usr/bin/python3
+    from PIL import Image, ImageOps
+    raw_bits = open('{{from_file}}', 'rb').read()
+    WIDTH = 230
+    HEIGHT = 303
+    SCAN_WIDTH = 240
+
+    # Convert
+    img = Image.frombuffer('1', (SCAN_WIDTH, HEIGHT), raw_bits)
+
+    # Crop to actual width (framebuffer is 240 vs 230 for actual display)
+    img = img.crop((0, 0, WIDTH, HEIGHT))
+
+    # Invert since raw image is actually white on black - have to convert to grayscale first since invert() doesn't work
+    # for 1-bit per pixel black/white images.
+    img = ImageOps.grayscale(img)
+    img = ImageOps.invert(img)
+
+    # Apply a color shift to make it look nicer
+    img = ImageOps.colorize(img, (0,0,0,0), '#E0E0E0')
+
+    img.save('{{to_file}}')
+
+# Capture a screenshot from Passport via OCD
+screenshot filename:
+    #!/usr/bin/env bash
+    ADDR_FILE=screenshot-addr.tmp
+    TMP_FILE=screenshot.tmp
+    just run-ocd-command-no-halt "dump_image $ADDR_FILE 0x38006920 4"
+    N=`head -c 4 $ADDR_FILE | od -An --endian=little -t u4`
+    FRAMEBUFFER_ADDR=`printf '%x\n' $N`
+    echo FRAMEBUFFER_ADDR=$FRAMEBUFFER_ADDR
+    just run-ocd-command-no-halt "dump_image screenshot.tmp 0x$FRAMEBUFFER_ADDR 9090"
+    just convert-screenshot $TMP_FILE {{filename}}
+    rm -f $TMP_FILE $ADDR_FILE

@@ -205,6 +205,8 @@ const mp_obj_type_t keypad_type = {
 /*=============================================================================
  * Start of LCD class
  *=============================================================================*/
+#define FRAMEBUFFER_ADDR_SRAM4 0x38006920 // NOTE: If SRAM4 layout changes, this must change too!
+
 void
 lcd_obj_print(const mp_print_t* print, mp_obj_t self_in, mp_print_kind_t kind)
 {
@@ -224,6 +226,18 @@ lcd_obj_make_new(const mp_obj_type_t* type, size_t n_args, size_t n_kw, const mp
     lcd->base.type = &lcd_type;
     lcd->spi = &spi_obj[0];
     // lcd_init(false);
+
+    // If a framebuffer address was passed, save it to a known location
+    if (n_args == 1) {
+        // Get the buffer info from the passed in object
+        mp_buffer_info_t framebuffer_info;
+        mp_get_buffer_raise(args[0], &framebuffer_info, MP_BUFFER_READ);
+
+        // Save the actual address
+        uint32_t* framebuffer_addr = (uint32_t*)FRAMEBUFFER_ADDR_SRAM4;
+        *framebuffer_addr = (uint32_t)(framebuffer_info.buf);
+    }
+
     return MP_OBJ_FROM_PTR(lcd);
 }
 
