@@ -564,7 +564,7 @@ class NewWalletUX(UXStateMachine):
                                                         acct=self.acct_num,
                                                         random=random_hex(8),
                                                         xfp=xfp2str(settings.get('xfp')).lower())
-                        print('Saving to fname={}'.format(fname))
+                        # print('Saving to fname={}'.format(fname))
 
                         # Write the data
                         with open(fname, 'wb') as fd:
@@ -587,7 +587,6 @@ class NewWalletUX(UXStateMachine):
                 self.exported = True
                 self.save_new_wallet_progress()
 
-                # dis.fullscreen('Saved to microSD')
                 base_filename = fname.split(card.get_sd_root() + '/', 1)[1]
                 result = await ux_show_story('Saved file to your microSD card.\n{}'.format(base_filename),
                                             title='Success',
