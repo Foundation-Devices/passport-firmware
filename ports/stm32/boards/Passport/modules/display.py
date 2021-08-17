@@ -192,27 +192,25 @@ class Display:
         fn = lookup(font, ord(ch))
         return fn.advance
 
-    def text_input(self, x, y, msg, font=FontSmall, invert=0, cursor_pos=None, visible_spaces=False, fixed_spacing=None, cursor_shape='line', max_chars_per_line=0):
-        if max_chars_per_line > 0:
-            # TODO: Improve this by splitting lines based on actual pixel widths instead of max_chars_per_line
-            # Split text into multiple lines and draw them separately
-            lines = [msg[i:i+max_chars_per_line]
-                     for i in range(0, len(msg), max_chars_per_line)]
-
-            # Special case to draw cursor by itself when no text is entered yet
-            if len(lines) == 0:
-                self.text(x, y, '', font, invert, cursor_pos,
-                          visible_spaces, fixed_spacing, cursor_shape)
-            else:
-                for line in lines:
-                    self.text(x, y, line, font, invert, cursor_pos,
-                              visible_spaces, fixed_spacing, cursor_shape)
-                    y += font.leading
-                    cursor_pos -= max_chars_per_line
-
+    def text_input(self, x, y, msg, font=FontSmall, invert=0, cursor_pos=None, visible_spaces=False, fixed_spacing=None, cursor_shape='line'):
+        from ux import word_wrap
+        from utils import split_by_char_size
+        
+        if hasattr(msg, 'readline'):
+            lines = split_by_char_size(msg.getvalue(), font)
         else:
-            self.text(x, y, msg, font, invert, cursor_pos,
+            lines = split_by_char_size(msg, font)
+
+        # Special case to draw cursor by itself when no text is entered yet
+        if len(msg) == 0:
+            self.text(x, y, '', font, invert, cursor_pos,
                       visible_spaces, fixed_spacing, cursor_shape)
+        else:
+            for line in lines:
+                self.text(x, y, line, font, invert, cursor_pos,
+                          visible_spaces, fixed_spacing, cursor_shape, True)
+                y += font.leading
+                cursor_pos -= len(line)
 
     def text(self, x, y, msg, font=FontSmall, invert=0, cursor_pos=None, visible_spaces=False, fixed_spacing=None, cursor_shape='line', scrollbar_visible=False):
         # Draw at x,y (top left corner of first letter)

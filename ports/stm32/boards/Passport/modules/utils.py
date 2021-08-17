@@ -881,4 +881,18 @@ def is_all_zero(buf):
 def split_to_lines(s, width):
     return '\n'.join([s[i:i+width] for i in range(0, len(s), width)])
 
+def split_by_char_size(msg, font):
+    from display import Display
+    from ux import MAX_WIDTH, word_wrap
+    from common import dis
+
+    lines = []
+    for ln in msg.split('\n'):
+        if dis.width(ln, font) > MAX_WIDTH:
+            lines.extend(word_wrap(ln, font))
+        else:
+            # ok if empty string, just a blank line
+            lines.append(ln)
+    return lines
+
 # EOF
