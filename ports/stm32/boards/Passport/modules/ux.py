@@ -642,8 +642,11 @@ async def ux_show_story(msg, title='Passport', sensitive=False, font=FontSmall, 
     if clear_keys:
         keypad.clear_keys()
 
-    lines = split_by_char_size(msg, font)
-
+    if hasattr(msg, 'readline'):
+        lines = split_by_char_size(msg.getvalue(), font)
+    else:
+        lines = split_by_char_size(msg, font)
+        
     # trim blank lines at end
     while not lines[-1]:
         lines = lines[:-1]
