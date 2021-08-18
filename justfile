@@ -1,4 +1,6 @@
 commit_sha := `git rev-parse HEAD`
+base_path := 'ports/stm32'
+firmware_path := base_path + '/build-Passport/firmware.bin'
 
 # build the firmware inside docker
 docker-build:
@@ -6,11 +8,30 @@ docker-build:
   set -euxo pipefail
   docker build -t foundation-devices/firmware-builder:{{ commit_sha }} .
   docker run -it --rm -v "$PWD":/workspace \
-    -w /workspace/ports/stm32 \
+    -w /workspace/{{ base_path }} \
     --entrypoint bash \
     foundation-devices/firmware-builder:{{ commit_sha }} \
     -c 'make BOARD=Passport MPY_CROSS=/usr/bin/mpy-cross'
 
 # run the built firmware through SHA256
 sha: docker-build
-  @shasum -a 256 ports/stm32/build-Passport/firmware.bin | awk '{print $1}'
+  @shasum -a 256 {{ firmware_path }} | awk '{print $1}'
+
+# sign the built firmware using a private key and the cosign tool
+sign keypath filepath=firmware_path: docker-build
+  #!/usr/bin/env bash
+  set -euxo pipefail
+
+  docker run -it --rm -v "$PWD":/workspace \
+    -w /workspace \
+    --entrypoint bash \
+    foundation-devices/firmware-builder:{{ commit_sha }} \
+    -c "cosign -f {{ filepath }} -k {{ keypath }} -v 4.5.6"
+
+# clean firmware build
+clean:
+  docker run -it --rm -v "$PWD":/workspace \
+    -w /workspace/{{ base_path }} \
+    --entrypoint bash \
+    foundation-devices/firmware-builder:{{ commit_sha }} \
+    -c "make clean BOARD=Passport"
