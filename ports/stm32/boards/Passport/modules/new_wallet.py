@@ -392,8 +392,8 @@ class NewWalletUX(UXStateMachine):
             self.goto(self.SHOW_RX_ADDRESSES_VERIFICATION_INTRO, save_curr=save_curr)
 
     def choose_multisig_option(self):
-        if 'mulitsig_export_mode' in self.export_mode:
-            if self.export_mode['mulitsig_export_mode'] == EXPORT_MODE_QR:
+        if 'mulitsig_import_mode' in self.export_mode:
+            if self.export_mode['mulitsig_import_mode'] == EXPORT_MODE_QR:
                 self.goto(self.IMPORT_MULTISIG_CONFIG_FROM_QR, save_curr=False)
             else:
                 self.goto(self.IMPORT_MULTISIG_CONFIG_FROM_MICROSD, save_curr=False)
