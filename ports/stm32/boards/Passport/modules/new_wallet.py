@@ -391,6 +391,17 @@ class NewWalletUX(UXStateMachine):
         elif method == 'show_addresses':
             self.goto(self.SHOW_RX_ADDRESSES_VERIFICATION_INTRO, save_curr=save_curr)
 
+    def choose_multisig_option(self):
+        if 'mulitsig_export_mode' in self.export_mode:
+            if self.export_mode['mulitsig_export_mode'] == EXPORT_MODE_QR:
+                self.goto(self.IMPORT_MULTISIG_CONFIG_FROM_QR, save_curr=False)
+            else:
+                self.goto(self.IMPORT_MULTISIG_CONFIG_FROM_MICROSD, save_curr=False)
+        elif self.export_mode['id'] == EXPORT_MODE_QR:
+            self.goto(self.IMPORT_MULTISIG_CONFIG_FROM_QR, save_curr=False)
+        else:
+            self.goto(self.IMPORT_MULTISIG_CONFIG_FROM_MICROSD, save_curr=False)
+
     async def show(self):
         while True:
             # print('show: state={}'.format(self.state))
@@ -541,10 +552,7 @@ class NewWalletUX(UXStateMachine):
                 # If multisig, we need to import the quorum/config info first, else go right to validating the first
                 # receive address from the wallet.
                 if self.is_multisig():
-                    if self.export_mode['mulitsig_config_export_mode'] == EXPORT_MODE_QR:
-                        self.goto(self.IMPORT_MULTISIG_CONFIG_FROM_QR, save_curr=False)
-                    else:
-                        self.goto(self.IMPORT_MULTISIG_CONFIG_FROM_MICROSD, save_curr=False)   
+                    self.choose_multisig_option()
                 else:
                     self.goto_address_verification_method(save_curr=False)
 
@@ -601,13 +609,9 @@ class NewWalletUX(UXStateMachine):
                 # If multisig, we need to import the quorum/config info first, else go right to validating the first
                 # receive address from the wallet.
                 if self.is_multisig():
-                    if self.export_mode['mulitsig_config_export_mode'] == EXPORT_MODE_QR:
-                        self.goto(self.IMPORT_MULTISIG_CONFIG_FROM_QR, save_curr=False)
-                    else:
-                        self.goto(self.IMPORT_MULTISIG_CONFIG_FROM_MICROSD, save_curr=False)   
+                    self.choose_multisig_option()
                 else:
                     self.goto_address_verification_method(save_curr=False)
-
 
             elif self.state == self.IMPORT_MULTISIG_CONFIG_FROM_QR:
                 while True:
@@ -837,11 +841,8 @@ Compare them with the addresses shown on the next screen to make sure they match
                 if self.is_multisig():
                     if not self.multisig_wallet:
                         # Need to import the multisig wallet
-                        if self.export_mode['mulitsig_config_export_mode'] == EXPORT_MODE_QR:
-                            self.goto(self.IMPORT_MULTISIG_CONFIG_FROM_QR, save_curr=False)
-                        else:
-                            self.goto(self.IMPORT_MULTISIG_CONFIG_FROM_MICROSD, save_curr=False)
-                    continue
+                        self.choose_multisig_option()
+                        continue
 
                 if not self.verified:
                     self.goto(self.SCAN_RX_ADDRESS)

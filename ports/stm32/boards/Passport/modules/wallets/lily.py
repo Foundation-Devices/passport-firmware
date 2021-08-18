@@ -20,6 +20,6 @@ LilyWallet = {
     ],
     'export_modes': [
         # {'id': 'qr', 'label': 'QR Code', 'qr_type': QRType.UR1},
-        {'id': 'microsd', 'label': 'microSD', 'filename_pattern': '{sd}/{xfp}-lily.json', 'filename_pattern_multisig': '{sd}/{xfp}-lily-multisig.json', 'mulitsig_config_export_mode': 'microsd'}
+        {'id': 'microsd', 'label': 'microSD', 'filename_pattern': '{sd}/{xfp}-lily.json', 'filename_pattern_multisig': '{sd}/{xfp}-lily-multisig.json'}
     ]
 }
