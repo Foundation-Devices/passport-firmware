@@ -150,29 +150,30 @@ class ChainsBase:
 
     @classmethod
     def render_value(cls, val, unpad=False):
-        from common import settings
-
         # convert nValue from a transaction into either BTC or sats
         # - always be precise
         # - return (string, units label)
+        from common import settings
+        from constants import UNIT_TYPE_BTC, UNIT_TYPE_SATS
 
         # BTC is the default if not set yet
-        units = settings.get('units', 'BTC')
-        if units == 'BTC':
+        units = settings.get('units', UNIT_TYPE_BTC)
+        if units == UNIT_TYPE_BTC:
+            label = cls.ctype
             if unpad:
                 if (val % 1E8):
                     # precise but unpadded
                     txt = ('%d.%08d' % (val // 1E8, val % 1E8)).rstrip('0')
                 else:
                     # round BTC amount, show no decimal
-
                     txt = '%d' % (val // 1E8)
             else:
                 # all the zeros
                 txt = '%d.%08d' % (val // 1E8, val % 1E8)
         else:
+            label = cls.ctype_sats
             txt = ('%d' % (val))
-        return txt, units
+        return txt, label
 
     @classmethod
     def render_address(cls, script):
@@ -202,6 +203,7 @@ class ChainsBase:
 class BitcoinMain(ChainsBase):
     # see <https://github.com/bitcoin/bitcoin/blob/master/src/chainparams.cpp#L140>
     ctype = 'BTC'
+    ctype_sats = 'sats'
     name = 'Bitcoin'
     core_name = 'Bitcoin Core'
     menu_name = 'Bitcoin Mainnet'
@@ -224,6 +226,7 @@ class BitcoinMain(ChainsBase):
 
 class BitcoinTestnet(BitcoinMain):
     ctype = 'TBTC'
+    ctype_sats = 'tsats'
     name = 'Bitcoin Testnet'
     menu_name = 'Bitcoin Testnet'
 
