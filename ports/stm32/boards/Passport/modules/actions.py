@@ -1396,10 +1396,17 @@ async def enter_passphrase(menu, label, item):
     title = item.arg
     passphrase = await ux_enter_text(title, label="Enter Passphrase", max_length=MAX_PASSPHRASE_LENGTH)
 
-    # print("Chosen passphrase = {}".format(passphrase))
-
-    if not await ux_confirm('Are you sure you want to apply the passphrase:\n\n{}'.format(passphrase)):
+    # None is passed back when user chose "back"
+    if passphrase == None:
         return
+
+    # print("Chosen passphrase = {}".format(passphrase))
+    if passphrase == '':
+        if not await ux_confirm('Are you sure you want to clear the passphrase?'):
+            return
+    else:    
+        if not await ux_confirm('Are you sure you want to apply the passphrase:\n\n{}'.format(passphrase)):
+            return
 
     # Applying the passphrase takes a bit of time so show message
     dis.fullscreen("Applying Passphrase...")

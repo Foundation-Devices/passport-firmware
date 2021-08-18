@@ -195,7 +195,11 @@ class Display:
     def text_input(self, x, y, msg, font=FontSmall, invert=0, cursor_pos=None, visible_spaces=False, fixed_spacing=None, cursor_shape='line'):
         from ux import word_wrap
         from utils import split_by_char_size
-        
+
+        # Maximum message size is 64 characters
+        if len(msg) >= 64:
+            msg = msg[:64]
+
         if hasattr(msg, 'readline'):
             lines = split_by_char_size(msg.getvalue(), font)
         else:
@@ -209,7 +213,8 @@ class Display:
             for line in lines:
                 self.text(x, y, line, font, invert, cursor_pos,
                           visible_spaces, fixed_spacing, cursor_shape, True)
-                y += font.leading
+                # move the y down enough to make room for 7 lines of text (hence the -2)
+                y += font.leading - 2
                 cursor_pos -= len(line)
 
     def text(self, x, y, msg, font=FontSmall, invert=0, cursor_pos=None, visible_spaces=False, fixed_spacing=None, cursor_shape='line', scrollbar_visible=False):
