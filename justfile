@@ -14,8 +14,8 @@ docker-build:
     -c 'make BOARD=Passport MPY_CROSS=/usr/bin/mpy-cross'
 
 # run the built firmware through SHA256
-sha: docker-build
-  @shasum -a 256 {{ firmware_path }} | awk '{print $1}'
+verify-sha sha: docker-build
+  echo "{{ sha }}  {{ firmware_path }}" | shasum -a 256 -c -
 
 # sign the built firmware using a private key and the cosign tool
 sign keypath filepath=firmware_path: docker-build
