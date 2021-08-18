@@ -102,4 +102,24 @@ def chain_chooser():
 
     return which, [t for _,t in ch], set_chain
     
+def units_chooser():
+    DEFAULT_UNITS = "BTC"
+
+    units = settings.get('units', DEFAULT_UNITS)
+
+    ch = ['BTC',
+          'sats']
+    val = ['BTC',
+          'sats']
+
+    try:
+        which = val.index(units)
+    except ValueError:
+        which = 1
+
+    def set_units(idx, text):
+        settings.set('units', val[idx])
+
+    return which, ch, set_units
+
 # EOF
