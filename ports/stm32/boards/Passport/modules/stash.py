@@ -221,7 +221,7 @@ class SensitiveValues:
         settings.set_volatile('xfp', xfp)
         settings.set_volatile('xpub', xpub)
 
-        settings.set('chain', self.chain.ctype)
+        settings.set_volatile('chain', self.chain.ctype)
         settings.set('words', (self.mode == 'words'))
 
     def register(self, item):

@@ -34,6 +34,8 @@ async def handle_schema_evolutions(update_from_to):
 
             # This no longer used, so clean it out
             settings.remove('backup_num')
+            # This is now volatile, so clean it out
+            settings.remove('chain')
             from_version = to_version
             continue
 

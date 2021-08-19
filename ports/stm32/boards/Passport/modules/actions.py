@@ -23,7 +23,7 @@ from common import settings, system, noise, dis
 from utils import (UXStateMachine, imported, pretty_short_delay, xfp2str, to_str,
                    truncate_string_to_width, set_next_addr, scan_for_address, get_accounts, run_chooser,
                    make_account_name_num, is_valid_address, save_next_addr, needs_microsd, format_btc_address,
-                   is_all_zero, bytes_to_hex_str, split_to_lines, is_valid_btc_address, do_address_verify)
+                   is_all_zero, bytes_to_hex_str, split_to_lines, is_valid_btc_address, do_address_verify, run_chooser)
 from wallets.utils import get_export_mode, get_addr_type_from_address, get_deriv_path_from_addr_type_and_acct
 from ux import (the_ux, ux_confirm, ux_enter_pin,
                 ux_enter_text, ux_scan_qr_code, ux_shutdown,
@@ -1128,6 +1128,9 @@ async def sign_tx_from_sd(*a):
 
     import stash
 
+    # Let the user know that using Testnet is potentially dangerous
+    await show_testnet_warning()
+
     if stash.bip39_passphrase:
         title = '[%s]' % xfp2str(settings.get('xfp'))
     else:
@@ -1322,6 +1325,9 @@ async def magic_scan(menu, label, item):
     from data_codecs.data_format import get_flow_for_data
 
     title = item.arg
+
+    # Let the user know that using Testnet is potentially dangerous
+    await show_testnet_warning()
 
     while True:
         system.turbo(True)
@@ -2072,3 +2078,23 @@ async def remove_user_firmware_pubkey(*a):
                             center=True,
                             center_vertically=True)
         clear_cached_pubkey()
+
+async def show_testnet_warning():
+    chain = settings.get('chain', 'BTC')
+    if chain == 'TBTC':
+        await ux_show_story('Passport is in Testnet mode. Use a separate seed to avoid issues with malicious software wallets.',
+                                title='Warning',
+                                center=True,
+                                center_vertically=True)
+
+async def testnet_chooser(*a):
+    from choosers import chain_chooser
+    
+    old_chain = settings.get('chain', 'BTC')
+    await run_chooser(chain_chooser, 'Passport', show_checks=True)
+    new_chain = settings.get('chain', 'BTC')
+    
+    # Only display the warning if the chain changed
+    if new_chain != old_chain:
+        # Let the user know that using Testnet is potentially dangerous
+        await show_testnet_warning()
