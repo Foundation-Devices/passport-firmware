@@ -18,7 +18,7 @@ verify-sha sha: docker-build
   echo "{{ sha }}  {{ firmware_path }}" | shasum -a 256 -c -
 
 # sign the built firmware using a private key and the cosign tool
-sign keypath filepath=firmware_path: docker-build
+sign keypath version filepath=firmware_path: docker-build
   #!/usr/bin/env bash
   set -euxo pipefail
 
@@ -26,7 +26,7 @@ sign keypath filepath=firmware_path: docker-build
     -w /workspace \
     --entrypoint bash \
     foundation-devices/firmware-builder:{{ commit_sha }} \
-    -c "cosign -f {{ filepath }} -k {{ keypath }} -v 4.5.6"
+    -c "cosign -f {{ filepath }} -k {{ keypath }} -v {{ version }}"
 
 # clean firmware build
 clean:
