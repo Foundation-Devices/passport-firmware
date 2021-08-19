@@ -39,3 +39,6 @@ MAX_ACCOUNT_NAME_LEN = 20
 MAX_MULTISIG_NAME_LEN = 20
 
 DEFAULT_ACCOUNT_ENTRY = {'name': 'Primary', 'acct_num': 0}
+
+# Maximum amount of characters in a text entry screen
+MAX_MESSAGE_LEN = 64

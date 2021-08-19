@@ -195,10 +195,11 @@ class Display:
     def text_input(self, x, y, msg, font=FontSmall, invert=0, cursor_pos=None, visible_spaces=False, fixed_spacing=None, cursor_shape='line'):
         from ux import word_wrap
         from utils import split_by_char_size
+        from constants import MAX_MESSAGE_LEN
 
-        # Maximum message size is 64 characters
-        if len(msg) >= 64:
-            msg = msg[:64]
+        # Maximum message size is MAX_MESSAGE_LEN (64) characters
+        if len(msg) >= MAX_MESSAGE_LEN:
+            msg = msg[:MAX_MESSAGE_LEN]
 
         if hasattr(msg, 'readline'):
             lines = split_by_char_size(msg.getvalue(), font)
