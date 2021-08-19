@@ -2087,7 +2087,7 @@ async def show_testnet_warning():
                                 center=True,
                                 center_vertically=True)
 
-async def test_chooser(*a):
+async def testnet_chooser(*a):
     from choosers import chain_chooser
     
     old_chain = settings.get('chain', 'BTC')
