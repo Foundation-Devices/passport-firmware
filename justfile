@@ -7,7 +7,7 @@ docker-build:
   #!/usr/bin/env bash
   set -euxo pipefail
   docker build -t foundation-devices/firmware-builder:{{ commit_sha }} .
-  docker run -it --rm -v "$PWD":/workspace \
+  docker run --rm -v "$PWD":/workspace \
     -w /workspace/{{ base_path }} \
     --entrypoint bash \
     foundation-devices/firmware-builder:{{ commit_sha }} \
@@ -31,7 +31,7 @@ sign keypath version filepath=firmware_path: docker-build
   #!/usr/bin/env bash
   set -euxo pipefail
 
-  docker run -it --rm -v "$PWD":/workspace \
+  docker run --rm -v "$PWD":/workspace \
     -w /workspace \
     --entrypoint bash \
     foundation-devices/firmware-builder:{{ commit_sha }} \
@@ -39,7 +39,7 @@ sign keypath version filepath=firmware_path: docker-build
 
 # clean firmware build
 clean:
-  docker run -it --rm -v "$PWD":/workspace \
+  docker run --rm -v "$PWD":/workspace \
     -w /workspace/{{ base_path }} \
     --entrypoint bash \
     foundation-devices/firmware-builder:{{ commit_sha }} \

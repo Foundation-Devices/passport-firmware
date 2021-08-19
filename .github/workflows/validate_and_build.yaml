@@ -1,0 +1,66 @@
+name: Validate and Build
+on: [push]
+jobs:
+  lint-py:
+    runs-on: ubuntu-18.04
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python 3.9
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.9
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pycodestyle
+    - name: Setup just
+      uses: extractions/setup-just@aa5d15c144db4585980a44ebfdd2cf337c4f14cb
+    - name: Analysing the code
+      run: just ports/stm32/lint-py
+      continue-on-error: true
+
+  lint-c:
+    runs-on: ubuntu-18.04
+    steps:
+    - uses: actions/checkout@v2
+    - name: Analysing the code
+      uses: DoozyX/clang-format-lint-action@2a28e3a8d9553f244243f7e1ff94f6685dff87be
+      with:
+        source: ./ports/stm32
+        exclude: trezor-firmware
+        extensions: 'c,h'
+        style: file
+        inplace: true
+      continue-on-error: true
+
+  build-firmware:
+    runs-on: ubuntu-18.04
+    needs: [lint-py, lint-c]
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+    - name: Setup just
+      uses: extractions/setup-just@aa5d15c144db4585980a44ebfdd2cf337c4f14cb
+    - name: Test branch name existence
+      run: git branch -a
+    - name: Build the firmware
+      run: |
+        echo "$SIGNING_KEY" > signing_key.pem
+        version=$(git describe --all --match dev* | cut -d '-' -f 2)
+
+        just docker-build
+        just sign signing_key.pem "${version#?}"
+      env:
+        SIGNING_KEY: ${{ secrets.UserSigningKey }}
+    - name: Upload built firmware file
+      uses: actions/upload-artifact@v2
+      with:
+        name: firmware.bin
+        path: ports/stm32/build-Passport/firmware.bin
+    - name: Upload signed firmware file
+      uses: actions/upload-artifact@v2
+      with:
+        name: firmware-key-user.bin
+        path: ports/stm32/build-Passport/firmware-key-user.bin
