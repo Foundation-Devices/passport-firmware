@@ -64,6 +64,7 @@ DeveloperPubkeyMenu = [
 ]
 
 AdvancedMenu = [
+    MenuItem('Units', chooser=units_chooser),
     MenuItem('Change PIN', f=change_pin),
     MenuItem('Passphrase', menu_title='Passphrase', menu=PassphraseMenu),
     MenuItem('Sign Text File', predicate=has_secrets, f=sign_message_on_sd),
@@ -71,7 +72,6 @@ AdvancedMenu = [
     MenuItem('View Seed Words', f=view_seed_words, predicate=lambda: settings.get('words', True)),
     MenuItem('Developer PubKey', menu=DeveloperPubkeyMenu, menu_title='Developer'),
     MenuItem('Testnet', f=test_chooser),
-    MenuItem('Units', chooser=units_chooser),
     MenuItem('Erase Passport', f=erase_wallet, arg=True)
 ]
 

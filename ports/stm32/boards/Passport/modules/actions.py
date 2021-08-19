@@ -2079,7 +2079,7 @@ async def remove_user_firmware_pubkey(*a):
                             center_vertically=True)
         clear_cached_pubkey()
 
-async def show_testnet_warning(*a):
+async def show_testnet_warning():
     chain = settings.get('chain', 'BTC')
     if chain == 'TBTC':
         await ux_show_story('Passport is in Testnet mode. Use a separate seed to avoid issues with malicious software wallets.',
@@ -2094,7 +2094,7 @@ async def test_chooser(*a):
     await run_chooser(chain_chooser, 'Passport', show_checks=True)
     new_chain = settings.get('chain', 'BTC')
     
-    # Only display the warning if the chain changed (user selected something)
+    # Only display the warning if the chain changed
     if new_chain != old_chain:
         # Let the user know that using Testnet is potentially dangerous
         await show_testnet_warning()

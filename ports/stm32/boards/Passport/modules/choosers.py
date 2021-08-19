@@ -117,7 +117,7 @@ def units_chooser():
     try:
         which = val.index(units)
     except ValueError:
-        which = 1
+        which = UNIT_TYPE_BTC
 
     def set_units(idx, text):
         settings.set('units', val[idx])
