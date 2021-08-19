@@ -15,7 +15,16 @@ docker-build:
 
 # run the built firmware through SHA256
 verify-sha sha: docker-build
-  echo "{{ sha }}  {{ firmware_path }}" | shasum -a 256 -c -
+  #!/usr/bin/env bash
+  sha=$(shasum -a 256 {{ firmware_path }} | awk '{print $1}')
+
+  echo -e "Expected SHA:\t{{ sha }}"
+  echo -e "Actual SHA:\t${sha}"
+  if [ "$sha" = "{{ sha }}" ]; then
+    echo "Hashes match!"
+  else
+    echo "ERROR: Hashes DO NOT match!"
+  fi
 
 # sign the built firmware using a private key and the cosign tool
 sign keypath version filepath=firmware_path: docker-build
