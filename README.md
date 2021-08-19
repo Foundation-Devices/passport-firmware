@@ -32,6 +32,14 @@ Code specific to Passport is included in the following folders:
 
 Please see [`DEVELOPMENT.md`](https://github.com/Foundation-Devices/passport/blob/main/DEVELOPMENT.md) for information on developing for Passport.
 
+## Verifying Firmware SHA Sums
+
+To make building and verifying the firmware a simple process, there is a Dockerfile in the project that builds an image to be used to build the firmware. Using [`just`](https://github.com/casey/just), the following command can be used to verify the reproducability of the firmware. Make sure to substitute `<the sha sum>` for the SHA string to verify.
+
+```shell
+just verify-sha <the-sha-sum>
+```
+
 ## Open Source Components
 
 Passport's firmware incorporates open-source software from several third-party projects, as well as other first-party work we open-sourced.
