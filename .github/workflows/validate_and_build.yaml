@@ -76,10 +76,10 @@ jobs:
         echo "$SIGNING_KEY" > signing_key.pem
         version=$(git describe --all --match *dev* | awk '{print $NF}' | cut -d '-' -f 2)
 
-        just sign signing_key.pem "${version#?}" "$DOCKER_TAG"
+        just DOCKER_REGISTRY_BASE="$D_BASE" sign signing_key.pem "${version#?}"
       env:
         SIGNING_KEY: ${{ secrets.UserSigningKey }}
-        DOCKER_TAG: localhost:5000/foundation-devices/firmware-builder:${{ github.sha }}
+        D_BASE: localhost:5000/
 
     - name: Upload built firmware file
       uses: actions/upload-artifact@v2
