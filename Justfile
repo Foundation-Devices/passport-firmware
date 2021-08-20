@@ -2,11 +2,19 @@ commit_sha := `git rev-parse HEAD`
 base_path := 'ports/stm32'
 firmware_path := base_path + '/build-Passport/firmware.bin'
 
-# build the firmware inside docker
+# build the docker image and then the firmware
+build: docker-build firmware-build
+
+# build the dependency docker image
 docker-build:
   #!/usr/bin/env bash
   set -euxo pipefail
   docker build -t foundation-devices/firmware-builder:{{ commit_sha }} .
+
+# build the firmware inside docker
+firmware-build:
+  #!/usr/bin/env bash
+  set -euxo pipefail
   docker run --rm -v "$PWD":/workspace \
     -w /workspace/{{ base_path }} \
     --entrypoint bash \
@@ -27,7 +35,7 @@ verify-sha sha: docker-build
   fi
 
 # sign the built firmware using a private key and the cosign tool
-sign keypath version filepath=firmware_path: docker-build
+sign keypath version filepath=firmware_path: firmware-build
   #!/usr/bin/env bash
   set -euxo pipefail
 
