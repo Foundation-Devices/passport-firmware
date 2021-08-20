@@ -24,13 +24,11 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Analysing the code
-      uses: DoozyX/clang-format-lint-action@2a28e3a8d9553f244243f7e1ff94f6685dff87be
+      uses: jidicula/clang-format-action@7f6b4bf5a7eb211c0872364ccd8072ff8a77ac44
       with:
-        source: ./ports/stm32
-        exclude: trezor-firmware
-        extensions: 'c,h'
-        style: file
-        inplace: true
+        clang-format-version: 5
+        check-path: ./ports/stm32
+        exclude-regex: trezor-firmware
       continue-on-error: true
 
   build-firmware:
