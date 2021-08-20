@@ -48,7 +48,7 @@ jobs:
     - name: Build the firmware
       run: |
         echo "$SIGNING_KEY" > signing_key.pem
-        version=$(git describe --all --match dev* | cut -d '-' -f 2)
+        version=$(git describe --all --match *dev* | awk '{print $NF}' | cut -d '-' -f 2)
 
         just docker-build
         just sign signing_key.pem "${version#?}"
