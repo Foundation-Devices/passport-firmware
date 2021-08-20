@@ -36,13 +36,22 @@ jobs:
   build-firmware:
     runs-on: ubuntu-18.04
     needs: [lint-py, lint-c]
+    services:
+      registry:
+        image: registry:2
+        ports:
+          - 5000:5000
     steps:
     - name: Checkout
       uses: actions/checkout@v2
       with:
         fetch-depth: 0
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v1
+      with:
+        driver-opts: network=host
+
     - name: Cache Docker layers
       uses: actions/cache@v2
       with:
@@ -50,28 +59,34 @@ jobs:
         key: ${{ runner.os }}-buildx-${{ github.sha }}
         restore-keys: |
           ${{ runner.os }}-buildx-
+
     - name: Setup just
       uses: extractions/setup-just@aa5d15c144db4585980a44ebfdd2cf337c4f14cb
+
     - name: Build the dependency Docker image
-      id: docker_build
       uses: docker/build-push-action@v2
       with:
-        tags: foundation-devices/firmware-builder:${{ github.sha }}
+        push: true
+        tags: localhost:5000/foundation-devices/firmware-builder:${{ github.sha }}
         cache-from: type=local,src=/tmp/.buildx-cache
         cache-to: type=local,dest=/tmp/.buildx-cache
+
     - name: Build the firmware
       run: |
         echo "$SIGNING_KEY" > signing_key.pem
         version=$(git describe --all --match *dev* | awk '{print $NF}' | cut -d '-' -f 2)
 
-        just sign signing_key.pem "${version#?}"
+        just sign signing_key.pem "${version#?}" "$DOCKER_TAG"
       env:
         SIGNING_KEY: ${{ secrets.UserSigningKey }}
+        DOCKER_TAG: localhost:5000/foundation-devices/firmware-builder:${{ github.sha }}
+
     - name: Upload built firmware file
       uses: actions/upload-artifact@v2
       with:
         name: firmware.bin
         path: ports/stm32/build-Passport/firmware.bin
+
     - name: Upload signed firmware file
       uses: actions/upload-artifact@v2
       with:
