@@ -32,7 +32,7 @@ bootloader-build:
     -w /workspace/{{ base_path }} \
     --entrypoint bash \
     ${DOCKER_REGISTRY_BASE}{{ docker_image }} \
-    -c 'make -C ports/stm32/boards/Passport/bootloader'
+    -c 'make -C boards/Passport/bootloader'
 
 # run the built firmware through SHA256
 verify-sha sha: build
