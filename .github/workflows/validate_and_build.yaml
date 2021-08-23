@@ -81,6 +81,8 @@ jobs:
 
     - name: Build the bootloader
       run: just bootloader-build
+      env:
+        D_BASE: localhost:5000/
 
     - name: Upload built firmware file
       uses: actions/upload-artifact@v2
