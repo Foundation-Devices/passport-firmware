@@ -80,7 +80,7 @@ jobs:
         D_BASE: localhost:5000/
 
     - name: Build the bootloader
-      run: just bootloader-build
+      run: just DOCKER_REGISTRY_BASE="$D_BASE" bootloader-build
       env:
         D_BASE: localhost:5000/
 
