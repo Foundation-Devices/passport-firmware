@@ -58,3 +58,4 @@ ports/stm32/boards/Passport/bootloader/secrets*
 
 *.pem
 .vscode
+cosign

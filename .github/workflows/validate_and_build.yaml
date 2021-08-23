@@ -84,6 +84,11 @@ jobs:
       env:
         D_BASE: localhost:5000/
 
+    - name: Build and make tools available
+      run: just DOCKER_REGISTRY_BASE="$D_BASE" tools
+      env:
+        D_BASE: localhost:5000/
+
     - name: Upload built firmware file
       uses: actions/upload-artifact@v2
       with:
@@ -101,3 +106,21 @@ jobs:
       with:
         name: bootloader.bin
         path: ports/stm32/boards/Passport/bootloader/arm/release/bootloader.bin
+
+    - name: Upload cosign
+      uses: actions/upload-artifact@v2
+      with:
+        name: cosign
+        path: cosign
+
+    - name: Upload add-secrets
+      uses: actions/upload-artifact@v2
+      with:
+        name: add-secrets
+        path: ports/stm32/boards/Passport/tools/add-secrets/x86/release/add-secrets
+
+    - name: Upload word_list_gen
+      uses: actions/upload-artifact@v2
+      with:
+        name: word_list_gen
+        path: ports/stm32/boards/Passport/tools/word_list_gen/word_list_gen
