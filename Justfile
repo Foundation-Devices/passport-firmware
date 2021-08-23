@@ -5,8 +5,8 @@ docker_image := 'foundation-devices/firmware-builder:' + commit_sha
 base_path := 'ports/stm32'
 firmware_path := base_path + '/build-Passport/firmware.bin'
 
-# build the docker image and then the firmware
-build: docker-build firmware-build
+# build the docker image and then the firmware and bootloader
+build: docker-build firmware-build bootloader-build
 
 # build the dependency docker image
 docker-build:
@@ -23,6 +23,16 @@ firmware-build:
     --entrypoint bash \
     ${DOCKER_REGISTRY_BASE}{{ docker_image }} \
     -c 'make BOARD=Passport MPY_CROSS=/usr/bin/mpy-cross'
+
+# build the bootloader inside docker
+bootloader-build:
+  #!/usr/bin/env bash
+  set -exo pipefail
+  docker run --rm -v "$PWD":/workspace \
+    -w /workspace/{{ base_path }} \
+    --entrypoint bash \
+    ${DOCKER_REGISTRY_BASE}{{ docker_image }} \
+    -c 'make -C ports/stm32/boards/Passport/bootloader'
 
 # run the built firmware through SHA256
 verify-sha sha: build

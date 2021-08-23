@@ -58,9 +58,6 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-buildx-
 
-    - name: Setup just
-      uses: extractions/setup-just@aa5d15c144db4585980a44ebfdd2cf337c4f14cb
-
     - name: Build the dependency Docker image
       uses: docker/build-push-action@v2
       with:
@@ -68,6 +65,9 @@ jobs:
         tags: localhost:5000/foundation-devices/firmware-builder:${{ github.sha }}
         cache-from: type=local,src=/tmp/.buildx-cache
         cache-to: type=local,dest=/tmp/.buildx-cache
+
+    - name: Setup just
+      uses: extractions/setup-just@aa5d15c144db4585980a44ebfdd2cf337c4f14cb
 
     - name: Build the firmware
       run: |
@@ -78,6 +78,9 @@ jobs:
       env:
         SIGNING_KEY: ${{ secrets.UserSigningKey }}
         D_BASE: localhost:5000/
+
+    - name: Build the bootloader
+      run: just bootloader-build
 
     - name: Upload built firmware file
       uses: actions/upload-artifact@v2
@@ -90,3 +93,9 @@ jobs:
       with:
         name: firmware-key-user.bin
         path: ports/stm32/build-Passport/firmware-key-user.bin
+
+    - name: Upload bootloader
+      uses: actions/upload-artifact@v2
+      with:
+        name: bootloader.bin
+        path: ports/stm32/boards/Passport/bootloader/arm/release/bootloader.bin
