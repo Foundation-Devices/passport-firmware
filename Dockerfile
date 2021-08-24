@@ -2,6 +2,7 @@ FROM ubuntu:18.04 AS cross_build
 RUN apt-get update && \
     apt-get install -y git make gcc-arm-none-eabi python3 gcc && \
     rm -rf /var/lib/apt/lists/*
+COPY drivers /workspace/passport-firmware/drivers
 COPY docs /workspace/passport-firmware/docs
 COPY extmod /workspace/passport-firmware/extmod
 COPY lib /workspace/passport-firmware/lib

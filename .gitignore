@@ -57,3 +57,5 @@ ports/stm32/boards/Passport/bootloader/version_info.c
 ports/stm32/boards/Passport/bootloader/secrets*
 
 *.pem
+.vscode
+cosign

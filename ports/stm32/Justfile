@@ -10,13 +10,23 @@ deps:
 init: deps
     git config core.hooksPath .githooks
 
-# Lint only the code of the project
-lint-code:
+# Lint only the python code of the project
+lint-py:
+    pycodestyle --exclude trezor-firmware --statistics .
+
+# Lint only the C code of the project
+lint-c:
     @echo "TBD"
 
-# Lint all of the project
-lint: lint-code
+# Lint only the code of the project
+lint-code: lint-py lint-c
+
+# Lint the licensing
+lint-license:
     reuse lint
+
+# Lint all of the project
+lint: lint-code lint-license
 
 #
 # Firmware Commands

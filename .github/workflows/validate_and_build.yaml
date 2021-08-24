@@ -1,0 +1,126 @@
+name: Validate and Build
+on: [push]
+jobs:
+  lint-py:
+    runs-on: ubuntu-18.04
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python 3.9
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.9
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pycodestyle
+    - name: Setup just
+      uses: extractions/setup-just@aa5d15c144db4585980a44ebfdd2cf337c4f14cb
+    - name: Analysing the code
+      run: just ports/stm32/lint-py
+      continue-on-error: true
+
+  lint-c:
+    runs-on: ubuntu-18.04
+    steps:
+    - uses: actions/checkout@v2
+    - name: Analysing the code
+      uses: jidicula/clang-format-action@7f6b4bf5a7eb211c0872364ccd8072ff8a77ac44
+      with:
+        clang-format-version: '10'
+        check-path: ./ports/stm32
+        exclude-regex: trezor-firmware
+      continue-on-error: true
+
+  build-firmware:
+    runs-on: ubuntu-18.04
+    needs: [lint-py, lint-c]
+    services:
+      registry:
+        image: registry:2
+        ports:
+          - 5000:5000
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
+      with:
+        driver-opts: network=host
+
+    - name: Cache Docker layers
+      uses: actions/cache@v2
+      with:
+        path: /tmp/.buildx-cache
+        key: ${{ runner.os }}-buildx-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-buildx-
+
+    - name: Build the dependency Docker image
+      uses: docker/build-push-action@v2
+      with:
+        push: true
+        tags: localhost:5000/foundation-devices/firmware-builder:${{ github.sha }}
+        cache-from: type=local,src=/tmp/.buildx-cache
+        cache-to: type=local,dest=/tmp/.buildx-cache
+
+    - name: Setup just
+      uses: extractions/setup-just@aa5d15c144db4585980a44ebfdd2cf337c4f14cb
+
+    - name: Build the firmware
+      run: |
+        echo "$SIGNING_KEY" > signing_key.pem
+        version=$(git describe --all --match *dev* | awk '{print $NF}' | cut -d '-' -f 2)
+
+        just DOCKER_REGISTRY_BASE="$D_BASE" sign signing_key.pem "${version#?}"
+      env:
+        SIGNING_KEY: ${{ secrets.UserSigningKey }}
+        D_BASE: localhost:5000/
+
+    - name: Build the bootloader
+      run: just DOCKER_REGISTRY_BASE="$D_BASE" bootloader-build
+      env:
+        D_BASE: localhost:5000/
+
+    - name: Build and make tools available
+      run: just DOCKER_REGISTRY_BASE="$D_BASE" tools
+      env:
+        D_BASE: localhost:5000/
+
+    - name: Upload built firmware file
+      uses: actions/upload-artifact@v2
+      with:
+        name: firmware.bin
+        path: ports/stm32/build-Passport/firmware.bin
+
+    - name: Upload signed firmware file
+      uses: actions/upload-artifact@v2
+      with:
+        name: firmware-key-user.bin
+        path: ports/stm32/build-Passport/firmware-key-user.bin
+
+    - name: Upload bootloader
+      uses: actions/upload-artifact@v2
+      with:
+        name: bootloader.bin
+        path: ports/stm32/boards/Passport/bootloader/arm/release/bootloader.bin
+
+    - name: Upload cosign
+      uses: actions/upload-artifact@v2
+      with:
+        name: cosign
+        path: cosign
+
+    - name: Upload add-secrets
+      uses: actions/upload-artifact@v2
+      with:
+        name: add-secrets
+        path: ports/stm32/boards/Passport/tools/add-secrets/x86/release/add-secrets
+
+    - name: Upload word_list_gen
+      uses: actions/upload-artifact@v2
+      with:
+        name: word_list_gen
+        path: ports/stm32/boards/Passport/tools/word_list_gen/word_list_gen
