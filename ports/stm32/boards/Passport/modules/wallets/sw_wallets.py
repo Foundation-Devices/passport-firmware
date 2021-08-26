@@ -8,7 +8,7 @@ from data_codecs.qr_type import QRType
 from .bitcoin_core import BitcoinCoreWallet
 from .bluewallet import BlueWallet
 from .btcpay import BtcPayWallet
-# from .casa import CasaWallet
+from .casa import CasaWallet
 # from .caravan import CaravanWallet
 # from .dux_reserve import DuxReserveWallet
 from .electrum import ElectrumWallet
@@ -26,7 +26,7 @@ supported_software_wallets = [
     BlueWallet,
     BtcPayWallet,
     # CaravanWallet,
-    # CasaWallet,
+    CasaWallet,
     # DuxReserveWallet,
     ElectrumWallet,
     # FullyNodedWallet,
