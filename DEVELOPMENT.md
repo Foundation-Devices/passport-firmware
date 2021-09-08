@@ -110,6 +110,8 @@ You can also dump the contents of the firmware header with the following command
 If you are using `just` commands, then signing the firmware can be done by running the following command with the desired version:
 
     just sign 1.0.7
+    
+It will build the firmware first if necessary.
 
 #### Building the Bootloader
 To build the bootloader do the following:
@@ -171,6 +173,8 @@ These commands do the following:
 If you are using `just` commands, ocd and telnet steps are not required and instead, flashing the firmware can be done using the following command with the desired version number:
 
     just flash 1.0.7
+
+It will build and sign the firmware first if necessary.
 
 ### RShell Window
 We use `rshell` to connect to the MicroPython device over USB serial.  Open another shell and run:
