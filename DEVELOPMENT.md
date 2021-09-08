@@ -41,6 +41,21 @@ Several tools are required for building and debugging Passport.
     sudo apt install python3-pip
     sudo pip3 install rshell                                  # (this should install rshell in /usr/local/)
 
+### Using Justfile commands
+To use Just for running commands, first follow the instructions here: https://github.com/casey/just#installation to install Just. Note that `Pillow` must be updated to `8.3.1` for all commands to work properly.
+ 
+Once Just has been installed, the developer can use `just` commands to perform actions such as building, flashing, resetting and even taking screenshots of the displays screen.
+ 
+Note that all `just` commands must be run from `ports/stm32/` directory.
+ 
+Here are some of the most common `just` commands and their usages:
+    
+    just flash {version} - Builds if necessary, signs with a user key and then flashes the device with the firmware binary created under `build-Passport/`
+    just reset - Resets the device
+    just screenshot {filename} - Screenshots the device and saves to the desired filename
+ 
+See the `Justfile` included in our source for the full list of `just` commands.
+
 ## Building
 ### Open Shell Windows/Tabs
 You will need several shell windows or tabs open to interact with the various tools.
@@ -63,6 +78,10 @@ You should see it building various `.c` files and freezing `.py` files.  Once co
     475304	    792	  57600	 533696	  824c0	build-Passport/firmware.elf
     GEN build-Passport/firmware.dfu
     GEN build-Passport/firmware.hex
+
+If you are using `just` commands, then building the firmware can be done by running the following command:
+
+    just build
 
 #### Code Signing
 In order to load the files onto the device, they need to first be signed by two separate keys.
@@ -87,6 +106,12 @@ Assuming you are still in the `ports/stm32` folder run the following:
 You can also dump the contents of the firmware header with the following command:
 
     cosign -f build-Passport/firmware-signed-signed.bin -x
+
+If you are using `just` commands, then signing the firmware can be done by running the following command with the desired version:
+
+    just sign 1.0.7
+    
+It will build the firmware first if necessary.
 
 #### Building the Bootloader
 To build the bootloader do the following:
@@ -144,6 +169,12 @@ These commands do the following:
 - Stop execution of code on the MCU
 - Write the firmware to flash at address 0x8000000
 - Reset the MCU and start executing code at address 0x8000000
+
+If you are using `just` commands, ocd and telnet steps are not required and instead, flashing the firmware can be done using the following command with the desired version number:
+
+    just flash 1.0.7
+
+It will build and sign the firmware first if necessary.
 
 ### RShell Window
 We use `rshell` to connect to the MicroPython device over USB serial.  Open another shell and run:
