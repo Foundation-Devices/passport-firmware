@@ -42,19 +42,19 @@ Several tools are required for building and debugging Passport.
     sudo pip3 install rshell                                  # (this should install rshell in /usr/local/)
 
 ### Using Justfile commands
-To use Justfile for running commands, first follow the instructions here: https://github.com/casey/just#installation to install Justfile. Note that `Pillow` must be updated to `8.3.1` for all commands to work properly.
+To use Just for running commands, first follow the instructions here: https://github.com/casey/just#installation to install Just. Note that `Pillow` must be updated to `8.3.1` for all commands to work properly.
  
-Once Justfile has been installed, the developer can use `just` commands to perform actions such as building, flashing, resetting and even taking screenshots of the displays screen.
+Once Just has been installed, the developer can use `just` commands to perform actions such as building, flashing, resetting and even taking screenshots of the displays screen.
  
 Note that all `just` commands must be run from `ports/stm32/` directory.
  
-Here are some of the most common `just` commands an their usages:
+Here are some of the most common `just` commands and their usages:
     
-    just flash {version} - Builds if necessary and then flashes the device with the firmware binary created under `build-Passport/`
+    just flash {version} - Builds if necessary, signs with a user key and then flashes the device with the firmware binary created under `build-Passport/`
     just reset - Resets the device
     just screenshot {filename} - Screenshots the device and saves to the desired filename
  
-See the Justfile included in our source for the full list of `just` commands.
+See the `Justfile` included in our source for the full list of `just` commands.
 
 ## Building
 ### Open Shell Windows/Tabs
