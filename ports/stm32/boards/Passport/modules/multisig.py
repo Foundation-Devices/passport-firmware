@@ -981,7 +981,7 @@ class MultisigWallet:
 
     @classmethod
     def import_from_psbt(cls, M, N, xpubs_list):
-        # given the raw data fro PSBT global header, offer the user
+        # given the raw data for PSBT global header, offer the user
         # the details, and/or bypass that all and just trust the data.
         # - xpubs_list is a list of (xfp+path, binary BIP32 xpub)
         # - already know not in our records.
@@ -1017,7 +1017,7 @@ class MultisigWallet:
         assert has_mine == 1         # 'my key not included'
 
         name = 'PSBT-%d-of-%d' % (M, N)
-        ms = cls(name, (M, N), xpubs, chain_type=expect_chain, addr_fmt=addr_fmt or AF_P2SH)
+        ms = cls(name, (M, N), xpubs, name, chain_type=expect_chain, addr_fmt=addr_fmt or AF_P2SH)
 
         # may just keep just in-memory version, no approval required, if we are
         # trusting PSBT's today, otherwise caller will need to handle UX w.r.t new wallet
