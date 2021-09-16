@@ -172,7 +172,7 @@ class ChainsBase:
                 txt = '%d.%08d' % (val // 1E8, val % 1E8)
         else:
             label = cls.ctype_sats
-            txt = ('%d' % (val))
+            txt = ('{:,}'.format(val))
         return txt, label
 
     @classmethod
