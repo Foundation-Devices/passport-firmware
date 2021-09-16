@@ -44,11 +44,12 @@ def get_addr_type_from_address(address, is_multisig):
     if len(address) < 26:
         return None
 
-    if address[0] == '1':
+    if address[0] == '1' or address[0] == 'm' or address[0] == 'n' :
         return AF_P2SH if is_multisig else AF_CLASSIC
-    elif address[0] == '3':
+    elif address[0] == '3' or address[0] == '2' :
         return AF_P2WSH_P2SH if is_multisig else AF_P2WPKH_P2SH
-    elif address[0] == 'b' and address[1] == 'c' and address[2] == '1':
+    elif (address[0] == 'b' and address[1] == 'c' and address[2] == '1') or \
+         (address[0] == 't' and address[1] == 'b' and address[2] == '1'):
         return AF_P2WSH if is_multisig else AF_P2WPKH
 
     return None
