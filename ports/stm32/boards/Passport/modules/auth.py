@@ -356,10 +356,10 @@ class ApproveTransaction(UserAuthorizedAction):
         # - expects CTxOut object
         # - gives user-visible string
         #
-        val = ''.join(self.chain.render_value(o.nValue))
+        val, label = self.chain.render_value(o.nValue)
         dest = self.chain.render_address(o.scriptPubKey)
 
-        return '\n%s\n\nDestination:\n%s' % (val, dest)
+        return '\n%s %s\n\nDestination:\n%s' % (val, label, dest)
 
     def render_warnings(self):
         with uio.StringIO() as msg:
@@ -584,9 +584,7 @@ class ApproveTransaction(UserAuthorizedAction):
                 msg.write('\nNo change')
                 return msg.getvalue()
 
-            total_val = ' '.join(self.chain.render_value(total))
-
-            msg.write("\n%s\n" % total_val)
+            msg.write("\n%s %s\n" % self.chain.render_value(total))
 
             if len(addrs) == 1:
                 msg.write('\nChange Address:\n%s\n' % addrs[0])
