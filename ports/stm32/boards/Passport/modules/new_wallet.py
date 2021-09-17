@@ -14,7 +14,7 @@ from wallets.utils import (
     get_deriv_path_from_addr_type_and_acct,
     get_addr_type_from_deriv)
 from ux import ux_show_story, ux_confirm, ux_show_text_as_ur, ux_scan_qr_code
-from multisig import MultisigWallet
+from multisig import MultisigWallet, TRUST_PSBT
 from utils import (
     UXStateMachine,
     to_str,
@@ -402,6 +402,33 @@ class NewWalletUX(UXStateMachine):
         else:
             self.goto(self.IMPORT_MULTISIG_CONFIG_FROM_MICROSD, save_curr=False)
 
+    def is_address_verification_skip_enabled(self):
+        if 'skip_address_validation' in self.sw_wallet:
+            if self.sw_wallet['skip_address_validation'] == 'True':
+                return True
+            else:
+                return False
+        else:
+            return False
+
+    def is_skip_multisig_import_enabled(self):
+        if 'skip_multisig_import' in self.sw_wallet:
+            if self.sw_wallet['skip_multisig_import'] == 'True':
+                return True
+            else:
+                return False
+        else:
+            return False
+
+    def is_force_multisig_policy_enabled(self):
+        if 'force_multisig_policy' in self.sw_wallet:
+            if self.sw_wallet['force_multisig_policy'] == 'True':
+                return True
+            else:
+                return False
+        else:
+            return False
+
     async def show(self):
         while True:
             # print('show: state={}'.format(self.state))
@@ -552,7 +579,27 @@ class NewWalletUX(UXStateMachine):
                 # If multisig, we need to import the quorum/config info first, else go right to validating the first
                 # receive address from the wallet.
                 if self.is_multisig():
-                    self.choose_multisig_import_mode()
+                    # Only perform multisig import if wallet does not prevent it
+                    if self.is_skip_multisig_import_enabled():
+                        continue
+                    else:
+                        self.choose_multisig_import_mode()
+
+                # Only perform address validation if wallet does not prevent it
+                if self.is_address_verification_skip_enabled():
+                    if self.is_force_multisig_policy_enabled():
+                        result = await ux_show_story('For compatibility with {}, Passport will set your multisig policy to Skip Verification.\n{}'.format(self.sw_wallet['label']),
+                        left_btn='NEXT',
+                        center=True,
+                        center_vertically=True)
+                        if result == 'x':
+                            if not self.goto_prev():
+                                return
+                        else:
+                            settings.set('multisig_policy', TRUST_PSBT)
+                            self.goto(self.CONFIRMATION)
+                    else:
+                        self.goto(self.CONFIRMATION)
                 else:
                     self.goto_address_verification_method(save_curr=False)
 
@@ -609,7 +656,27 @@ class NewWalletUX(UXStateMachine):
                 # If multisig, we need to import the quorum/config info first, else go right to validating the first
                 # receive address from the wallet.
                 if self.is_multisig():
-                    self.choose_multisig_import_mode()
+                    # Only perform multisig import if wallet does not prevent it
+                    if self.is_skip_multisig_import_enabled():
+                        continue
+                    else:
+                        self.choose_multisig_import_mode()
+
+                # Only perform address validation if wallet does not prevent it
+                if self.is_address_verification_skip_enabled():
+                    if self.is_force_multisig_policy_enabled():
+                        result = await ux_show_story('For compatibility with {}, Passport will set your multisig policy to Skip Verification.\n{}'.format(self.sw_wallet['label']),
+                        left_btn='NEXT',
+                        center=True,
+                        center_vertically=True)
+                        if result == 'x':
+                            if not self.goto_prev():
+                                return
+                        else:
+                            settings.set('multisig_policy', TRUST_PSBT)
+                            self.goto(self.CONFIRMATION)
+                    else:
+                        self.goto(self.CONFIRMATION)
                 else:
                     self.goto_address_verification_method(save_curr=False)
 
@@ -839,11 +906,28 @@ Compare them with the addresses shown on the next screen to make sure they match
                     continue
 
                 if self.is_multisig():
-                    if not self.multisig_wallet:
+                    if self.is_skip_multisig_import_enabled():
+                        continue
+                    else:
                         # Need to import the multisig wallet
                         self.choose_multisig_import_mode()
                         continue
 
                 if not self.verified:
-                    self.goto(self.SCAN_RX_ADDRESS)
-                    continue
+                    if self.is_address_verification_skip_enabled():
+                        if self.is_force_multisig_policy_enabled():
+                            result = await ux_show_story('For compatibility with {}, Passport will set your multisig policy to Skip Verification.\n{}'.format(self.sw_wallet['label']),
+                            left_btn='NEXT',
+                            center=True,
+                            center_vertically=True)
+                            if result == 'x':
+                                if not self.goto_prev():
+                                    return
+                            else:
+                                settings.set('multisig_policy', TRUST_PSBT)
+                                self.goto(self.CONFIRMATION)
+                        else:
+                            self.goto(self.CONFIRMATION)
+                    else:
+                        self.goto(self.SCAN_RX_ADDRESS)
+                        continue
