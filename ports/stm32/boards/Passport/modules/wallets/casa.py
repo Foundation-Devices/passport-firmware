@@ -56,5 +56,8 @@ CasaWallet = {
     'export_modes': [
         {'id': 'microsd', 'label': 'microSD', 'filename_pattern': '{sd}/{xfp}-casa.txt', 'ext': '.txt',
          'filename_pattern_multisig': '{sd}/{xfp}-casa-multisig.txt', 'ext_multisig': '.txt'}
-    ]
+    ],
+    'skip_address_validation': 'True',
+    'skip_multisig_import': 'True',
+    'force_multisig_policy': 'True'
 }
