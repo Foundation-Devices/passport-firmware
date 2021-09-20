@@ -327,7 +327,8 @@ class NewWalletUX(UXStateMachine):
             addr_type=self.addr_type,
             acct_num=self.acct_num,
             multisig=self.is_multisig(),
-            legacy=self.sig_type.get('legacy', False))
+            legacy=self.sig_type.get('legacy', False),
+            export_mode=self.export_mode['id'])
 
         self.infer_wallet_info()
 
@@ -402,30 +403,21 @@ class NewWalletUX(UXStateMachine):
         else:
             self.goto(self.IMPORT_MULTISIG_CONFIG_FROM_MICROSD, save_curr=False)
 
-    def is_address_verification_skip_enabled(self):
+    def is_skip_address_verifivation_enabled(self):
         if 'skip_address_validation' in self.sw_wallet:
-            if self.sw_wallet['skip_address_validation'] == 'True':
-                return True
-            else:
-                return False
+            return self.sw_wallet['skip_address_validation']
         else:
             return False
 
     def is_skip_multisig_import_enabled(self):
         if 'skip_multisig_import' in self.sw_wallet:
-            if self.sw_wallet['skip_multisig_import'] == 'True':
-                return True
-            else:
-                return False
+            return self.sw_wallet['skip_multisig_import']
         else:
             return False
 
     def is_force_multisig_policy_enabled(self):
         if 'force_multisig_policy' in self.sw_wallet:
-            if self.sw_wallet['force_multisig_policy'] == 'True':
-                return True
-            else:
-                return False
+            return self.sw_wallet['force_multisig_policy']
         else:
             return False
 
@@ -569,7 +561,9 @@ class NewWalletUX(UXStateMachine):
                 # TODO: Do we need to encode the data to text for QR here? Some formats might not be text.
 
                 qr_type = self.export_mode['qr_type']
-                await ux_show_text_as_ur(title='Export QR', qr_text=data, qr_type=qr_type, left_btn='DONE')
+                is_cbor = self.export_mode['is_cbor'] if 'is_cbor' in self.export_mode else False
+                qr_args = {'prefix': self.export_mode['ur_type']} if 'ur_type' in self.export_mode else None
+                await ux_show_text_as_ur(title='Export QR', qr_text=data, qr_type=qr_type, qr_args=qr_args, left_btn='DONE', is_cbor=is_cbor)
                 # Only way to get out is DONE, so no need to check result
 
                 # Save the progress so that we can resume later
@@ -580,16 +574,13 @@ class NewWalletUX(UXStateMachine):
                 # receive address from the wallet.
                 if self.is_multisig():
                     # Only perform multisig import if wallet does not prevent it
-                    if self.is_skip_multisig_import_enabled():
-                        continue
-                    else:
+                    if self.is_skip_multisig_import_enabled() == False:
                         self.choose_multisig_import_mode()
 
                 # Only perform address validation if wallet does not prevent it
-                if self.is_address_verification_skip_enabled():
+                if self.is_skip_address_verifivation_enabled():
                     if self.is_force_multisig_policy_enabled():
-                        result = await ux_show_story('For compatibility with {}, Passport will set your multisig policy to Skip Verification.\n{}'.format(self.sw_wallet['label']),
-                        left_btn='NEXT',
+                        result = await ux_show_story('For compatibility with {}, Passport will set your Multisig Policy to Skip Verification.\n'.format(self.sw_wallet['label']),
                         center=True,
                         center_vertically=True)
                         if result == 'x':
@@ -657,16 +648,14 @@ class NewWalletUX(UXStateMachine):
                 # receive address from the wallet.
                 if self.is_multisig():
                     # Only perform multisig import if wallet does not prevent it
-                    if self.is_skip_multisig_import_enabled():
-                        continue
-                    else:
+                    if self.is_skip_multisig_import_enabled() == False:
                         self.choose_multisig_import_mode()
 
                 # Only perform address validation if wallet does not prevent it
-                if self.is_address_verification_skip_enabled():
+                if self.is_skip_address_verifivation_enabled():
                     if self.is_force_multisig_policy_enabled():
-                        result = await ux_show_story('For compatibility with {}, Passport will set your multisig policy to Skip Verification.\n{}'.format(self.sw_wallet['label']),
-                        left_btn='NEXT',
+                        result = await ux_show_story('For compatibility with {}, Passport will set your multisig policy to Skip Verification.\n'.format(self.sw_wallet['label']),
+                        left_btn='OK',
                         center=True,
                         center_vertically=True)
                         if result == 'x':
@@ -914,7 +903,7 @@ Compare them with the addresses shown on the next screen to make sure they match
                         continue
 
                 if not self.verified:
-                    if self.is_address_verification_skip_enabled():
+                    if self.is_skip_address_verifivation_enabled():
                         if self.is_force_multisig_policy_enabled():
                             result = await ux_show_story('For compatibility with {}, Passport will set your multisig policy to Skip Verification.\n{}'.format(self.sw_wallet['label']),
                             left_btn='NEXT',

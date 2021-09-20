@@ -18,7 +18,7 @@ from utils import xfp2str, to_str
 from .multisig_json import create_multisig_json_wallet
 from .multisig_import import read_multisig_config_from_qr, read_multisig_config_from_microsd
 
-def create_bitcoin_core_export(sw_wallet=None, addr_type=None, acct_num=0, multisig=False, legacy=False):
+def create_bitcoin_core_export(sw_wallet=None, addr_type=None, acct_num=0, multisig=False, legacy=False, export_mode='qr'):
     import ustruct
     xfp = xfp2str(settings.get('xfp'))
 

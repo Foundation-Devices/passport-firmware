@@ -49,7 +49,7 @@ class QREncoder(DataEncoder):
     def get_max_len(self, index):
         return 300
 
-    def encode(self, data, is_binary=False, max_fragment_len=None):
+    def encode(self, data, is_cbor=False, max_fragment_len=None):
         self.data = data
 
     def next_part(self):
