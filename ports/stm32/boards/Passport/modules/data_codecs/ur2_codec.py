@@ -86,12 +86,14 @@ class UR2Encoder(DataEncoder):
         return self.qr_sizes[index]
 
     # Encode the given data
-    def encode(self, data, is_binary=False, max_fragment_len=500):
-        encoder = CBOREncoder()
-        # print('UR2: data={}'.format(to_str(data)))
-        encoder.encodeBytes(data)
+    def encode(self, data, is_cbor=False, max_fragment_len=500):
+        if not is_cbor:
+            encoder = CBOREncoder()
+            # print('UR2: data={}'.format(to_str(data)))
+            encoder.encodeBytes(data)
+            data = encoder.get_bytes()
         # TODO: Need to change this interface most likely to allow for different types like crypto-psbt
-        ur_obj = UR(self.prefix, encoder.get_bytes())
+        ur_obj = UR(self.prefix, data)
         self.ur_encoder = UREncoder(ur_obj, max_fragment_len)
 
     # UR2.0's next_part() returns the initial pieces split into max_fragment_len bytes, but then switches over to

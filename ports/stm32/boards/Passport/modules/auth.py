@@ -139,11 +139,12 @@ def sign_message_digest(digest, subpath, prompt):
 
 
 class ApproveMessageSign(UserAuthorizedAction):
-    def __init__(self, text, subpath, addr_fmt, approved_cb=None):
+    def __init__(self, text, subpath, addr_fmt, approved_cb=None, sign_type='File'):
         super().__init__()
         self.text = text
         self.subpath = subpath
         self.approved_cb = approved_cb
+        self.sign_type = sign_type
 
         from common import dis, system
         dis.fullscreen('Wait...')
@@ -160,7 +161,7 @@ class ApproveMessageSign(UserAuthorizedAction):
 
         story = MSG_SIG_TEMPLATE.format(
             msg=self.text, addr=self.address, subpath=self.subpath)
-        ch = await ux_show_story(story, title='Sign File', right_btn='SIGN')
+        ch = await ux_show_story(story, title='Sign ' + self.sign_type, right_btn='SIGN')
 
         if ch != 'y':
             # they don't want to!
@@ -210,8 +211,9 @@ class ApproveMessageSign(UserAuthorizedAction):
         # looks ok
         return
 
+async def sign_msg(text, subpath, addr_fmt):
+    UserAuthorizedAction.cleanup()
 
-def sign_msg(text, subpath, addr_fmt):
     # Convert to strings
     try:
         text = str(text, 'ascii')
@@ -229,11 +231,36 @@ def sign_msg(text, subpath, addr_fmt):
     # Do some verification before we even show to the local user
     ApproveMessageSign.validate(text)
 
+    async def sign_msg_done(signature, address):
+        # complete. write out UR message to QR
+        from common import system, last_scanned_qr_type, last_scanned_ur_prefix
+        from ubinascii import b2a_base64
+        from ur2.cbor_lite import CBOREncoder
+        from ux import DisplayURCode
+        from data_codecs.qr_type import QRType
+
+        system.hide_busy_bar()
+        
+        sig = b2a_base64(signature).decode('ascii').strip()
+        # print('signature: {} address: {} sig: {}'.format(signature, address, sig))
+        
+        signed_message = RFC_SIGNATURE_TEMPLATE.format(addr=address, msg=text, blockchain='BITCOIN', sig=sig)
+        print('QR when decoded will read:\n{}'.format(signed_message))
+
+        encoder = CBOREncoder()
+        encoder.encodeBytes(bytearray(signed_message))
+        signed_bytes = encoder.get_bytes()
+
+        o = DisplayURCode('Signed Message', signed_bytes, last_scanned_qr_type or QRType.UR2, {'prefix': last_scanned_ur_prefix }, is_cbor=True)
+        result = await o.interact_bare()
+        UserAuthorizedAction.cleanup()
+
     # UserAuthorizedAction.check_busy()
     UserAuthorizedAction.active_request = ApproveMessageSign(
-        text, subpath, addr_fmt)
+        text, subpath, addr_fmt, approved_cb=sign_msg_done, sign_type='Message')
 
-    # kill any menu stack, and put our thing at the top
+    # Kill any menu stack, and put our thing at the top - whatever async chain started off this signing process will
+    # now resume and complete, and then the following action will become active.
     abort_and_goto(UserAuthorizedAction.active_request)
 
 
@@ -332,7 +359,7 @@ def sign_txt_file(filename):
 
     # UserAuthorizedAction.check_busy()
     UserAuthorizedAction.active_request = ApproveMessageSign(
-        text, subpath, AF_CLASSIC, approved_cb=done)
+        text, subpath, AF_CLASSIC, approved_cb=done, sign_type='File')
 
     # do not kill the menu stack!
     from ux import the_ux
@@ -928,9 +955,9 @@ async def sign_psbt_buf(psbt_buf):
         # print('last_scanned_qr_type={}'.format(last_scanned_qr_type))
 
         # Text format for UR1, but binary for UR2
-        #     def __init__(self, title, qr_text, qr_type, qr_args=None, msg=None, left_btn='DONE', right_btn='RESIZE', is_binary=False):
+        #     def __init__(self, title, qr_text, qr_type, qr_args=None, msg=None, left_btn='DONE', right_btn='RESIZE', is_cbor=False):
 
-        o = DisplayURCode('Signed Txn', signed_bytes if last_scanned_qr_type == QRType.UR2 else signed_hex, last_scanned_qr_type or QRType.UR2, {'prefix': last_scanned_ur_prefix }, is_binary=True)
+        o = DisplayURCode('Signed Txn', signed_bytes if last_scanned_qr_type == QRType.UR2 else signed_hex, last_scanned_qr_type or QRType.UR2, {'prefix': last_scanned_ur_prefix }, is_cbor=False)
         result = await o.interact_bare()
         UserAuthorizedAction.cleanup()
 

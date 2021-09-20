@@ -1089,9 +1089,9 @@ def abort_and_push(m):
 #         the_ux.pop()
 
 
-async def ux_show_text_as_ur(title='QR Code', qr_text='', qr_type=QRType.UR2, qr_args=None, msg=None, left_btn='BACK', right_btn='RESIZE'):
-    # print('ux_show_text_as_ur: qr_type: {}'.format(qr_type))
-    o = DisplayURCode(title, qr_text, qr_type, qr_args=qr_args, msg=msg, left_btn=left_btn, right_btn=right_btn)
+async def ux_show_text_as_ur(title='QR Code', qr_text='', qr_type=QRType.UR2, qr_args=None, msg=None, left_btn='BACK', right_btn='RESIZE', is_cbor=False):
+    # print('ux_show_text_as_ur: qr_type: {}\nqr_text: {}\n'.format(qr_type, qr_text))
+    o = DisplayURCode(title, qr_text, qr_type, qr_args=qr_args, msg=msg, left_btn=left_btn, right_btn=right_btn, is_cbor=is_cbor)
     result = await o.interact_bare()
     gc.collect()
     return result
@@ -1113,7 +1113,7 @@ class DisplayURCode(UserInteraction):
     # Purpose is to allow a QR code to be scanned, so we make it as big as possible
     # given our screen size, but if it's too big, we display a series of images
     # instead.
-    def __init__(self, title, qr_text, qr_type, qr_args=None, msg=None, left_btn='DONE', right_btn='RESIZE', is_binary=False):
+    def __init__(self, title, qr_text, qr_type, qr_args=None, msg=None, left_btn='DONE', right_btn='RESIZE', is_cbor=False):
         self.title = title
         self.qr_text = qr_text
         self.input = KeyInputHandler(down='xy', up='xy')
@@ -1129,7 +1129,7 @@ class DisplayURCode(UserInteraction):
         self.qr_type = qr_type
         # print('DisplayURCode: qr_type: {}'.format(qr_type))
         self.qr_args = qr_args
-        self.is_binary = is_binary
+        self.is_cbor = is_cbor
 
         system.turbo(True)
         self.generate_qr_data()
@@ -1147,7 +1147,7 @@ class DisplayURCode(UserInteraction):
         gc.collect()
 
         max_len = self.qr_encoder.get_max_len(self.qr_version_idx)
-        self.qr_encoder.encode(self.qr_text, is_binary=self.is_binary, max_fragment_len=max_len)
+        self.qr_encoder.encode(self.qr_text, is_cbor=self.is_cbor, max_fragment_len=max_len)
 
         gc.collect()
         system.hide_busy_bar()

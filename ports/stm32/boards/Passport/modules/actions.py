@@ -697,6 +697,30 @@ First use Advanced > Erase Passport to remove the current seed.''', right_btn='O
     await goto_top_menu()
     return True
 
+async def handle_sign_message_format(data):
+    from common import dis
+    from public_constants import AF_CLASSIC
+    from auth import sign_msg
+
+    if data != None:
+        try:
+            # TODO split this on '/n'
+            msg_to_sign = data[:36]
+            deriv_path_to_sign = data[37:]
+            # print('handle_sign_message_format signing msg: {} deriv_path: {}'.format(msg_to_sign, deriv_path_to_sign))
+
+            dis.fullscreen('Analyzing...')
+            # TODO: determing addr_type instead of hard coded passing AF_CLASSIC
+            system.show_busy_bar()
+            await sign_msg(msg_to_sign, deriv_path_to_sign, AF_CLASSIC)
+        except Exception as e:
+            result = await ux_show_story('Error signing message:\n\n{}'.format(e), title='Error', right_btn='RETRY')
+            return result == 'y'
+        finally:
+            system.hide_busy_bar()
+
+    return False
+
 async def erase_wallet(menu, label, item):
     # Erase the seed words, and private key from this wallet!
     # This is super dangerous for the customer's money.
@@ -1590,7 +1614,7 @@ async def test_ur(*a):
 
 async def test_ur_encoder(_1, _2, item):
     await ux_show_text_as_ur(title='Test UR Encoding', msg='Animated UR Code', qr_text=b'Y\x01\x00\x91n\xc6\\\xf7|\xad\xf5\\\xd7\xf9\xcd\xa1\xa1\x03\x00&\xdd\xd4.\x90[w\xad\xc3nO-<\xcb\xa4O\x7f\x04\xf2\xdeD\xf4-\x84\xc3t\xa0\xe1I\x13o%\xb0\x18RTYa\xd5_\x7fz\x8c\xdem\x0e.\xc4?;-\xcbdJ"\t\xe8\xc9\xe3J\xf5\xc4ty\x84\xa5\xe8s\xc9\xcf_\x96^%\xee)\x03\x9f\xdf\x8c\xa7O\x1cv\x9f\xc0~\xb7\xeb\xae\xc4n\x06\x95\xae\xa6\xcb\xd6\x0b>\xc4\xbb\xff\x1b\x9f\xfe\x8a\x9er@\x12\x93w\xb9\xd3q\x1e\xd3\x8dA/\xbbDB%o\x1eoY^\x0f\xc5\x7f\xedE\x1f\xb0\xa0\x10\x1f\xb7k\x1f\xb1\xe1\xb8\x8c\xfd\xfd\xaa\x94b\x94\xa4}\xe8\xff\xf1s\xf0!\xc0\xe6\xf6[\x05\xc0\xa4\x94\xe5\x07\x91\'\n\x00P\xa7:\xe6\x9bg%PZ.\xc8\xa5y\x14W\xc9\x87m\xd3J\xad\xd1\x92\xa5:\xa0\xdcf\xb5V\xc0\xc2\x15\xc7\xce\xb8$\x8bq|"\x95\x1ee0[V\xa3pn>\x86\xeb\x01\xc8\x03\xbb\xf9\x15\xd8\x0e\xdc\xd6MM',
-                             qr_type=QRType.UR1, qr_args=None)
+                             qr_type=QRType.UR1, qr_args=None, is_cbor=False)
 
 async def test_num_entry(*a):
     num = await ux_enter_text('Enter Number', label='Enter an integer', num_only=True)
@@ -1697,7 +1721,6 @@ async def test_ur1_old(*a):
         print('decode_ur() worked!')
     else:
         print('decode_ur() failed!')
-
 
 async def test_ur1(*a):
     from ur1.decode_ur import decode_ur

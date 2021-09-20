@@ -18,7 +18,7 @@ class DataEncoder:
     def get_max_len(self, index):
         return 0
 
-    def encode(self, data, is_binary=False, max_fragment_len=None):
+    def encode(self, data, is_cbor=False, max_fragment_len=None):
         pass
 
     def next_part(self):

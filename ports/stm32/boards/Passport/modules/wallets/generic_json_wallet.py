@@ -16,7 +16,7 @@ from utils import xfp2str, to_str
 from common import settings
 from public_constants import AF_CLASSIC, AF_P2WPKH, AF_P2WPKH_P2SH, AF_P2WSH_P2SH, AF_P2WSH
 
-def create_generic_json_wallet(sw_wallet=None, addr_type=None, acct_num=0, multisig=False, legacy=False):
+def create_generic_json_wallet(sw_wallet=None, addr_type=None, acct_num=0, multisig=False, legacy=False, export_mode='qr'):
     # Generate data that other programers will use to import from (single-signer)
 
     chain = chains.current_chain()
