@@ -19,6 +19,6 @@ BlueWallet = {
     ],
     'export_modes': [
         {'id': 'qr', 'label': 'QR Code', 'qr_type': QRType.UR1},
-        {'id': 'microsd', 'label': 'microSD', 'filename_pattern': '{sd}/passport-bluewallet.json', 'filename_pattern_multisig': '{sd}/passport-bluewallet-multisig.json'}
+        {'id': 'microsd', 'label': 'microSD', 'filename_pattern': '{sd}/{xfp}-bluewallet.json', 'filename_pattern_multisig': '{sd}/{xfp}-bluewallet-multisig.json'}
     ]
 }

@@ -87,8 +87,9 @@ int compare_word_info(const void * a, const void * b) {
 }
 
 void make_num_pairs_array(const char** words, char* prefix) {
-  printf("// SPDX-FileCopyrightText: 2021 Foundation Devices, Inc. <hello@foundationdevices.com>\n");
-  printf("// SPDX-License-Identifier: GPL-3.0-or-later\n");
+  // Insert the hyphen all weird like this so that `reuse lint` doesn't complain about parsing this
+  printf("// SPDX%cFileCopyrightText: 2021 Foundation Devices, Inc. <hello@foundationdevices.com>\n", '-');
+  printf("// SPDX%cLicense-Identifier: GPL-3.0-or-later\n", '-');
   printf("//\n\n");
   printf("#include <stdint.h>\n\n");
 

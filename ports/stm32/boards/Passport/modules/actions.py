@@ -23,7 +23,7 @@ from common import settings, system, noise, dis
 from utils import (UXStateMachine, imported, pretty_short_delay, xfp2str, to_str,
                    truncate_string_to_width, set_next_addr, scan_for_address, get_accounts, run_chooser,
                    make_account_name_num, is_valid_address, save_next_addr, needs_microsd, format_btc_address,
-                   is_all_zero, bytes_to_hex_str, split_to_lines)
+                   is_all_zero, bytes_to_hex_str, split_to_lines, is_valid_btc_address, do_address_verify, run_chooser)
 from wallets.utils import get_export_mode, get_addr_type_from_address, get_deriv_path_from_addr_type_and_acct
 from ux import (the_ux, ux_confirm, ux_enter_pin,
                 ux_enter_text, ux_scan_qr_code, ux_shutdown,
@@ -268,21 +268,15 @@ class VerifyAddressUX(UXStateMachine):
                 # Scan the address to be verified - should be a normal QR code
                 system.turbo(True);
                 address = await ux_scan_qr_code('Verify Address')
+                system.turbo(False)
                 if address == None:
                     return
 
-                # Strip prefix if present
-                if address[0:8].lower() == 'bitcoin:':
-                    address = address[8:]
-
-                if not is_valid_address(address):
-                    result = await ux_show_story('That is not a valid Bitcoin address.', title='Error', left_btn='BACK',
-                                                 right_btn='SCAN', center=True, center_vertically=True)
-                    if result == 'x':
-                        if not self.goto_prev():
-                            # Nothing to return back to, so we must have skipped one or more steps...we're done
-                            return
-                    continue
+                address, is_valid_btc = await is_valid_btc_address(address)
+                if is_valid_btc == False:
+                    if not self.goto_prev():
+                        return
+                    continue   
 
                 # Get the address type from the address
                 is_multisig = self.sig_type == 'multisig'
@@ -290,29 +284,10 @@ class VerifyAddressUX(UXStateMachine):
                 addr_type = get_addr_type_from_address(address, is_multisig)
                 deriv_path = get_deriv_path_from_addr_type_and_acct(addr_type, self.acct_num, is_multisig)
 
-                # Scan addresses to see if it's valid
-                addr_idx, is_change = await scan_for_address(self.acct_num, address, addr_type, deriv_path, self.multisig_wallet)
-                if addr_idx >= 0:
-                    # Remember where to start from next time
-                    save_next_addr(self.acct_num, addr_type, addr_idx, is_change)
-                    address = format_btc_address(address, addr_type)
-
-                    result = await ux_show_story('''Address Verified!
-
-{}
-
-This is a {} address at index {}.'''.format(address, 'change' if is_change == 1 else 'receive',  addr_idx),
-                        title='Verify',
-                        left_btn='BACK',
-                        right_btn='CONTINUE',
-                        center=True,
-                        center_vertically=True)
-                    if result == 'x':
-                        if not self.goto_prev():
-                            # Nothing to return back to, so we must have skipped one or more steps...we're done
-                            return
-
-                    return
+                result = await do_address_verify(self.acct_num, address, addr_type, deriv_path, self.multisig_wallet)
+                if result == 'x':
+                    if not self.goto_prev():
+                        return
                 else:
                     # User asked to stop searching
                     return
@@ -371,11 +346,18 @@ async def update_firmware(*a):
                 return
 
             # Validate the header
-            is_valid, version, error_msg = system.validate_firmware_header(header)
+            is_valid, version, error_msg, is_user_signed = system.validate_firmware_header(header)
             if not is_valid:
                 system.turbo(False)
                 await ux_show_story('Firmware header is invalid.\n\n{}'.format(error_msg), title='Error', left_btn='BACK', right_btn='OK', center=True, center_vertically=True)
                 return
+
+            if is_user_signed:
+                pubkey_result, pubkey = read_user_firmware_pubkey()
+                if not pubkey_result or is_all_zero(pubkey):
+                    system.turbo(False)
+                    await ux_show_story('Install a Developer PubKey before loading non-Foundation firmware.\n\n', title='Error', left_btn='BACK', right_btn='OK', center=True, center_vertically=True)
+                    return
 
             system.turbo(False)
 
@@ -1146,6 +1128,9 @@ async def sign_tx_from_sd(*a):
 
     import stash
 
+    # Let the user know that using Testnet is potentially dangerous
+    await show_testnet_warning()
+
     if stash.bip39_passphrase:
         title = '[%s]' % xfp2str(settings.get('xfp'))
     else:
@@ -1341,6 +1326,9 @@ async def magic_scan(menu, label, item):
 
     title = item.arg
 
+    # Let the user know that using Testnet is potentially dangerous
+    await show_testnet_warning()
+
     while True:
         system.turbo(True)
         data = await ux_scan_qr_code(title)
@@ -1412,12 +1400,19 @@ async def enter_passphrase(menu, label, item):
     from constants import MAX_PASSPHRASE_LENGTH
 
     title = item.arg
-    passphrase = await ux_enter_text(title, label="Enter a Passphrase", max_length=MAX_PASSPHRASE_LENGTH)
+    passphrase = await ux_enter_text(title, label="Enter Passphrase", max_length=MAX_PASSPHRASE_LENGTH)
+
+    # None is passed back when user chose "back"
+    if passphrase == None:
+        return
 
     # print("Chosen passphrase = {}".format(passphrase))
-
-    if not await ux_confirm('Are you sure you want to apply the passphrase:\n\n{}'.format(passphrase)):
-        return
+    if passphrase == '':
+        if not await ux_confirm('Are you sure you want to clear the passphrase?'):
+            return
+    else:    
+        if not await ux_confirm('Are you sure you want to apply the passphrase:\n\n{}'.format(passphrase)):
+            return
 
     # Applying the passphrase takes a bit of time so show message
     dis.fullscreen("Applying Passphrase...")
@@ -1855,13 +1850,13 @@ async def test_derive_addresses(*a):
     chain = chains.current_chain()
 
     addrs = []
-    path = "m/84'/0'/{account}'/{change}/{idx}"
+    path = "m/84'/{coin_type}'/{account}'/{change}/{idx}"
 
     system.turbo(True)
     start_time = utime.ticks_ms()
     with stash.SensitiveValues() as sv:
         for idx in range(n):
-            subpath = path.format(account=0, change=0, idx=idx)
+            subpath = path.format(coin_type=chain.b44_cointype, account=0, change=0, idx=idx)
             node = sv.derive_path(subpath, register=False)
             addr = chain.address(node, AF_P2WPKH)
             addrs.append(addr)
@@ -2083,3 +2078,23 @@ async def remove_user_firmware_pubkey(*a):
                             center=True,
                             center_vertically=True)
         clear_cached_pubkey()
+
+async def show_testnet_warning():
+    chain = settings.get('chain', 'BTC')
+    if chain == 'TBTC':
+        await ux_show_story('Passport is in Testnet mode. Use a separate seed to avoid issues with malicious software wallets.',
+                                title='Warning',
+                                center=True,
+                                center_vertically=True)
+
+async def testnet_chooser(*a):
+    from choosers import chain_chooser
+    
+    old_chain = settings.get('chain', 'BTC')
+    await run_chooser(chain_chooser, 'Passport', show_checks=True)
+    new_chain = settings.get('chain', 'BTC')
+    
+    # Only display the warning if the chain changed
+    if new_chain != old_chain:
+        # Let the user know that using Testnet is potentially dangerous
+        await show_testnet_warning()

@@ -29,6 +29,16 @@ async def handle_schema_evolutions(update_from_to):
             from_version = to_version
             continue
 
+        elif from_version == '1.0.6' and to_version == '1.0.7':
+            # Handle evolutions
+
+            # This no longer used, so clean it out
+            settings.remove('backup_num')
+            # This is now volatile, so clean it out
+            settings.remove('chain')
+            from_version = to_version
+            continue
+
         # We only reach here if no more evolutions are possible.
         # Remove the update indicator from the settings.
         # NOTE: There is a race condition here, but these evolutions should be extremely fast, and ideally

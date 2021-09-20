@@ -150,20 +150,30 @@ class ChainsBase:
 
     @classmethod
     def render_value(cls, val, unpad=False):
-        # convert nValue from a transaction into human form.
+        # convert nValue from a transaction into either BTC or sats
         # - always be precise
         # - return (string, units label)
-        if unpad:
-            if (val % 1E8):
-                # precise but unpadded
-                txt = ('%d.%08d' % (val // 1E8, val % 1E8)).rstrip('0')
+        from common import settings
+        from constants import UNIT_TYPE_BTC, UNIT_TYPE_SATS
+
+        # BTC is the default if not set yet
+        units = settings.get('units', UNIT_TYPE_BTC)
+        if units == UNIT_TYPE_BTC:
+            label = cls.ctype
+            if unpad:
+                if (val % 1E8):
+                    # precise but unpadded
+                    txt = ('%d.%08d' % (val // 1E8, val % 1E8)).rstrip('0')
+                else:
+                    # round BTC amount, show no decimal
+                    txt = '%d' % (val // 1E8)
             else:
-                # round BTC amount, show no decimal
-                txt = '%d' % (val // 1E8)
+                # all the zeros
+                txt = '%d.%08d' % (val // 1E8, val % 1E8)
         else:
-            # all the zeros
-            txt = '%d.%08d' % (val // 1E8, val % 1E8)
-        return txt, cls.ctype
+            label = cls.ctype_sats
+            txt = ('{:,}'.format(val))
+        return txt, label
 
     @classmethod
     def render_address(cls, script):
@@ -193,8 +203,10 @@ class ChainsBase:
 class BitcoinMain(ChainsBase):
     # see <https://github.com/bitcoin/bitcoin/blob/master/src/chainparams.cpp#L140>
     ctype = 'BTC'
+    ctype_sats = 'sats'
     name = 'Bitcoin'
     core_name = 'Bitcoin Core'
+    menu_name = 'Bitcoin Mainnet'
 
     slip132 = {
         AF_CLASSIC:     Slip132Version(0x0488B21E, 0x0488ADE4, 'x'),
@@ -214,8 +226,9 @@ class BitcoinMain(ChainsBase):
 
 class BitcoinTestnet(BitcoinMain):
     ctype = 'TBTC'
+    ctype_sats = 'tsats'
     name = 'Bitcoin Testnet'
-    menu_name = 'Testnet: BTC'
+    menu_name = 'Bitcoin Testnet'
 
     slip132 = {
         AF_CLASSIC:     Slip132Version(0x043587cf, 0x04358394, 't'),

@@ -484,8 +484,9 @@ async def write_complete_backup(words, auto_backup=False, is_first_backup=False)
 
     body = render_backup_contents().encode()
 
-    backup_num = settings.get('backup_num', 1)
-    # print('backup_num={}'.format(backup_num))
+    backup_num = 1
+    xfp = xfp2str(settings.get('xfp')).lower()
+    # print('XFP: {}'.format(xfp))
 
     gc.collect()
 
@@ -520,7 +521,7 @@ async def write_complete_backup(words, auto_backup=False, is_first_backup=False)
 
                 # Make a unique filename
                 while True:
-                    base_filename = 'passport-backup-{}.7z'.format(backup_num)
+                    base_filename = '{}-backup-{}.7z'.format(xfp, backup_num)
                     fname = '{}/{}'.format(backups_path, base_filename)
 
                     # Ensure filename doesn't already exist
@@ -529,7 +530,6 @@ async def write_complete_backup(words, auto_backup=False, is_first_backup=False)
 
                     # Ooops...that exists, so increment and try again
                     backup_num += 1
-                    # print('backup_num={}'.format(backup_num))
 
                 # print('Saving to fname={}'.format(fname))
 
@@ -557,10 +557,6 @@ async def write_complete_backup(words, auto_backup=False, is_first_backup=False)
                     continue
             else:
                 return
-
-        # Update backup counter
-        backup_num += 1
-        settings.set('backup_num', backup_num)
 
         if not auto_backup:
             await ux_show_story('Saved backup to\n\n{}\n\nin /backups folder.'.format(base_filename),

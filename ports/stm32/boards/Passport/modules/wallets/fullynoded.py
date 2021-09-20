@@ -19,6 +19,6 @@ FullyNodedWallet = {
     ],
     'export_modes': [
         {'id': 'qr', 'label': 'QR Code', 'qr_type': QRType.UR2},
-        {'id': 'microsd', 'label': 'microSD', 'filename_pattern': '{sd}/passport-fullynoded.json', 'filename_pattern_multisig': '{sd}/passport-fullynoded-multisig.json'}
+        {'id': 'microsd', 'label': 'microSD', 'filename_pattern': '{sd}/{xfp}-fullynoded.json', 'filename_pattern_multisig': '{sd}/{xfp}-fullynoded-multisig.json'}
     ]
 }

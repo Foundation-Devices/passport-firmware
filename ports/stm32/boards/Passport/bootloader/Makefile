@@ -207,7 +207,7 @@ ifneq ($(MAKECMDGOALS),clean)
 endif
 
 # make a 'release' build
-release: code-committed check-fontawesome clean all capture
+release: clean all
 release: CFLAGS += -DRELEASE=1 -Werror
 
 clean:

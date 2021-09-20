@@ -10,7 +10,7 @@ import zlib
 def read_text(fname):
 
     w = 0
-    rows = [] 
+    rows = []
     Z = b'\0'
     F = b'\xff'
 
@@ -59,7 +59,7 @@ def crunch(n):
     #print(' / '.join("%d => %d" % (wb,len(d)) for wb,d in a))
 
     return a[0]
-        
+
 
 def gen_header(outfile, fnames):
 
@@ -78,9 +78,9 @@ def gen_header(outfile, fnames):
 #include <stdint.h>
 
 typedef struct _Image {
-    int16_t width;
-    int16_t height;
-    int16_t byte_width;
+    int16_t  width;
+    int16_t  height;
+    int16_t  byte_width;
     uint8_t* data;
 } Image;
 

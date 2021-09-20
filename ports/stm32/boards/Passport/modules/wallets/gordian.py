@@ -19,6 +19,6 @@ GordianWallet = {
     ],
     'export_modes': [
         {'id': 'qr', 'label': 'QR Code', 'qr_type': QRType.UR2},
-        {'id': 'microsd', 'label': 'microSD', 'filename_pattern': '{sd}/passport-gordian.json', 'filename_pattern_multisig': '{sd}/passport-gordian-multisig.json'}
+        {'id': 'microsd', 'label': 'microSD', 'filename_pattern': '{sd}/{xfp}-gordian.json', 'filename_pattern_multisig': '{sd}/{xfp}-gordian-multisig.json'}
     ]
 }

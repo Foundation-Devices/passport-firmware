@@ -72,4 +72,56 @@ def enable_passphrase_chooser():
         settings.set('enable_passphrase', va[idx])
 
     return which, ch, set_enable_passphrase
+
+def chain_chooser():
+    from chains import AllChains
+
+    chain = settings.get('chain', 'BTC')
+
+    ch = [(i.ctype, i.menu_name or i.name) for i in AllChains ]
+
+    # find index of current choice
+    try:
+        which = [n for n, (k,v) in enumerate(ch) if k == chain][0]
+    except IndexError:
+        which = 0
+
+    def set_chain(idx, text):
+        val = ch[idx][0]
+        assert ch[idx][1] == text
+        settings.set_volatile('chain', val)
+
+        try:
+            # update xpub stored in settings
+            import stash
+            with stash.SensitiveValues() as sv:
+                sv.capture_xpub()
+        except ValueError:
+            # no secrets yet, not an error
+            pass
+
+    return which, [t for _,t in ch], set_chain
+    
+def units_chooser():
+    import chains
+    from constants import UNIT_TYPE_BTC, UNIT_TYPE_SATS
+
+    chain = chains.current_chain()
+    units = settings.get('units', UNIT_TYPE_BTC)
+
+    ch = [chain.ctype,
+          chain.ctype_sats]
+    val = [UNIT_TYPE_BTC,
+          UNIT_TYPE_SATS]
+
+    try:
+        which = val.index(units)
+    except ValueError:
+        which = UNIT_TYPE_BTC
+
+    def set_units(idx, text):
+        settings.set('units', val[idx])
+
+    return which, ch, set_units
+
 # EOF

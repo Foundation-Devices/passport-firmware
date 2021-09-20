@@ -19,7 +19,7 @@ from public_constants import AF_P2WPKH
 from multisig import make_multisig_menu
 from wallets.utils import has_export_mode
 from export import view_backup_password
-from utils import is_new_wallet_in_progress, get_accounts, is_screenshot_mode_enabled
+from utils import is_new_wallet_in_progress, get_accounts, is_screenshot_mode_enabled, run_chooser
 from new_wallet import pair_new_wallet
 from ie import show_browser
 
@@ -52,6 +52,11 @@ def has_pubkey():
             return False
     return not is_all_zero(common.cached_pubkey)
 
+PassphraseMenu = [
+    MenuItem('Set Passphrase', f=enter_passphrase, arg='Passphrase'),
+    MenuItem('Enter at Startup', menu_title='Passphrase', chooser=enable_passphrase_chooser)
+]
+
 DeveloperPubkeyMenu = [
     MenuItem('Install PubKey', predicate=lambda: not has_pubkey(), f=install_user_firmware_pubkey),
     MenuItem('View PubKey', predicate=has_pubkey, f=view_user_firmware_pubkey),
@@ -60,11 +65,13 @@ DeveloperPubkeyMenu = [
 
 AdvancedMenu = [
     MenuItem('Change PIN', f=change_pin),
-    MenuItem('Passphrase', menu_title='Passphrase', chooser=enable_passphrase_chooser),
+    MenuItem('Units', chooser=units_chooser),
+    MenuItem('Passphrase', menu_title='Passphrase', menu=PassphraseMenu),
     MenuItem('Sign Text File', predicate=has_secrets, f=sign_message_on_sd),
     MenuItem('MicroSD Settings', menu=SDCardMenu),
     MenuItem('View Seed Words', f=view_seed_words, predicate=lambda: settings.get('words', True)),
     MenuItem('Developer PubKey', menu=DeveloperPubkeyMenu, menu_title='Developer'),
+    MenuItem('Testnet', f=testnet_chooser),
     MenuItem('Erase Passport', f=erase_wallet, arg=True)
 ]
 

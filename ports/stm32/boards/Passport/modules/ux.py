@@ -26,6 +26,8 @@ LEFT_MARGIN = 8
 RIGHT_MARGIN = 6
 TOP_MARGIN = 12
 VERT_SPACING = 10
+MAX_WIDTH = Display.WIDTH - LEFT_MARGIN - \
+    RIGHT_MARGIN - Display.SCROLLBAR_WIDTH
 
 TEXTBOX_MARGIN = 6
 
@@ -167,6 +169,13 @@ class KeyInputHandler:
     def clear(self):
         from common import keypad
         keypad.clear_keys()
+
+    # Reset internal state so that all pending kcodes and repeats are forgotten.
+    def reset(self):
+        self.time_pressed = {}
+        self.kcode_state = 0
+        self.kcode_last_time_pressed = 0
+        self.repeat_active = False
 
     # New input function to be used in place of PressRelease and ux_press_release, ux_all_up and ux_poll_once.
     async def get_event(self):
@@ -455,7 +464,7 @@ async def ux_enter_text(title="Enter Text", label="Text", initial_text='', left_
         # Draw the text and any other stuff
         y += 4
         dis.text_input(None, y, text_handler.get_text(),
-                       cursor_pos=text_handler.cursor_pos, font=font, max_chars_per_line=14)
+                       cursor_pos=text_handler.cursor_pos, font=font)
 
         dis.draw_footer(left_btn, right_btn, input.is_pressed(
             'x'), input.is_pressed('y'))
@@ -587,7 +596,6 @@ async def ux_show_symbols_popup(title="Enter Passphrase"):
 def chars_per_line(font):
     return (Display.WIDTH - LEFT_MARGIN - Display.SCROLLBAR_WIDTH) // font.advance
 
-
 def word_wrap(ln, font):
     from common import dis
     max_width = Display.WIDTH - LEFT_MARGIN - \
@@ -626,6 +634,7 @@ async def ux_show_story(msg, title='Passport', sensitive=False, font=FontSmall, 
                         right_btn='CONTINUE', scroll_label=None, left_btn_enabled=True, right_btn_enabled=True,
                         center_vertically=False, center=False, overlay=None, clear_keys=False):
     from common import dis, keypad
+    from utils import split_by_char_size
 
     system.turbo(True)
 
@@ -633,35 +642,11 @@ async def ux_show_story(msg, title='Passport', sensitive=False, font=FontSmall, 
     if clear_keys:
         keypad.clear_keys()
 
-    ch_per_line = chars_per_line(font)
-
-    lines = []
-
-    # First case is used with StringIO objects
     if hasattr(msg, 'readline'):
-        msg.seek(0)
-        for ln in msg:
-            if ln[-1] == '\n':
-                ln = ln[:-1]
-
-            if len(ln) > ch_per_line:
-                lines.extend(word_wrap(ln, font))
-            else:
-                # ok if empty string, just a blank line
-                lines.append(ln)
-
-        # no longer needed & rude to our caller, but let's save the memory
-        msg.close()
-        del msg
-        gc.collect()
+        lines = split_by_char_size(msg.getvalue(), font)
     else:
-        for ln in msg.split('\n'):
-            if len(ln) > ch_per_line:
-                lines.extend(word_wrap(ln, font))
-            else:
-                # ok if empty string, just a blank line
-                lines.append(ln)
-
+        lines = split_by_char_size(msg, font)
+        
     # trim blank lines at end
     while not lines[-1]:
         lines = lines[:-1]

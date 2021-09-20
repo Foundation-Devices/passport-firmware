@@ -20,7 +20,6 @@ CFLAGS += -I$(TOP)/include
 CFLAGS += -I/usr/local/include
 CFLAGS += -I$(TOP)/common/micro-ecc -DuECC_PLATFORM=uECC_x86
 CFLAGS += -DPASSPORT_COSIGN_TOOL
-CFLAGS += -DUSE_CRYPTO
 CFLAGS += -L/usr/local/lib
 
 LDFLAGS  = -Wl,-Map,$(MAP)

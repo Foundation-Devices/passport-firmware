@@ -446,7 +446,15 @@ async def show_top_menu():
 
 # TODO: For now this just checks the front bytes, but it could ensure the whole thing is valid
 def is_valid_address(address):
-        return (len(address) > 3) and (address[0] == '1' or address[0] == '3' or (address[0] == 'b' and address[1] == 'c' and address[2] == '1'))
+    # Valid addresses: 1 , 3 , bc1, tb1, m, n, 2
+    return  (len(address) > 3) and \
+            ((address[0] == '1') or \
+            (address[0] == '2') or \
+            (address[0] == '3') or \
+            (address[0] == 'm') or \
+            (address[0] == 'n') or \
+            (address[0] == 'b' and address[1] == 'c' and address[2] == '1') or \
+            (address[0] == 't' and address[1] == 'b' and address[2] == '1'))
 
 
 # Return array of bytewords where each byte in buf maps to a word
@@ -491,10 +499,14 @@ def ensure_folder_exists(path):
         return
 
 def file_exists(path):
+    import os
+    from stat import S_ISREG
+
     try:
-        with open(fname, 'wb') as fd:
-            return True
-    except:
+        s = os.stat(path)
+        mode = s[0]
+        return S_ISREG(mode)
+    except OSError as e:
         return False
 
 def folder_exists(path):
@@ -691,6 +703,48 @@ async def scan_for_address(acct_num, address, addr_type, deriv_path, ms_wallet):
             if result == 'x':
                 return -1, False
 
+async def is_valid_btc_address(address):
+    from ux import ux_show_story
+
+    # Strip prefix if present
+    if address[0:8].lower() == 'bitcoin:':
+        address = address[8:]
+
+    if not is_valid_address(address):
+        await ux_show_story('That is not a valid Bitcoin address.', title='Error', left_btn='BACK',
+             right_btn='SCAN', center=True, center_vertically=True)
+        return address, False
+    else:
+        return address, True
+
+async def do_address_verify(acct_num, address, addr_type, deriv_path, multisig_wallet):
+    from common import system
+    from ux import ux_show_story
+
+    system.turbo(True)
+    # Scan addresses to see if it's valid
+    addr_idx, is_change = await scan_for_address(acct_num, address, addr_type, deriv_path, multisig_wallet)
+    if addr_idx >= 0:
+        # Remember where to start from next time
+        save_next_addr(acct_num, addr_type, addr_idx, is_change)
+        address = format_btc_address(address, addr_type)
+        result = await ux_show_story('''Address Verified!
+
+{}
+
+This is a {} address at index {}.'''.format(address, 'change' if is_change == 1 else 'receive',  addr_idx),
+                        title='Verify',
+                        left_btn='BACK',
+                        right_btn='CONTINUE',
+                        center=True,
+                        center_vertically=True)
+        system.turbo(False)
+        return True
+    else:
+        system.turbo(False)
+        return 
+
+
 def is_new_wallet_in_progress():
     from common import settings
     ap = settings.get('wallet_prog', None)
@@ -834,5 +888,19 @@ def is_all_zero(buf):
 
 def split_to_lines(s, width):
     return '\n'.join([s[i:i+width] for i in range(0, len(s), width)])
+
+def split_by_char_size(msg, font):
+    from display import Display
+    from ux import MAX_WIDTH, word_wrap
+    from common import dis
+
+    lines = []
+    for ln in msg.split('\n'):
+        if dis.width(ln, font) > MAX_WIDTH:
+            lines.extend(word_wrap(ln, font))
+        else:
+            # ok if empty string, just a blank line
+            lines.append(ln)
+    return lines
 
 # EOF

@@ -39,3 +39,10 @@ MAX_ACCOUNT_NAME_LEN = 20
 MAX_MULTISIG_NAME_LEN = 20
 
 DEFAULT_ACCOUNT_ENTRY = {'name': 'Primary', 'acct_num': 0}
+
+# Unit types for labeling conversions
+UNIT_TYPE_BTC = 0
+UNIT_TYPE_SATS = 1
+
+# Maximum amount of characters in a text entry screen
+MAX_MESSAGE_LEN = 64

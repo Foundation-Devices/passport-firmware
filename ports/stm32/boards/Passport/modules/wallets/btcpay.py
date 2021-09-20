@@ -18,6 +18,6 @@ BtcPayWallet = {
     'address_validation_method': 'show_addresses',
     'export_modes': [
         {'id': 'qr', 'label': 'QR Code', 'qr_type': QRType.QR},
-        {'id': 'microsd', 'label': 'microSD', 'filename_pattern': '{sd}/passport-btcpay.json', 'filename_pattern_multisig': '{sd}/passport-btcpay-multisig.json'}
+        {'id': 'microsd', 'label': 'microSD', 'filename_pattern': '{sd}/{xfp}-btcpay.json', 'filename_pattern_multisig': '{sd}/{xfp}-btcpay-multisig.json'}
     ]
 }
