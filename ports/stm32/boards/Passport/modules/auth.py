@@ -684,7 +684,7 @@ def sign_transaction(psbt_len, flags=0x0, psbt_sha=None):
 
 def sign_psbt_file(filename):
     # sign a PSBT file found on a microSD card
-    from files import CardSlot, CardMissingError
+    from files import CardSlot, CardMissingError, securely_blank_file
     from common import dis, system
     # from sram4 import tmp_buf  -- the fd.readinto() below doesn't work for some odd reason, even though the fd.readinto() for firmware updates
     tmp_buf = bytearray(1024)
@@ -797,6 +797,8 @@ def sign_psbt_file(filename):
                                 with HexWriter(open(out2_full, 'w+t')) as fd:
                                     # save transaction, in hex
                                     txid = psbt.finalize(fd)
+
+                        securely_blank_file(filename)
 
                     # success and done!
                     break
