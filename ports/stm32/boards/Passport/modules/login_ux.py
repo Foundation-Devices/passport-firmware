@@ -286,3 +286,89 @@ class ChangePinUX(UXStateMachine):
                 utime.sleep(2)
                 system.reset()
                 return
+
+class CheckPinUX(UXStateMachine):
+
+    def __init__(self):
+        # States
+        self.ENTER_PIN = 1
+        self.CHECK_PIN = 2
+        self.PIN_ATTEMPT_FAILED = 3
+        self.SHOW_BRICK_MESSAGE = 4
+
+        # Different initial state if we are a brick
+        if pa.attempts_left == 0:
+            initial_state = self.SHOW_BRICK_MESSAGE
+        else:
+            initial_state = self.ENTER_PIN
+
+        # print('CheckPinUX init: pa={}'.format(pa))
+        super().__init__(initial_state)
+
+        self.pin = None
+
+    async def show(self):
+        while True:
+            # print('show: state={}'.format(self.state))
+            if self.state == self.ENTER_PIN:
+                self.pin = await ux_enter_pin(title='Passport', heading='Enter PIN', left_btn='SHUTDOWN')
+                if self.pin != None:
+                    self.goto(self.CHECK_PIN)
+                else:
+                    await ux_shutdown()
+
+            elif self.state == self.CHECK_PIN:
+                try:
+                    from common import dis
+                    dis.fullscreen('Verifying PIN...')
+                    system.show_busy_bar()
+                    pa.setup(self.pin)
+                    if pa.login():
+                        # PIN is correct!
+                        return
+                    else:
+                        self.goto(self.PIN_ATTEMPT_FAILED)
+
+                except RuntimeError as err:
+                    system.hide_busy_bar()
+                    self.goto(self.PIN_ATTEMPT_FAILED)
+                except BootloaderError as err:
+                    system.hide_busy_bar()
+                    self.goto(self.PIN_ATTEMPT_FAILED)
+                except Exception as err:
+                    # print('Exception err={}'.format(err))
+                    self.goto(self.PIN_ATTEMPT_FAILED)
+                finally:
+                    system.hide_busy_bar()
+
+            elif self.state == self.PIN_ATTEMPT_FAILED:
+                # Switch to bricked view if no more attempts
+                if pa.attempts_left == 0:
+                    self.goto(self.SHOW_BRICK_MESSAGE)
+                    continue
+
+                result = await ux_show_story(
+                    'You have {} attempts remaining.'.format(pa.attempts_left),
+                    title="Wrong PIN",
+                    left_btn='BACK',
+                    right_btn='RETRY',
+                    center_vertically=True,
+                    center=True)
+
+                if result == 'y':
+                    self.pin = None
+                    self.goto(self.ENTER_PIN)
+                elif result == 'x':
+                    return
+
+            elif self.state == self.SHOW_BRICK_MESSAGE:
+                msg = '''After %d failed PIN attempts, this Passport is now permanently disabled.
+
+Restore a microSD backup or seed phrase onto a new Passport to recover your funds.''' % pa.num_fails
+
+                result = await ux_show_story(msg, title='Error', left_btn='SHUTDOWN', right_btn='RESTART')
+                if result == 'x':
+                    await ux_shutdown()
+                else:
+                    import machine
+                    machine.reset()

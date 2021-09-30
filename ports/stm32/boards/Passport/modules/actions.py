@@ -717,12 +717,17 @@ async def erase_wallet(menu, label, item):
 async def view_seed_words(*a):
     import stash
     from common import dis
+    from login_ux import CheckPinUX
 
     if not await ux_confirm(
         'The next screen will show your seed words and, if defined, your passphrase.\n\n' +
         'Anyone who knows these words can control your funds.\n\n' +
         'Do you want to display this sensitive information?', scroll_label='MORE', center=False):
         return
+
+    # PIN entry is required to continue beyond this point
+    check_pin_ux = CheckPinUX()
+    await check_pin_ux.show()
 
     dis.fullscreen('Retrieving Seed...')
     system.show_busy_bar()
