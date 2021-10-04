@@ -15,7 +15,7 @@ Passport strives to offer best-in-class hardware security through a model of sec
 
 * Assemble our hardware in the USA, including circuit boards, under close supervision by Foundation Devices team members.<br/>
 
-Completely air-gapped, Passport communicates only via QR codes or microSD cards – Passport includes no USB port or wireless communications of any kzind.
+Completely air-gapped, Passport communicates only via QR codes or microSD cards – Passport includes no USB port or wireless communications of any kind.
 
 Passport uses the following key components:
 
