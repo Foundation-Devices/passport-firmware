@@ -124,4 +124,23 @@ def units_chooser():
 
     return which, ch, set_units
 
+
+def security_words_chooser():
+    from constants import SECURITY_WORDS_ENABLED_DEFAULT
+
+    ch = ['At PIN Entry', 'Never']
+    va = ['True', 'False']
+    assert len(ch) == len(va)
+
+    security_words = settings.get('security_words_enabled', SECURITY_WORDS_ENABLED_DEFAULT)
+
+    try:
+        which = va.index(security_words)
+    except ValueError:
+        which = 0
+
+    def set_enable_security_words(idx, text):
+        settings.set('security_words_enabled', va[idx])
+
+    return which, ch, set_enable_security_words
 # EOF

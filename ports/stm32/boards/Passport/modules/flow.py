@@ -72,6 +72,7 @@ AdvancedMenu = [
     MenuItem('View Seed Words', f=view_seed_words, predicate=lambda: settings.get('words', True)),
     MenuItem('Developer PubKey', menu=DeveloperPubkeyMenu, menu_title='Developer'),
     MenuItem('Testnet', f=testnet_chooser),
+    MenuItem('Show Security Words', menu_title='Passphrase', chooser=security_words_chooser),
     MenuItem('Erase Passport', f=erase_wallet, arg=True)
 ]
 

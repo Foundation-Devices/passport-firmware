@@ -14,6 +14,7 @@ from utils import UXStateMachine
 from ux import KeyInputHandler, ux_show_story, ux_show_word_list, ux_enter_pin, ux_shutdown, ux_confirm, ux_enter_text
 from pincodes import BootloaderError
 import utime
+from constants import SECURITY_WORDS_ENABLED_DEFAULT
 
 # Separate PIN state machines to keep the logic cleaner in each and make it easier to change messaging in each
 
@@ -37,12 +38,13 @@ class LoginUX(UXStateMachine):
         super().__init__(initial_state)
 
         self.pin = None
+        self.security_words_enabled = settings.get('security_words_enabled', SECURITY_WORDS_ENABLED_DEFAULT)
 
     async def show(self):
         while True:
             # print('show: state={}'.format(self.state))
             if self.state == self.ENTER_PIN:
-                self.pin = await ux_enter_pin(title='Login', heading='Enter PIN', left_btn='SHUTDOWN')
+                self.pin = await ux_enter_pin(title='Login', heading='Enter PIN', left_btn='SHUTDOWN', security_words_enabled=self.security_words_enabled)
                 if self.pin != None:
                     self.goto(self.CHECK_PIN)
                 else:
@@ -147,6 +149,7 @@ class EnterInitialPinUX(UXStateMachine):
         super().__init__(self.ENTER_PIN)
         self.pins = [None, None]  # PIN is entered twice for confirmation
         self.round = 0
+        self.security_words_enabled = settings.get('security_words_enabled', SECURITY_WORDS_ENABLED_DEFAULT)
 
     def is_confirming(self):
         return self.round == 1
@@ -161,7 +164,12 @@ class EnterInitialPinUX(UXStateMachine):
         while True:
             if self.state == self.ENTER_PIN:
                 heading = '{} PIN'.format('Confirm' if self.is_confirming() else 'Enter')
-                self.pins[self.round] = await ux_enter_pin(title='Set PIN', heading=heading, left_btn='SHUTDOWN', hide_attempt_counter=True, is_new_pin=True)
+                self.pins[self.round] = await ux_enter_pin(title='Set PIN',
+                                                            heading=heading,
+                                                            left_btn='SHUTDOWN',
+                                                            hide_attempt_counter=True,
+                                                            is_new_pin=True,
+                                                            security_words_enabled=self.security_words_enabled)
                 if self.pins[self.round] == None:
                     await ux_shutdown()
                     continue
@@ -201,6 +209,7 @@ class ChangePinUX(UXStateMachine):
         super().__init__(self.ENTER_OLD_PIN)
 
         self.reset()
+        self.security_words_enabled = settings.get('security_words_enabled', SECURITY_WORDS_ENABLED_DEFAULT)
 
     def reset(self):
         self.pins = [None, None]
@@ -221,7 +230,7 @@ class ChangePinUX(UXStateMachine):
         while True:
             # print('show: state={}'.format(self.state))
             if self.state == self.ENTER_OLD_PIN:
-                pin = await ux_enter_pin(title='Change PIN', heading='Enter Current PIN')
+                pin = await ux_enter_pin(title='Change PIN', heading='Enter Current PIN', security_words_enabled=self.security_words_enabled)
                 if not self.is_pin_valid(pin):
                     return
 
@@ -233,7 +242,8 @@ class ChangePinUX(UXStateMachine):
                     title='Change PIN',
                     heading='{} New PIN'.format('Enter' if self.round == 0 else 'Confirm'),
                     left_btn='BACK',
-                    is_new_pin=not self.is_confirming())
+                    is_new_pin=not self.is_confirming(),
+                    security_words_enabled=self.security_words_enabled)
                 if not self.is_pin_valid(pin):
                     self.goto_prev()
 
@@ -306,12 +316,13 @@ class CheckPinUX(UXStateMachine):
         super().__init__(initial_state)
 
         self.pin = None
+        self.security_words_enabled = settings.get('security_words_enabled', SECURITY_WORDS_ENABLED_DEFAULT)
 
     async def show(self):
         while True:
             # print('show: state={}'.format(self.state))
             if self.state == self.ENTER_PIN:
-                self.pin = await ux_enter_pin(title='Passport', heading='Enter PIN', left_btn='SHUTDOWN')
+                self.pin = await ux_enter_pin(title='Passport', heading='Enter PIN', left_btn='SHUTDOWN', security_words_enabled=self.security_words_enabled)
                 if self.pin != None:
                     self.goto(self.CHECK_PIN)
                 else:

@@ -46,3 +46,6 @@ UNIT_TYPE_SATS = 1
 
 # Maximum amount of characters in a text entry screen
 MAX_MESSAGE_LEN = 64
+
+# Default security words state
+SECURITY_WORDS_ENABLED_DEFAULT = 'True'

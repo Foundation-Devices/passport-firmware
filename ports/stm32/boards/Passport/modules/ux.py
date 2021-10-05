@@ -1627,7 +1627,7 @@ async def ux_show_word_list(title, words, heading1='', heading2=None, left_align
                 return key
 
 async def ux_enter_pin(title, heading='Enter PIN', left_btn='BACK', right_btn='ENTER', left_btn_function=None,
-        hide_attempt_counter=False, is_new_pin=False):
+        hide_attempt_counter=False, is_new_pin=False, security_words_enabled='True'):
     from common import dis, pa
     import pincodes
 
@@ -1643,6 +1643,7 @@ async def ux_enter_pin(title, heading='Enter PIN', left_btn='BACK', right_btn='E
 
     show_security_words = False
     security_words_confirmed = False
+    security_words = None
     show_short_pin_message = False
     pin = ''
     pressed = False
@@ -1823,7 +1824,7 @@ async def ux_enter_pin(title, heading='Enter PIN', left_btn='BACK', right_btn='E
                         pin += key
 
         # Decide whether to show the security words
-        if not security_words_confirmed:
+        if not security_words_confirmed and security_words_enabled == 'True':
             show_security_words = len(pin) == SHOW_SECURITY_WORDS_AT_LEN
 
 
