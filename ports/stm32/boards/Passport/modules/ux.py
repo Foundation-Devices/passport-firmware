@@ -1627,7 +1627,7 @@ async def ux_show_word_list(title, words, heading1='', heading2=None, left_align
                 return key
 
 async def ux_enter_pin(title, heading='Enter PIN', left_btn='BACK', right_btn='ENTER', left_btn_function=None,
-        hide_attempt_counter=False, is_new_pin=False, security_words_enabled='True'):
+        hide_attempt_counter=False, is_new_pin=False, security_words_enabled='True', saved_pin=None):
     from common import dis, pa
     import pincodes
 
@@ -1645,7 +1645,7 @@ async def ux_enter_pin(title, heading='Enter PIN', left_btn='BACK', right_btn='E
     security_words_confirmed = False
     security_words = None
     show_short_pin_message = False
-    pin = ''
+    pin = '' if saved_pin == None else saved_pin
     pressed = False
     security_label = 'NEXT' if is_new_pin else 'CONFIRM'
 
@@ -1796,8 +1796,9 @@ async def ux_enter_pin(title, heading='Enter PIN', left_btn='BACK', right_btn='E
                         pressed = True
 
         elif event_type == 'up':
+            # Return false when user selects left_btn
             if key == 'x':
-                return None
+                return False, pin
 
             elif key == 'y':
                 if show_security_words:
@@ -1811,7 +1812,8 @@ async def ux_enter_pin(title, heading='Enter PIN', left_btn='BACK', right_btn='E
                     continue
                 else:
                     # print('RETURNING PIN = {}'.format(pin))
-                    return pin
+                    # Return true when user complets PIN entry successfully
+                    return True, pin
 
             elif key in '0123456789':
                 if not show_security_words:

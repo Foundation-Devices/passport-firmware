@@ -44,8 +44,12 @@ class LoginUX(UXStateMachine):
         while True:
             # print('show: state={}'.format(self.state))
             if self.state == self.ENTER_PIN:
-                self.pin = await ux_enter_pin(title='Login', heading='Enter PIN', left_btn='SHUTDOWN', security_words_enabled=self.security_words_enabled)
-                if self.pin != None:
+                success, self.pin = await ux_enter_pin( title='Login',
+                                                        heading='Enter PIN',
+                                                        left_btn='SHUTDOWN',
+                                                        security_words_enabled=self.security_words_enabled,
+                                                        saved_pin=self.pin)
+                if self.pin != None and success == True:
                     self.goto(self.CHECK_PIN)
                 else:
                     await ux_shutdown()
@@ -164,13 +168,14 @@ class EnterInitialPinUX(UXStateMachine):
         while True:
             if self.state == self.ENTER_PIN:
                 heading = '{} PIN'.format('Confirm' if self.is_confirming() else 'Enter')
-                self.pins[self.round] = await ux_enter_pin(title='Set PIN',
+                success, self.pins[self.round] = await ux_enter_pin(title='Set PIN',
                                                             heading=heading,
                                                             left_btn='SHUTDOWN',
                                                             hide_attempt_counter=True,
                                                             is_new_pin=True,
-                                                            security_words_enabled=self.security_words_enabled)
-                if self.pins[self.round] == None:
+                                                            security_words_enabled=self.security_words_enabled,
+                                                            saved_pin=self.pins[self.round])
+                if self.pins[self.round] == None or success == False:
                     await ux_shutdown()
                     continue
 
@@ -227,24 +232,29 @@ class ChangePinUX(UXStateMachine):
 
     async def show(self):
         from common import system
+
+        pin = None
         while True:
             # print('show: state={}'.format(self.state))
             if self.state == self.ENTER_OLD_PIN:
-                pin = await ux_enter_pin(title='Change PIN', heading='Enter Current PIN', security_words_enabled=self.security_words_enabled)
-                if not self.is_pin_valid(pin):
+                success, pin = await ux_enter_pin(  title='Change PIN',
+                                                    heading='Enter Current PIN',
+                                                    security_words_enabled=self.security_words_enabled,
+                                                    saved_pin=pin)
+                if not self.is_pin_valid(pin) or success == False:
                     return
 
                 self.old_pin = pin
                 self.goto(self.ENTER_NEW_PIN)
 
             elif self.state == self.ENTER_NEW_PIN:
-                pin = await ux_enter_pin(
+                success, pin = await ux_enter_pin(
                     title='Change PIN',
                     heading='{} New PIN'.format('Enter' if self.round == 0 else 'Confirm'),
                     left_btn='BACK',
                     is_new_pin=not self.is_confirming(),
                     security_words_enabled=self.security_words_enabled)
-                if not self.is_pin_valid(pin):
+                if not self.is_pin_valid(pin) or success == False:
                     self.goto_prev()
 
                 self.pins[self.round] = pin
@@ -322,8 +332,11 @@ class CheckPinUX(UXStateMachine):
         while True:
             # print('show: state={}'.format(self.state))
             if self.state == self.ENTER_PIN:
-                self.pin = await ux_enter_pin(title='Passport', heading='Enter PIN', left_btn='SHUTDOWN', security_words_enabled=self.security_words_enabled)
-                if self.pin != None:
+                success, self.pin = await ux_enter_pin( title='Passport',
+                                                        heading='Enter PIN',
+                                                        left_btn='SHUTDOWN',security_words_enabled=self.security_words_enabled,
+                                                        saved_pin=self.pin)
+                if self.pin != None and success == True:
                     self.goto(self.CHECK_PIN)
                 else:
                     await ux_shutdown()
