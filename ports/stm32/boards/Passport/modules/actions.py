@@ -21,7 +21,7 @@ from uasyncio import sleep_ms
 import common
 from common import settings, system, noise, dis
 from utils import (UXStateMachine, imported, pretty_short_delay, xfp2str, to_str,
-                   truncate_string_to_width, set_next_addr, scan_for_address, get_accounts, run_chooser,
+                   truncate_string_to_width, set_next_addr, get_accounts, run_chooser,
                    make_account_name_num, is_valid_address, save_next_addr, needs_microsd, format_btc_address,
                    is_all_zero, bytes_to_hex_str, split_to_lines, is_valid_btc_address, do_address_verify, run_chooser)
 from wallets.utils import get_export_mode, get_addr_type_from_address, get_deriv_path_from_addr_type_and_acct
@@ -272,6 +272,7 @@ class VerifyAddressUX(UXStateMachine):
                 if address == None:
                     return
 
+                address = address.lower()
                 address, is_valid_btc = await is_valid_btc_address(address)
                 if is_valid_btc == False:
                     if not self.goto_prev():

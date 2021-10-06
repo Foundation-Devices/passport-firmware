@@ -447,6 +447,7 @@ async def show_top_menu():
 # TODO: For now this just checks the front bytes, but it could ensure the whole thing is valid
 def is_valid_address(address):
     # Valid addresses: 1 , 3 , bc1, tb1, m, n, 2
+    address = address.lower()
     return  (len(address) > 3) and \
             ((address[0] == '1') or \
             (address[0] == '2') or \
