@@ -21,6 +21,7 @@ from common import system, dis
 from data_codecs.qr_type import QRType
 from data_codecs.qr_factory import get_qr_decoder_for_data, make_qr_encoder
 from utils import is_alphanumeric_qr
+from constants import SECURITY_WORDS_ENABLED_DEFAULT
 
 LEFT_MARGIN = 8
 RIGHT_MARGIN = 6
@@ -1627,7 +1628,7 @@ async def ux_show_word_list(title, words, heading1='', heading2=None, left_align
                 return key
 
 async def ux_enter_pin(title, heading='Enter PIN', left_btn='BACK', right_btn='ENTER', left_btn_function=None,
-        hide_attempt_counter=False, is_new_pin=False, security_words_enabled='True', saved_pin=None):
+        hide_attempt_counter=False, is_new_pin=False, security_words_enabled=SECURITY_WORDS_ENABLED_DEFAULT, saved_pin=None):
     from common import dis, pa
     import pincodes
 
@@ -1826,7 +1827,7 @@ async def ux_enter_pin(title, heading='Enter PIN', left_btn='BACK', right_btn='E
                         pin += key
 
         # Decide whether to show the security words
-        if not security_words_confirmed and security_words_enabled == 'True':
+        if not security_words_confirmed and security_words_enabled:
             show_security_words = len(pin) == SHOW_SECURITY_WORDS_AT_LEN
 
 

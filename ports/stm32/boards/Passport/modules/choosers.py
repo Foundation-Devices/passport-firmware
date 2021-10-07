@@ -129,7 +129,7 @@ def security_words_chooser():
     from constants import SECURITY_WORDS_ENABLED_DEFAULT
 
     ch = ['At PIN Entry', 'Never']
-    va = ['True', 'False']
+    va = [True, False]
     assert len(ch) == len(va)
 
     security_words = settings.get('security_words_enabled', SECURITY_WORDS_ENABLED_DEFAULT)
