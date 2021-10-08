@@ -1745,6 +1745,10 @@ async def ux_enter_pin(title, heading='Enter PIN', left_btn='BACK', right_btn='E
         # Since box size can vary, we advance a constant here and center the box in that space based on height above
         y = 128
 
+        # Decide whether to show the security words
+        if not security_words_confirmed and security_words_enabled:
+            show_security_words = len(pin) == SHOW_SECURITY_WORDS_AT_LEN
+
         if show_short_pin_message:
             y = draw_popup('Info', ['PIN must be at','least 6 digits'], y)
 
@@ -1825,10 +1829,6 @@ async def ux_enter_pin(title, heading='Enter PIN', left_btn='BACK', right_btn='E
                         pass
                     else:
                         pin += key
-
-        # Decide whether to show the security words
-        if not security_words_confirmed and security_words_enabled:
-            show_security_words = len(pin) == SHOW_SECURITY_WORDS_AT_LEN
 
 
 async def ux_shutdown():
