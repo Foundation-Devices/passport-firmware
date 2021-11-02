@@ -488,10 +488,12 @@ class ApproveTransaction(UserAuthorizedAction):
                 outputs = uio.StringIO()
                 outputs.write('Amount:')
 
+                has_change = False
                 first = True
                 for idx, tx_out in self.psbt.output_iter():
                     outp = self.psbt.outputs[idx]
                     if outp.is_change:
+                        has_change = True
                         continue
 
                     if first:
@@ -507,9 +509,13 @@ class ApproveTransaction(UserAuthorizedAction):
 
                 # print('total_out={} total_in={} change={}'.format=(self.psbt.total_value_out, self.psbt.total_value_in, self.psbt.total_value_in - self.psbt.total_value_out))
                 pages = [
-                    {'title': 'Sign Txn', 'msg': outputs.getvalue(), 'center': True, 'center_vertically': True},
-                    {'title': 'Sign Txn', 'msg': self.render_change_text(), 'center': True, 'center_vertically': True},
+                    {'title': 'Sign Txn', 'msg': outputs.getvalue(), 'center': True, 'center_vertically': True}
                 ]
+
+                if has_change != False:
+                    pages.append(
+                        {'title': 'Sign Txn', 'msg': self.render_change_text(), 'center': True, 'center_vertically': True}
+                    )
 
                 warnings = self.render_warnings()
                 # print('warnings = "{}"'.format(warnings))
