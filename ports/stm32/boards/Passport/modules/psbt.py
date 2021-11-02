@@ -190,7 +190,6 @@ class psbtProxy:
                 # print('not expecting key')
                 assert len(key) == 1        # not expecting key
 
-            # COREY COME BACK TO THIS, store is being sent the `kt` which we have seen is 0.. causing unknown and no subpaths to be stored
             # storing offset and length only! Mostly.
             # print('self.short_values={}'.format(self.short_values))
             if kt in self.short_values:
@@ -242,14 +241,10 @@ class psbtProxy:
         # - creates dictionary: pubkey => [xfp, *path]
         # - will be single entry for non-p2sh ins and outs
 
-        print('Corey: subpaths: {}, num_our_keys: {}'.format(self.subpaths, self.num_our_keys))
-
         if not self.subpaths:
-            print('Corey: returning at if not self.subpaths')
             return 0
 
         if self.num_our_keys != None:
-            print('Corey: returning at if self.num_our_keys != None')
             # already been here once
             return self.num_our_keys
 
@@ -270,7 +265,6 @@ class psbtProxy:
             v = self.get(self.subpaths[pk])
             here = list(unpack_from('<%dI' % (vl//4), v))
 
-            print('Corey: here[0]: {}'.format(here[0]))
             if here[0] == 0:
                 here[0] = my_xfp
                 if not any(True for k,_ in warnings if 'XFP' in k):
@@ -281,7 +275,6 @@ class psbtProxy:
             self.subpaths[pk] = here
 
             if here[0] == my_xfp or here[0] == swab32(my_xfp):
-                print('Corey: adding 1 to num_ours')
                 num_ours += 1
             else:
                 # Address that isn't based on my seed; might be another leg in a p2sh,
@@ -289,7 +282,6 @@ class psbtProxy:
                 pass
 
         self.num_our_keys = num_ours
-        print('Corey, set num_our_keys to {}'.format(self.num_our_keys))
         return num_ours
 
 
@@ -316,7 +308,6 @@ class psbtOutputProxy(psbtProxy):
 
 
     def store(self, kt, key, val):
-        print('Corey: store: kt: {}, key: {}, val: {}'.format(kt, key, val))
         if kt == PSBT_OUT_BIP32_DERIVATION:
             if not self.subpaths:
                 self.subpaths = {}
@@ -359,21 +350,15 @@ class psbtOutputProxy(psbtProxy):
         # - full key derivation and validation is done during signing, and critical.
         # - we raise fraud alarms, since these are not innocent errors
         #
-
-        print('Corey: xfp Im about to check: {}, index: {}'.format(my_xfp, out_idx))
         num_ours = self.parse_subpaths(my_xfp)
-        print('Corey: num_ours: {}'.format(num_ours))
 
         if num_ours == 0:
             # - not considered fraud because other signers looking at PSBT may have them
             # - user will see them as normal outputs, which they are from our PoV.
-            print('Corey: returning because num_ours: {}'.format(num_ours))
             return
 
         # - must match expected address for this output, coming from unsigned txn
         addr_type, addr_or_pubkey, is_segwit = txo.get_address()
-        # Corey print out values here and analyze (addr_type, addr_or_pubkey, is_segwit)
-        print('Corey: addr_type: {}, addr_or_pubkey: {}, is_segwit: {}'.format(addr_type, addr_or_pubkey, is_segwit))
 
         if len(self.subpaths) == 1:
             # p2pk, p2pkh, p2wpkh cases
@@ -390,7 +375,6 @@ class psbtOutputProxy(psbtProxy):
                 raise FraudulentChangeOutput(out_idx, "P2PK change output is fraudulent")
 
             self.is_change = True
-            print('Corey: is_change = True #1')
             return
 
         # Figure out what the hashed addr should be
@@ -429,7 +413,6 @@ class psbtOutputProxy(psbtProxy):
                     # - might be a p2sh output for another wallet that isn't us
                     # - not fraud, just an output with more details than we need.
                     self.is_change = False
-                    print('Corey is_change False because if not active_multisig')
                     return
 
                 # redeem script must be exactly what we expect
@@ -452,7 +435,6 @@ class psbtOutputProxy(psbtProxy):
                     if expect_wsh != addr_or_pubkey:
                         raise FraudulentChangeOutput(out_idx, "P2WSH witness script has wrong hash")
 
-                    print('Corey is_change True because is_segwit')
                     self.is_change = True
                     return
 
@@ -477,8 +459,6 @@ class psbtOutputProxy(psbtProxy):
             expect_pkh = hash160(expect_pubkey)
         else:
             # we don't know how to "solve" this type of input
-            # Corey possibly this? Maybe we don't check for the addr_type used by Casa
-            print('Corey: addr_type wasn\'t p2pkh, instead addr_type: {} .. returning'.format(addr_type))
             return
 
         if pkh != expect_pkh:
@@ -551,7 +531,6 @@ class psbtInputProxy(psbtProxy):
 
         # rework the pubkey => subpath mapping
         self.parse_subpaths(my_xfp)
-        print('Corey: after parse_subpaths, self.num_our_keys = {}'.format(self.num_our_keys))
 
         # sighash, but we're probably going to ignore anyway.
         self.sighash = SIGHASH_ALL if self.sighash is None else self.sighash
@@ -940,12 +919,9 @@ class psbtObject(psbtProxy):
         old_pos = fd.tell()
         fd.seek(self.txn[0])
 
-        print('Corey: PSBT: {}'.format(fd))
-
         # see serializations.py:CTransaction.deserialize()
         # and BIP-144 ... we expect witness serialization, but
         # don't force that
-
         self.txn_version, marker, flags = unpack("<iBB", fd.read(6))
         self.had_witness = (marker == 0 and flags != 0x0)
 
