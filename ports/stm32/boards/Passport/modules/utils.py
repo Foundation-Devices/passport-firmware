@@ -531,7 +531,7 @@ def find_address(path, start_address_idx, address, addr_type, ms_wallet, is_chan
         with stash.SensitiveValues() as sv:
             if ms_wallet:
                 # NOTE: Can't easily reverse order here, so this is slightly less efficient
-                for (curr_idx, paths, curr_address, script) in ms_wallet.yield_addresses(start_address_idx, max_to_check):
+                for (curr_idx, paths, curr_address, script) in ms_wallet.yield_addresses(start_address_idx, max_to_check, change_idx=1 if is_change else 0):
                     # print('curr_idx={}: paths={} curr_address = {}'.format(curr_idx, paths, curr_address))
 
                     if curr_address == address:
