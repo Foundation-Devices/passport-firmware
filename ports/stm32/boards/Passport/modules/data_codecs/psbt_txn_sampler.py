@@ -15,7 +15,7 @@ class PsbtTxnSampler(DataSampler):
     # Return True if it matches or False if not.
     @classmethod
     def sample(cls, data):
-        print('psbt sampler: data={}'.format(b2a_hex(data)))
+        # print('psbt sampler: data={}'.format(b2a_hex(data)))
         if data[0:5] == b'psbt\xff':
             return True
         if data[0:10] == b'70736274ff':        # hex-encoded

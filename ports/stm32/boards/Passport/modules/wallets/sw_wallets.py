@@ -15,6 +15,7 @@ from .electrum import ElectrumWallet
 # from .fullynoded import FullyNodedWallet
 # from .gordian import GordianWallet
 # from .lily import LilyWallet
+from .simple_bitcoin_wallet import SimpleBitcoinWallet
 from .sparrow import SparrowWallet
 from .specter import SpecterWallet
 from .wasabi import WasabiWallet
@@ -31,6 +32,7 @@ supported_software_wallets = [
     # FullyNodedWallet,
     # GordianWallet,
     # LilyWallet,
+    SimpleBitcoinWallet,
     SparrowWallet,
     SpecterWallet,
     WasabiWallet,
