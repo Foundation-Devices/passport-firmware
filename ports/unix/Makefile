@@ -167,6 +167,11 @@ OBJ = $(PY_O)
 OBJ += $(addprefix $(BUILD)/, $(SRC_C:.c=.o))
 OBJ += $(addprefix $(BUILD)/, $(LIB_SRC_C:.c=.o))
 
+# secp256k1-zkp
+# NOTE: this is done here because the flag from the Unix and STM32 ports
+# differ.
+CFLAGS += -DSECP256K1_CONTEXT_SIZE=208 -Wno-sign-compare
+
 # List of sources for qstr extraction
 SRC_QSTR += $(SRC_C) $(LIB_SRC_C)
 # Append any auto-generated sources that are needed by sources listed in

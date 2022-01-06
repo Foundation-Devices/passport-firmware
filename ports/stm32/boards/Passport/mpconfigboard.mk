@@ -45,12 +45,26 @@ SRC_MOD += $(addprefix boards/$(BOARD)/trezor-firmware/crypto/,\
 				chacha20poly1305/poly1305-donna.c \
 				chacha20poly1305/rfc7539.c \
 				shamir.c groestl.c slip39.c rand.c rfc6979.c \
-				hmac_drbg.c )
+				hmac_drbg.c zkp_bip340.c)
+SRC_MOD += boards/$(BOARD)/trezor-firmware/core/vendor/trezor-crypto/zkp_context.c \
+           boards/$(BOARD)/trezor-firmware/vendor/secp256k1-zkp/src/secp256k1.c \
 
 # settings that apply only to crypto C-lang code
 build-Passport/boards/Passport/crypto/%.o: CFLAGS_MOD += \
 	-DUSE_BIP39_CACHE=0 -DBIP32_CACHE_SIZE=0 -DUSE_BIP32_CACHE=0 -DBIP32_CACHE_MAXDEPTH=0 \
 	-DRAND_PLATFORM_INDEPENDENT=1 -DUSE_BIP39_GENERATE=0 -DUSE_BIP32_25519_CURVES=0
+
+build-Passport/boards/Passport/trezor-firmware/vendor/secp256k1-zkp/src/secp256k1.o: CFLAGS_MOD += \
+    -DUSE_NUM_NONE -DUSE_FIELD_INV_BUILTIN \
+    -DUSE_FIELD_10X26 -DUSE_SCALAR_8X32 -DUSE_ECMULT_STATIC_PRECOMPUTATION \
+    -DUSE_EXTERNAL_DEFAULT_CALLBACKS -DECMULT_GEN_PREC_BITS=4 \
+    -DECMULT_WINDOW_SIZE=8 -DENABLE_MODULE_GENERATOR \
+    -DENABLE_MODULE_RECOVERY -DENABLE_MODULE_SCHNORRSIG \
+    -DENABLE_MODULE_EXTRAKEYS -Iboards/$(BOARD)/trezor-firmware/vendor/secp256k1-zkp \
+    -Iboards/$(BOARD)/trezor-firmware/vendor/secp256k1-zkp/src -Wno-unused-function
+
+#build-Passport/boards/Passport/trezor-firmware/vendor/secp256k1-zkp/src/secp256k1.o:
+#	echo $(CFLAGS_MOD)
 
 CFLAGS_MOD += -Iboards/$(BOARD)/trezor-firmware/core/embed/extmod/modtrezorcrypto -Iboards/$(BOARD)/trezor-firmware/core
 SRC_MOD += $(addprefix boards/$(BOARD)/trezor-firmware/core/embed/extmod/modtrezorcrypto/, modtrezorcrypto.c crc.c)

@@ -211,7 +211,7 @@ STATIC mp_obj_t modtcc_bech32_encode(mp_obj_t hrp_obj, mp_obj_t segwit_version_o
             size_t data_len);
      */
     // printf("hrp=%s, data_len=%d\n", hrp, data_len);
-    int rv = bech32_encode(vstr.buf, hrp, data, data_len);
+    int rv = bech32_encode(vstr.buf, hrp, data, data_len, BECH32_ENCODING_BECH32);
 
     if(rv != 1) {
         mp_raise_ValueError("encode fail");

@@ -472,6 +472,12 @@ OBJ += $(addprefix $(BUILD)/, $(SRC_USBDEV:.c=.o))
 OBJ += $(addprefix $(BUILD)/, $(SRC_MOD:.c=.o))
 OBJ += $(BUILD)/pins_$(BOARD).o
 
+# secp256k1-zkp ARM assembly.
+# NOTE: this is done here because the assembly and the flag from the Unix and
+# STM32 ports differ.
+OBJ += $(SECP256K1_DIR)/src/asm/field_10x26_arm.o
+CFLAGS += -DUSE_EXTERNAL_ASM -DSECP256K1_CONTEXT_SIZE=184
+
 # This file contains performance critical functions so turn up the optimisation
 # level.  It doesn't add much to the code size and improves performance a bit.
 # Don't use -O3 with this file because gcc tries to optimise memset in terms of itself.

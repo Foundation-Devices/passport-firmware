@@ -670,7 +670,7 @@ First use Advanced > Erase Passport to remove the current seed.''', right_btn='O
         return False
 
     bip = bip39()
-    len = bip.mnemonic_to_entropy(mnemonic, entropy)
+    len = bip.mnemonic_to_bits(mnemonic, entropy)
 
     if len == 264: # 24 words x 11 bits each
         trim_pos = 32
