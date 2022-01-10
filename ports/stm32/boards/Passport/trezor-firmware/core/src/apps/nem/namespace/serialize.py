@@ -1,5 +1,4 @@
-from trezor.messages.NEMProvisionNamespace import NEMProvisionNamespace
-from trezor.messages.NEMTransactionCommon import NEMTransactionCommon
+from trezor.messages import NEMProvisionNamespace, NEMTransactionCommon
 
 from ..helpers import NEM_TRANSACTION_TYPE_PROVISION_NAMESPACE
 from ..writers import (
@@ -23,6 +22,6 @@ def serialize_provision_namespace(
     if namespace.parent:
         write_bytes_with_len(tx, namespace.parent.encode())
     else:
-        write_uint32_le(tx, 0xFFFFFFFF)
+        write_uint32_le(tx, 0xFFFF_FFFF)
 
     return tx

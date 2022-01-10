@@ -3,8 +3,6 @@ import ustruct
 from trezor.crypto import base32
 from trezor.wire import ProcessError
 
-from apps.common import HARDENED
-
 
 def public_key_from_address(address: str) -> bytes:
     """Extracts public key from an address
@@ -16,7 +14,7 @@ def public_key_from_address(address: str) -> bytes:
     return b[1:-2]
 
 
-def address_from_public_key(pubkey: bytes):
+def address_from_public_key(pubkey: bytes) -> str:
     """Returns the base32-encoded version of public key bytes (G...)"""
     address = bytearray()
     address.append(6 << 3)  # version -> 'G'
@@ -26,23 +24,7 @@ def address_from_public_key(pubkey: bytes):
     return base32.encode(address)
 
 
-def validate_full_path(path: list) -> bool:
-    """
-    Validates derivation path to equal 44'/148'/a',
-    where `a` is an account index from 0 to 1 000 000.
-    """
-    if len(path) != 3:
-        return False
-    if path[0] != 44 | HARDENED:
-        return False
-    if path[1] != 148 | HARDENED:
-        return False
-    if path[2] < HARDENED or path[2] > 1000000 | HARDENED:
-        return False
-    return True
-
-
-def _crc16_checksum_verify(data: bytes, checksum: bytes):
+def _crc16_checksum_verify(data: bytes, checksum: bytes) -> None:
     if _crc16_checksum(data) != checksum:
         raise ProcessError("Invalid address checksum")
 

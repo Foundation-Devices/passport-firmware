@@ -1,14 +1,14 @@
 from micropython import const
 
 from trezor.crypto import bech32
-from trezor.crypto.scripts import sha256_ripemd160_digest
-from trezor.messages.BinanceCancelMsg import BinanceCancelMsg
-from trezor.messages.BinanceInputOutput import BinanceInputOutput
-from trezor.messages.BinanceOrderMsg import BinanceOrderMsg
-from trezor.messages.BinanceSignTx import BinanceSignTx
-from trezor.messages.BinanceTransferMsg import BinanceTransferMsg
-
-from apps.common import HARDENED
+from trezor.crypto.scripts import sha256_ripemd160
+from trezor.messages import (
+    BinanceCancelMsg,
+    BinanceInputOutput,
+    BinanceOrderMsg,
+    BinanceSignTx,
+    BinanceTransferMsg,
+)
 
 ENVELOPE_BLUEPRINT = '{{"account_number":"{account_number}","chain_id":"{chain_id}","data":null,"memo":"{memo}","msgs":[{msgs}],"sequence":"{sequence}","source":"{source}"}}'
 MSG_TRANSFER_BLUEPRINT = '{{"inputs":[{inputs}],"outputs":[{outputs}]}}'
@@ -22,11 +22,11 @@ DECIMALS = const(8)
 
 
 def produce_json_for_signing(envelope: BinanceSignTx, msg) -> str:
-    if isinstance(msg, BinanceTransferMsg):
+    if BinanceTransferMsg.is_type_of(msg):
         json_msg = produce_transfer_json(msg)
-    elif isinstance(msg, BinanceOrderMsg):
+    elif BinanceOrderMsg.is_type_of(msg):
         json_msg = produce_neworder_json(msg)
-    elif isinstance(msg, BinanceCancelMsg):
+    elif BinanceCancelMsg.is_type_of(msg):
         json_msg = produce_cancel_json(msg)
     else:
         raise ValueError("input message unrecognized, is of type " + type(msg).__name__)
@@ -86,30 +86,8 @@ def address_from_public_key(pubkey: bytes, hrp: str) -> str:
     HRP - bnb for productions, tbnb for tests
     """
 
-    h = sha256_ripemd160_digest(pubkey)
+    h = sha256_ripemd160(pubkey).digest()
 
     convertedbits = bech32.convertbits(h, 8, 5, False)
 
-    return bech32.bech32_encode(hrp, convertedbits)
-
-
-def validate_full_path(path: list) -> bool:
-    """
-    Validates derivation path to equal 44'/714'/a'/0/0,
-    where `a` is an account index from 0 to 1 000 000.
-    Similar to Ethereum this should be 44'/714'/a', but for
-    compatibility with other HW vendors we use 44'/714'/a'/0/0.
-    """
-    if len(path) != 5:
-        return False
-    if path[0] != 44 | HARDENED:
-        return False
-    if path[1] != 714 | HARDENED:
-        return False
-    if path[2] < HARDENED or path[2] > 1000000 | HARDENED:
-        return False
-    if path[3] != 0:
-        return False
-    if path[4] != 0:
-        return False
-    return True
+    return bech32.bech32_encode(hrp, convertedbits, bech32.Encoding.BECH32)

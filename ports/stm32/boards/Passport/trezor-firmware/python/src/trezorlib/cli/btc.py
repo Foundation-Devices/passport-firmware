@@ -1,6 +1,6 @@
 # This file is part of the Trezor project.
 #
-# Copyright (C) 2012-2019 SatoshiLabs and contributors
+# Copyright (C) 2012-2022 SatoshiLabs and contributors
 #
 # This library is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Lesser General Public License version 3
@@ -16,6 +16,7 @@
 
 import base64
 import json
+from typing import TYPE_CHECKING, Dict, List, Optional, TextIO, Tuple
 
 import click
 import construct as c
@@ -23,16 +24,29 @@ import construct as c
 from .. import btc, messages, protobuf, tools
 from . import ChoiceType, with_client
 
+if TYPE_CHECKING:
+    from ..client import TrezorClient
+
 INPUT_SCRIPTS = {
     "address": messages.InputScriptType.SPENDADDRESS,
     "segwit": messages.InputScriptType.SPENDWITNESS,
     "p2shsegwit": messages.InputScriptType.SPENDP2SHWITNESS,
+    "taproot": messages.InputScriptType.SPENDTAPROOT,
+    "pkh": messages.InputScriptType.SPENDADDRESS,
+    "wpkh": messages.InputScriptType.SPENDWITNESS,
+    "sh-wpkh": messages.InputScriptType.SPENDP2SHWITNESS,
+    "tr": messages.InputScriptType.SPENDTAPROOT,
 }
 
 OUTPUT_SCRIPTS = {
     "address": messages.OutputScriptType.PAYTOADDRESS,
     "segwit": messages.OutputScriptType.PAYTOWITNESS,
     "p2shsegwit": messages.OutputScriptType.PAYTOP2SHWITNESS,
+    "taproot": messages.OutputScriptType.PAYTOTAPROOT,
+    "pkh": messages.OutputScriptType.PAYTOADDRESS,
+    "wpkh": messages.OutputScriptType.PAYTOWITNESS,
+    "sh-wpkh": messages.OutputScriptType.PAYTOP2SHWITNESS,
+    "tr": messages.OutputScriptType.PAYTOTAPROOT,
 }
 
 DEFAULT_COIN = "Bitcoin"
@@ -49,25 +63,30 @@ XpubStruct = c.Struct(
 )
 
 
-def xpub_deserialize(xpubstr):
+def xpub_deserialize(xpubstr: str) -> Tuple[str, messages.HDNodeType]:
     xpub_bytes = tools.b58check_decode(xpubstr)
     data = XpubStruct.parse(xpub_bytes)
+    if data.key[0] == 0:
+        private_key = data.key[1:]
+        public_key = None
+    else:
+        public_key = data.key
+        private_key = None
+
     node = messages.HDNodeType(
         depth=data.depth,
         fingerprint=data.fingerprint,
         child_num=data.child_num,
         chain_code=data.chain_code,
+        public_key=public_key,  # type: ignore ["Unknown | None" cannot be assigned to parameter "public_key"]
+        private_key=private_key,
     )
-    if data.key[0] == 0:
-        node.private_key = data.key[1:]
-    else:
-        node.public_key = data.key
 
     return data.version, node
 
 
 @click.group(name="btc")
-def cli():
+def cli() -> None:
     """Bitcoin and Bitcoin-like coins commands."""
 
 
@@ -77,7 +96,7 @@ def cli():
 
 
 @cli.command()
-@click.option("-c", "--coin")
+@click.option("-c", "--coin", default=DEFAULT_COIN)
 @click.option("-n", "--address", required=True, help="BIP-32 path")
 @click.option("-t", "--script-type", type=ChoiceType(INPUT_SCRIPTS), default="address")
 @click.option("-d", "--show-display", is_flag=True)
@@ -92,15 +111,15 @@ def cli():
 )
 @with_client
 def get_address(
-    client,
-    coin,
-    address,
-    script_type,
-    show_display,
-    multisig_xpub,
-    multisig_threshold,
-    multisig_suffix_length,
-):
+    client: "TrezorClient",
+    coin: str,
+    address: str,
+    script_type: messages.InputScriptType,
+    show_display: bool,
+    multisig_xpub: List[str],
+    multisig_threshold: Optional[int],
+    multisig_suffix_length: int,
+) -> str:
     """Get address for specified path.
 
     To obtain a multisig address, provide XPUBs of all signers (including your own) in
@@ -121,9 +140,9 @@ def get_address(
     You can specify a different suffix length by using the -N option. For example, to
     use final xpubs, specify '-N 0'.
     """
-    coin = coin or DEFAULT_COIN
     address_n = tools.parse_path(address)
 
+    multisig: Optional[messages.MultisigRedeemScriptType]
     if multisig_xpub:
         if multisig_threshold is None:
             raise click.ClickException("Please specify signature threshold")
@@ -149,15 +168,21 @@ def get_address(
 
 
 @cli.command()
-@click.option("-c", "--coin")
+@click.option("-c", "--coin", default=DEFAULT_COIN)
 @click.option("-n", "--address", required=True, help="BIP-32 path, e.g. m/44'/0'/0'")
 @click.option("-e", "--curve")
 @click.option("-t", "--script-type", type=ChoiceType(INPUT_SCRIPTS), default="address")
 @click.option("-d", "--show-display", is_flag=True)
 @with_client
-def get_public_node(client, coin, address, curve, script_type, show_display):
+def get_public_node(
+    client: "TrezorClient",
+    coin: str,
+    address: str,
+    curve: Optional[str],
+    script_type: messages.InputScriptType,
+    show_display: bool,
+) -> dict:
     """Get public node of given path."""
-    coin = coin or DEFAULT_COIN
     address_n = tools.parse_path(address)
     result = btc.get_public_node(
         client,
@@ -179,6 +204,79 @@ def get_public_node(client, coin, address, curve, script_type, show_display):
     }
 
 
+def _append_descriptor_checksum(desc: str) -> str:
+    checksum = tools.descriptor_checksum(desc)
+    return f"{desc}#{checksum}"
+
+
+def _get_descriptor(
+    client: "TrezorClient",
+    coin: Optional[str],
+    account: str,
+    script_type: messages.InputScriptType,
+    show_display: bool,
+) -> str:
+    coin = coin or DEFAULT_COIN
+    if script_type == messages.InputScriptType.SPENDADDRESS:
+        acc_type = 44
+        fmt = "pkh({})"
+    elif script_type == messages.InputScriptType.SPENDP2SHWITNESS:
+        acc_type = 49
+        fmt = "sh(wpkh({}))"
+    elif script_type == messages.InputScriptType.SPENDWITNESS:
+        acc_type = 84
+        fmt = "wpkh({})"
+    elif script_type == messages.InputScriptType.SPENDTAPROOT:
+        acc_type = 86
+        fmt = "tr({})"
+    else:
+        raise ValueError("Unsupported account type")
+
+    if coin is None or coin == "Bitcoin":
+        coin_type = 0
+    elif coin == "Testnet" or coin == "Regtest":
+        coin_type = 1
+    else:
+        raise ValueError("Unsupported coin")
+
+    path = f"m/{acc_type}'/{coin_type}'/{account}'"
+    n = tools.parse_path(path)
+    pub = btc.get_public_node(
+        client,
+        n,
+        show_display=show_display,
+        coin_name=coin,
+        script_type=script_type,
+        ignore_xpub_magic=True,
+    )
+
+    fingerprint = pub.root_fingerprint if pub.root_fingerprint is not None else 0
+    descriptor = f"[{fingerprint:08x}{path[1:]}]{pub.xpub}/<0;1>/*"
+    return _append_descriptor_checksum(fmt.format(descriptor))
+
+
+@cli.command()
+@click.option("-c", "--coin")
+@click.option(
+    "-n", "--account", required=True, type=int, help="account index (0 = first account)"
+)
+@click.option("-t", "--script-type", type=ChoiceType(INPUT_SCRIPTS), default="address")
+@click.option("-d", "--show-display", is_flag=True)
+@with_client
+def get_descriptor(
+    client: "TrezorClient",
+    coin: Optional[str],
+    account: str,
+    script_type: messages.InputScriptType,
+    show_display: bool,
+) -> str:
+    """Get descriptor of given account."""
+    try:
+        return _get_descriptor(client, coin, account, script_type, show_display)
+    except ValueError as e:
+        raise click.ClickException(str(e))
+
+
 #
 # Signing functions
 #
@@ -188,7 +286,7 @@ def get_public_node(client, coin, address, curve, script_type, show_display):
 @click.option("-c", "--coin", is_flag=True, hidden=True, expose_value=False)
 @click.argument("json_file", type=click.File())
 @with_client
-def sign_tx(client, json_file):
+def sign_tx(client: "TrezorClient", json_file: TextIO) -> None:
     """Sign transaction.
 
     Transaction data must be provided in a JSON file. See `transaction-format.md` for
@@ -199,7 +297,7 @@ def sign_tx(client, json_file):
     """
     data = json.load(json_file)
     coin = data.get("coin_name", DEFAULT_COIN)
-    details = protobuf.dict_to_proto(messages.SignTx, data.get("details", {}))
+    details = data.get("details", {})
     inputs = [
         protobuf.dict_to_proto(messages.TxInputType, i) for i in data.get("inputs", ())
     ]
@@ -212,7 +310,14 @@ def sign_tx(client, json_file):
         for txid, tx in data.get("prev_txes", {}).items()
     }
 
-    _, serialized_tx = btc.sign_tx(client, coin, inputs, outputs, details, prev_txes)
+    _, serialized_tx = btc.sign_tx(
+        client,
+        coin,
+        inputs,
+        outputs,
+        prev_txes=prev_txes,
+        **details,
+    )
 
     click.echo()
     click.echo("Signed Transaction:")
@@ -225,14 +330,19 @@ def sign_tx(client, json_file):
 
 
 @cli.command()
-@click.option("-c", "--coin")
+@click.option("-c", "--coin", default=DEFAULT_COIN)
 @click.option("-n", "--address", required=True, help="BIP-32 path")
 @click.option("-t", "--script-type", type=ChoiceType(INPUT_SCRIPTS), default="address")
 @click.argument("message")
 @with_client
-def sign_message(client, coin, address, message, script_type):
+def sign_message(
+    client: "TrezorClient",
+    coin: str,
+    address: str,
+    message: str,
+    script_type: messages.InputScriptType,
+) -> Dict[str, str]:
     """Sign message using address of given path."""
-    coin = coin or DEFAULT_COIN
     address_n = tools.parse_path(address)
     res = btc.sign_message(client, coin, address_n, message, script_type)
     return {
@@ -243,16 +353,17 @@ def sign_message(client, coin, address, message, script_type):
 
 
 @cli.command()
-@click.option("-c", "--coin")
+@click.option("-c", "--coin", default=DEFAULT_COIN)
 @click.argument("address")
 @click.argument("signature")
 @click.argument("message")
 @with_client
-def verify_message(client, coin, address, signature, message):
+def verify_message(
+    client: "TrezorClient", coin: str, address: str, signature: str, message: str
+) -> bool:
     """Verify message."""
-    signature = base64.b64decode(signature)
-    coin = coin or DEFAULT_COIN
-    return btc.verify_message(client, coin, address, signature, message)
+    signature_bytes = base64.b64decode(signature)
+    return btc.verify_message(client, coin, address, signature_bytes, message)
 
 
 #

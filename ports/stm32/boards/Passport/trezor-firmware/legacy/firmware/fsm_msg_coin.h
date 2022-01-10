@@ -34,29 +34,31 @@ void fsm_msgGetPublicKey(const GetPublicKey *msg) {
   if (msg->has_ecdsa_curve_name) {
     curve = msg->ecdsa_curve_name;
   }
-  uint32_t fingerprint;
-  HDNode *node = node = fsm_getDerivedNode(curve, msg->address_n,
-                                           msg->address_n_count, &fingerprint);
-  if (!node) return;
-  hdnode_fill_public_key(node);
 
-  if (msg->has_show_display && msg->show_display) {
-    layoutPublicKey(node->public_key);
-    if (!protectButton(ButtonRequestType_ButtonRequest_PublicKey, true)) {
-      fsm_sendFailure(FailureType_Failure_ActionCancelled, NULL);
-      layoutHome();
-      return;
-    }
+  // derive m/0' to obtain root_fingerprint
+  uint32_t root_fingerprint;
+  uint32_t path[1] = {0x80000000 | 0};
+  HDNode *node = fsm_getDerivedNode(curve, path, 1, &root_fingerprint);
+  if (!node) return;
+
+  uint32_t fingerprint;
+  node = fsm_getDerivedNode(curve, msg->address_n, msg->address_n_count,
+                            &fingerprint);
+  if (!node) return;
+
+  if (hdnode_fill_public_key(node) != 0) {
+    fsm_sendFailure(FailureType_Failure_ProcessError,
+                    _("Failed to derive public key"));
+    layoutHome();
+    return;
   }
 
-  resp->has_node = true;
   resp->node.depth = node->depth;
   resp->node.fingerprint = fingerprint;
   resp->node.child_num = node->child_num;
   resp->node.chain_code.size = 32;
   memcpy(resp->node.chain_code.bytes, node->chain_code, 32);
   resp->node.has_private_key = false;
-  resp->node.has_public_key = true;
   resp->node.public_key.size = 33;
   memcpy(resp->node.public_key.bytes, node->public_key, 33);
   if (node->public_key[0] == 1) {
@@ -64,25 +66,53 @@ void fsm_msgGetPublicKey(const GetPublicKey *msg) {
     resp->node.public_key.bytes[0] = 0;
   }
 
-  resp->has_xpub = true;
   if (coin->xpub_magic && (script_type == InputScriptType_SPENDADDRESS ||
                            script_type == InputScriptType_SPENDMULTISIG)) {
     hdnode_serialize_public(node, fingerprint, coin->xpub_magic, resp->xpub,
                             sizeof(resp->xpub));
-  } else if (coin->has_segwit && coin->xpub_magic_segwit_p2sh &&
-             script_type == InputScriptType_SPENDP2SHWITNESS) {
+  } else if (coin->has_segwit &&
+             script_type == InputScriptType_SPENDP2SHWITNESS &&
+             !msg->ignore_xpub_magic && coin->xpub_magic_segwit_p2sh) {
     hdnode_serialize_public(node, fingerprint, coin->xpub_magic_segwit_p2sh,
                             resp->xpub, sizeof(resp->xpub));
-  } else if (coin->has_segwit && coin->xpub_magic_segwit_native &&
-             script_type == InputScriptType_SPENDWITNESS) {
+  } else if (coin->has_segwit &&
+             script_type == InputScriptType_SPENDP2SHWITNESS &&
+             msg->ignore_xpub_magic && coin->xpub_magic) {
+    hdnode_serialize_public(node, fingerprint, coin->xpub_magic, resp->xpub,
+                            sizeof(resp->xpub));
+  } else if (coin->has_segwit && script_type == InputScriptType_SPENDWITNESS &&
+             !msg->ignore_xpub_magic && coin->xpub_magic_segwit_native) {
     hdnode_serialize_public(node, fingerprint, coin->xpub_magic_segwit_native,
                             resp->xpub, sizeof(resp->xpub));
+  } else if (coin->has_segwit && script_type == InputScriptType_SPENDWITNESS &&
+             msg->ignore_xpub_magic && coin->xpub_magic) {
+    hdnode_serialize_public(node, fingerprint, coin->xpub_magic, resp->xpub,
+                            sizeof(resp->xpub));
+  } else if (coin->has_taproot && script_type == InputScriptType_SPENDTAPROOT &&
+             coin->xpub_magic) {
+    hdnode_serialize_public(node, fingerprint, coin->xpub_magic, resp->xpub,
+                            sizeof(resp->xpub));
   } else {
     fsm_sendFailure(FailureType_Failure_DataError,
                     _("Invalid combination of coin and script_type"));
     layoutHome();
     return;
   }
+
+  if (msg->has_show_display && msg->show_display) {
+    for (int page = 0; page < 2; page++) {
+      layoutXPUB(resp->xpub, page);
+      if (!protectButton(ButtonRequestType_ButtonRequest_PublicKey, true)) {
+        memzero(resp, sizeof(PublicKey));
+        fsm_sendFailure(FailureType_Failure_ActionCancelled, NULL);
+        layoutHome();
+        return;
+      }
+    }
+  }
+
+  resp->has_root_fingerprint = true;
+  resp->root_fingerprint = root_fingerprint;
 
   msg_write(MessageType_MessageType_PublicKey, resp);
   layoutHome();
@@ -121,6 +151,32 @@ void fsm_msgTxAck(TxAck *msg) {
   signing_txack(&(msg->tx));
 }
 
+static bool fsm_checkCoinPath(const CoinInfo *coin, InputScriptType script_type,
+                              uint32_t address_n_count,
+                              const uint32_t *address_n, bool has_multisig) {
+  if (!coin_path_check(coin, script_type, address_n_count, address_n,
+                       has_multisig, CoinPathCheckLevel_SCRIPT_TYPE)) {
+    if (config_getSafetyCheckLevel() == SafetyCheckLevel_Strict &&
+        !coin_path_check(coin, script_type, address_n_count, address_n,
+                         has_multisig, CoinPathCheckLevel_KNOWN)) {
+      fsm_sendFailure(FailureType_Failure_DataError, _("Forbidden key path"));
+      layoutHome();
+      return false;
+    }
+
+    layoutDialogSwipe(&bmp_icon_warning, _("Abort"), _("Continue"), NULL,
+                      _("Wrong address path"), _("for selected coin."), NULL,
+                      _("Continue at your"), _("own risk!"), NULL);
+    if (!protectButton(ButtonRequestType_ButtonRequest_UnknownDerivationPath,
+                       false)) {
+      fsm_sendFailure(FailureType_Failure_ActionCancelled, NULL);
+      layoutHome();
+      return false;
+    }
+  }
+  return true;
+}
+
 void fsm_msgGetAddress(const GetAddress *msg) {
   RESP_INIT(Address);
 
@@ -133,7 +189,13 @@ void fsm_msgGetAddress(const GetAddress *msg) {
   HDNode *node = fsm_getDerivedNode(coin->curve_name, msg->address_n,
                                     msg->address_n_count, NULL);
   if (!node) return;
-  hdnode_fill_public_key(node);
+
+  if (hdnode_fill_public_key(node) != 0) {
+    fsm_sendFailure(FailureType_Failure_ProcessError,
+                    _("Failed to derive public key"));
+    layoutHome();
+    return;
+  }
 
   char address[MAX_ADDR_SIZE];
   if (msg->has_multisig) {  // use progress bar only for multisig
@@ -163,25 +225,32 @@ void fsm_msgGetAddress(const GetAddress *msg) {
       strlcpy(desc, _("Address:"), sizeof(desc));
     }
 
-    if (!coin_known_path_check(coin, msg->script_type, msg->address_n_count,
-                               msg->address_n, true)) {
-      layoutDialogSwipe(&bmp_icon_warning, _("Abort"), _("Continue"), NULL,
-                        _("Wrong address path"), _("for selected coin."), NULL,
-                        _("Continue at your"), _("own risk!"), NULL);
-      if (!protectButton(ButtonRequestType_ButtonRequest_Other, false)) {
-        fsm_sendFailure(FailureType_Failure_ActionCancelled, NULL);
-        layoutHome();
-        return;
+    if (!fsm_checkCoinPath(coin, msg->script_type, msg->address_n_count,
+                           msg->address_n, msg->has_multisig)) {
+      return;
+    }
+
+    uint32_t multisig_xpub_magic = coin->xpub_magic;
+    if (msg->has_multisig && coin->has_segwit) {
+      if (!msg->has_ignore_xpub_magic || !msg->ignore_xpub_magic) {
+        if (msg->script_type == InputScriptType_SPENDWITNESS &&
+            coin->xpub_magic_segwit_native) {
+          multisig_xpub_magic = coin->xpub_magic_segwit_native;
+        } else if (msg->script_type == InputScriptType_SPENDP2SHWITNESS &&
+                   coin->xpub_magic_segwit_p2sh) {
+          multisig_xpub_magic = coin->xpub_magic_segwit_p2sh;
+        }
       }
     }
 
     bool is_cashaddr = coin->cashaddr_prefix != NULL;
-    bool is_bech32 = msg->script_type == InputScriptType_SPENDWITNESS;
+    bool is_bech32 = msg->script_type == InputScriptType_SPENDWITNESS ||
+                     msg->script_type == InputScriptType_SPENDTAPROOT;
     if (!fsm_layoutAddress(address, desc, is_cashaddr || is_bech32,
                            is_cashaddr ? strlen(coin->cashaddr_prefix) + 1 : 0,
                            msg->address_n, msg->address_n_count, false,
                            msg->has_multisig ? &(msg->multisig) : NULL,
-                           multisig_index, coin)) {
+                           multisig_index, multisig_xpub_magic, coin)) {
       return;
     }
   }
@@ -199,34 +268,52 @@ void fsm_msgSignMessage(const SignMessage *msg) {
 
   CHECK_INITIALIZED
 
-  layoutSignMessage(msg->message.bytes, msg->message.size);
-  if (!protectButton(ButtonRequestType_ButtonRequest_ProtectCall, false)) {
+  CHECK_PIN
+
+  const CoinInfo *coin = fsm_getCoin(msg->has_coin_name, msg->coin_name);
+  if (!coin) return;
+
+  if (!fsm_checkCoinPath(coin, msg->script_type, msg->address_n_count,
+                         msg->address_n, false)) {
+    return;
+  }
+
+  HDNode *node = fsm_getDerivedNode(coin->curve_name, msg->address_n,
+                                    msg->address_n_count, NULL);
+  if (!node) return;
+
+  if (hdnode_fill_public_key(node) != 0) {
+    fsm_sendFailure(FailureType_Failure_ProcessError,
+                    _("Failed to derive public key"));
+    layoutHome();
+    return;
+  }
+
+  if (!compute_address(coin, msg->script_type, node, false, NULL,
+                       resp->address)) {
+    fsm_sendFailure(FailureType_Failure_ProcessError,
+                    _("Error computing address"));
+    layoutHome();
+    return;
+  }
+
+  layoutVerifyAddress(coin, resp->address);
+  if (!protectButton(ButtonRequestType_ButtonRequest_Other, false)) {
     fsm_sendFailure(FailureType_Failure_ActionCancelled, NULL);
     layoutHome();
     return;
   }
 
-  CHECK_PIN
-
-  const CoinInfo *coin = fsm_getCoin(msg->has_coin_name, msg->coin_name);
-  if (!coin) return;
-  HDNode *node = fsm_getDerivedNode(coin->curve_name, msg->address_n,
-                                    msg->address_n_count, NULL);
-  if (!node) return;
+  if (!fsm_layoutSignMessage(msg->message.bytes, msg->message.size)) {
+    fsm_sendFailure(FailureType_Failure_ActionCancelled, NULL);
+    layoutHome();
+    return;
+  }
 
   layoutProgressSwipe(_("Signing"), 0);
-  if (cryptoMessageSign(coin, node, msg->script_type, msg->message.bytes,
-                        msg->message.size, resp->signature.bytes) == 0) {
-    resp->has_address = true;
-    hdnode_fill_public_key(node);
-    if (!compute_address(coin, msg->script_type, node, false, NULL,
-                         resp->address)) {
-      fsm_sendFailure(FailureType_Failure_ProcessError,
-                      _("Error computing address"));
-      layoutHome();
-      return;
-    }
-    resp->has_signature = true;
+  if (cryptoMessageSign(coin, node, msg->script_type, msg->no_script_type,
+                        msg->message.bytes, msg->message.size,
+                        resp->signature.bytes) == 0) {
     resp->signature.size = 65;
     msg_write(MessageType_MessageType_MessageSignature, resp);
   } else {
@@ -237,9 +324,6 @@ void fsm_msgSignMessage(const SignMessage *msg) {
 }
 
 void fsm_msgVerifyMessage(const VerifyMessage *msg) {
-  CHECK_PARAM(msg->has_address, _("No address provided"));
-  CHECK_PARAM(msg->has_message, _("No message provided"));
-
   const CoinInfo *coin = fsm_getCoin(msg->has_coin_name, msg->coin_name);
   if (!coin) return;
   layoutProgressSwipe(_("Verifying"), 0);
@@ -252,12 +336,13 @@ void fsm_msgVerifyMessage(const VerifyMessage *msg) {
       layoutHome();
       return;
     }
-    layoutVerifyMessage(msg->message.bytes, msg->message.size);
-    if (!protectButton(ButtonRequestType_ButtonRequest_Other, false)) {
+
+    if (!fsm_layoutVerifyMessage(msg->message.bytes, msg->message.size)) {
       fsm_sendFailure(FailureType_Failure_ActionCancelled, NULL);
       layoutHome();
       return;
     }
+
     fsm_sendSuccess(_("Message verified"));
   } else {
     fsm_sendFailure(FailureType_Failure_DataError, _("Invalid signature"));

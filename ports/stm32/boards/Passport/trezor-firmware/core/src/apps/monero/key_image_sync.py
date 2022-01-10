@@ -1,24 +1,23 @@
 import gc
 
 from trezor import log, wire
-from trezor.messages.MoneroExportedKeyImage import MoneroExportedKeyImage
-from trezor.messages.MoneroKeyImageExportInitAck import MoneroKeyImageExportInitAck
-from trezor.messages.MoneroKeyImageSyncFinalAck import MoneroKeyImageSyncFinalAck
-from trezor.messages.MoneroKeyImageSyncFinalRequest import (
+from trezor.messages import (
+    MoneroExportedKeyImage,
+    MoneroKeyImageExportInitAck,
+    MoneroKeyImageSyncFinalAck,
     MoneroKeyImageSyncFinalRequest,
+    MoneroKeyImageSyncStepAck,
+    MoneroKeyImageSyncStepRequest,
 )
-from trezor.messages.MoneroKeyImageSyncStepAck import MoneroKeyImageSyncStepAck
-from trezor.messages.MoneroKeyImageSyncStepRequest import MoneroKeyImageSyncStepRequest
 
 from apps.common import paths
-from apps.common.keychain import with_slip44_keychain
-from apps.monero import CURVE, SLIP44_ID, misc
-from apps.monero.layout import confirms
+from apps.common.keychain import auto_keychain
+from apps.monero import layout, misc
 from apps.monero.xmr import crypto, key_image, monero
 from apps.monero.xmr.crypto import chacha_poly
 
 
-@with_slip44_keychain(SLIP44_ID, CURVE, allow_testnet=True)
+@auto_keychain(__name__)
 async def key_image_sync(ctx, msg, keychain):
     state = KeyImageSync()
 
@@ -45,13 +44,11 @@ class KeyImageSync:
 
 
 async def _init_step(s, ctx, msg, keychain):
-    await paths.validate_path(
-        ctx, misc.validate_full_path, keychain, msg.address_n, CURVE
-    )
+    await paths.validate_path(ctx, keychain, msg.address_n)
 
     s.creds = misc.get_creds(keychain, msg.address_n, msg.network_type)
 
-    await confirms.require_confirm_keyimage_sync(ctx)
+    await layout.require_confirm_keyimage_sync(ctx)
 
     s.num_outputs = msg.num
     s.expected_hash = msg.hash
@@ -73,7 +70,7 @@ async def _sync_step(s, ctx, tds):
     buff = bytearray(32 * 3)
     buff_mv = memoryview(buff)
 
-    await confirms.keyimage_sync_step(ctx, s.current_output, s.num_outputs)
+    await layout.keyimage_sync_step(ctx, s.current_output, s.num_outputs)
 
     for td in tds.tdis:
         s.current_output += 1

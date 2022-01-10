@@ -22,6 +22,7 @@
 #include "bl_check.h"
 #include "buttons.h"
 #include "common.h"
+#include "compiler_traits.h"
 #include "config.h"
 #include "gettext.h"
 #include "layout.h"
@@ -37,6 +38,23 @@
 #include <libopencm3/stm32/desig.h>
 #include "otp.h"
 #endif
+#ifdef USE_SECP256K1_ZKP
+#include "zkp_context.h"
+#endif
+
+#ifdef USE_SECP256K1_ZKP
+void secp256k1_default_illegal_callback_fn(const char *str, void *data) {
+  (void)data;
+  __fatal_error(NULL, str, __FILE__, __LINE__, __func__);
+  return;
+}
+
+void secp256k1_default_error_callback_fn(const char *str, void *data) {
+  (void)data;
+  __fatal_error(NULL, str, __FILE__, __LINE__, __func__);
+  return;
+}
+#endif
 
 /* Screen timeout */
 uint32_t system_millis_lock_start = 0;
@@ -50,8 +68,8 @@ void check_lock_screen(void) {
     return;
   }
 
-  // button held for long enough (2 seconds)
-  if (layoutLast == layoutHome && button.NoDown >= 285000 * 2) {
+  // button held for long enough (5 seconds)
+  if (layoutLast == layoutHome && button.NoDown >= 114000 * 5) {
     layoutDialog(&bmp_icon_question, _("Cancel"), _("Lock Device"), NULL,
                  _("Do you really want to"), _("lock your Trezor?"), NULL, NULL,
                  NULL, NULL);
@@ -123,7 +141,7 @@ int main(void) {
                                    // unpredictable stack protection checks
   oledInit();
 #else
-  check_bootloader(true);
+  check_and_replace_bootloader(true);
   setupApp();
   __stack_chk_guard = random32();  // this supports compiler provided
                                    // unpredictable stack protection checks
@@ -142,6 +160,10 @@ int main(void) {
     collect_hw_entropy(false);
   }
 
+#ifdef USE_SECP256K1_ZKP
+  ensure(sectrue * (zkp_context_init() == 0), NULL);
+#endif
+
 #if DEBUG_LINK
   oledSetDebugLink(1);
 #if !EMULATOR
@@ -149,14 +171,19 @@ int main(void) {
 #endif
 #endif
 
-  oledDrawBitmap(40, 0, &bmp_logo64);
+  oledDrawBitmap(40, 0, &bmp_logo64_half);
+  oledDrawBitmapFlip(40 + 24, 0, &bmp_logo64_half);
   oledRefresh();
 
   config_init();
   layoutHome();
   usbInit();
   for (;;) {
+#if EMULATOR
+    usbSleep(10);
+#else
     usbPoll();
+#endif
     check_lock_screen();
   }
 

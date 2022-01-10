@@ -40,8 +40,8 @@ class Display:
         w: int,
         h: int,
         fgcolor: int,
-        bgcolor: int = None,
-        radius: int = None,
+        bgcolor: int | None = None,
+        radius: int | None = None,
     ) -> None:
         """
         Renders a rounded bar at position (x,y = upper left corner) with width w
@@ -49,7 +49,7 @@ class Display:
         are drawn with radius radius.
         """
 
-    def toif_info(self, image: bytes) -> Tuple[int, int, bool]:
+    def toif_info(self, image: bytes) -> tuple[int, int, bool]:
         """
         Returns tuple containing TOIF image dimensions: width, height, and
         whether it is grayscale.
@@ -89,8 +89,8 @@ class Display:
         yoffset: int,
         fgcolor: int,
         bgcolor: int,
-        icon: bytes = None,
-        iconfgcolor: int = None,
+        icon: bytes | None = None,
+        iconfgcolor: int | None = None,
     ) -> None:
         """
         Renders a rotating loader graphic.
@@ -114,11 +114,15 @@ class Display:
         font: int,
         fgcolor: int,
         bgcolor: int,
+        text_offset: int | None = None,
+        text_len: int | None = None,
     ) -> None:
         """
         Renders left-aligned text at position (x,y) where x is left position and
         y is baseline. Font font is used for rendering, fgcolor is used as
         foreground color, bgcolor as background.
+        Arguments text_offset and text_len can be used to render a substring of
+        the text.
         """
 
     def text_center(
@@ -151,9 +155,17 @@ class Display:
         foreground color, bgcolor as background.
         """
 
-    def text_width(self, text: str, font: int) -> int:
+    def text_width(
+        self,
+        text: str,
+        font: int,
+        text_offset: int | None = None,
+        text_len: int | None = None,
+    ) -> int:
         """
         Returns a width of text in pixels. Font font is used for rendering.
+        Arguments text_offset and text_len can be used to render a substring of
+        the text.
         """
 
     def text_split(self, text: str, font: int, requested_width: int) -> int:
@@ -169,7 +181,7 @@ class Display:
         Scale determines a zoom factor.
         """
 
-    def orientation(self, degrees: int = None) -> int:
+    def orientation(self, degrees: int | None = None) -> int:
         """
         Sets display orientation to 0, 90, 180 or 270 degrees.
         Everything needs to be redrawn again when this function is used.
@@ -177,13 +189,13 @@ class Display:
         value.
         """
 
-    def backlight(self, val: int = None) -> int:
+    def backlight(self, val: int | None = None) -> int:
         """
         Sets backlight intensity to the value specified in val.
         Call without the val parameter to just perform the read of the value.
         """
 
-    def offset(self, xy: Tuple[int, int] = None) -> Tuple[int, int]:
+    def offset(self, xy: tuple[int, int] | None = None) -> tuple[int, int]:
         """
         Sets offset (x, y) for all subsequent drawing calls.
         Call without the xy parameter to just perform the read of the value.

@@ -37,7 +37,7 @@ typedef struct _mp_obj_Blake256_t {
 
 STATIC mp_obj_t mod_trezorcrypto_Blake256_update(mp_obj_t self, mp_obj_t data);
 
-/// def __init__(self, data: bytes = None) -> None:
+/// def __init__(self, data: bytes | None = None) -> None:
 ///     """
 ///     Creates a hash context object.
 ///     """
@@ -77,12 +77,13 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_2(mod_trezorcrypto_Blake256_update_obj,
 ///     """
 STATIC mp_obj_t mod_trezorcrypto_Blake256_digest(mp_obj_t self) {
   mp_obj_Blake256_t *o = MP_OBJ_TO_PTR(self);
-  uint8_t hash[BLAKE256_DIGEST_LENGTH] = {0};
+  vstr_t hash = {0};
+  vstr_init_len(&hash, BLAKE256_DIGEST_LENGTH);
   BLAKE256_CTX ctx = {0};
   memcpy(&ctx, &(o->ctx), sizeof(BLAKE256_CTX));
-  blake256_Final(&ctx, hash);
+  blake256_Final(&ctx, (uint8_t *)hash.buf);
   memzero(&ctx, sizeof(BLAKE256_CTX));
-  return mp_obj_new_bytes(hash, sizeof(hash));
+  return mp_obj_new_str_from_vstr(&mp_type_bytes, &hash);
 }
 STATIC MP_DEFINE_CONST_FUN_OBJ_1(mod_trezorcrypto_Blake256_digest_obj,
                                  mod_trezorcrypto_Blake256_digest);

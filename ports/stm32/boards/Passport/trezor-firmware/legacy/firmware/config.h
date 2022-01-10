@@ -79,14 +79,19 @@ typedef struct _Storage {
 
 extern Storage configUpdate;
 
-#define MAX_PIN_LEN 9
+#define MAX_PIN_LEN 50
 #define MAX_LABEL_LEN 32
 #define MAX_LANGUAGE_LEN 16
 #define MAX_MNEMONIC_LEN 240
 #define HOMESCREEN_SIZE 1024
 #define UUID_SIZE 12
+
+#if DEBUG_LINK
 #define MIN_AUTOLOCK_DELAY_MS (10 * 1000U)  // 10 seconds
-#define MAX_AUTOLOCK_DELAY_MS 0x20000000U   // ~6 days
+#else
+#define MIN_AUTOLOCK_DELAY_MS (60 * 1000U)  // 1 minute
+#endif
+#define MAX_AUTOLOCK_DELAY_MS 0x20000000U  // ~6 days
 
 void config_init(void);
 void session_clear(bool lock);
@@ -156,6 +161,9 @@ bool config_getFlags(uint32_t *flags);
 
 uint32_t config_getAutoLockDelayMs(void);
 void config_setAutoLockDelayMs(uint32_t auto_lock_delay_ms);
+
+SafetyCheckLevel config_getSafetyCheckLevel(void);
+void config_setSafetyCheckLevel(SafetyCheckLevel safety_check_level);
 
 void config_wipe(void);
 

@@ -2,32 +2,32 @@
 
 ## 1. Running the full test suite
 
-_Note: You need Pipenv, as mentioned in the core's [documentation](https://docs.trezor.io/trezor-firmware/core/) section._
+_Note: You need Poetry, as mentioned in the core's [documentation](https://docs.trezor.io/trezor-firmware/core/) section._
 
 In the `trezor-firmware` checkout, in the root of the monorepo, install the environment:
 
 ```sh
-pipenv sync
+poetry install
 ```
 
 And run the tests:
 
 ```sh
-pipenv run make -C core test_emu_ui
+poetry run make -C core test_emu_ui
 ```
 
 ## 2. Running tests manually
 
-Install the pipenv environment as outlined above. Then switch to a shell inside the
+Install the poetry environment as outlined above. Then switch to a shell inside the
 environment:
 
 ```sh
-pipenv shell
+poetry shell
 ```
 
-If you want to test against the emulator, run it in a separate terminal:
+If you want to test against the emulator, run it with disabled animation in a separate terminal:
 ```sh
-./core/emu.py
+./core/emu.py -a
 ```
 
 Now you can run the test suite with `pytest` from the root directory:
@@ -51,7 +51,7 @@ pytest tests/device_tests --ui=test -m "not skip_ui"
 
 Short version:
 ```sh
-pipenv run make -C core test_emu_ui_record
+poetry run make -C core test_emu_ui_record
 ```
 
 Long version:
@@ -79,10 +79,15 @@ pytest tests/device_tests --ui=record --ui-check-missing
 ### Tests
 
 Each `--ui=test` creates a clear report which tests passed and which failed.
-The index file is stored in `tests/ui_tests/reporting/reports/test/index.html`, but for an ease of use
-you will find a link at the end of the pytest summary.
+The index file is stored in `tests/ui_tests/reporting/reports/test/index.html`.
+The script `tests/show_results.py` starts a local HTTP server that serves this page --
+this is necessary for access to browser local storage, which enables a simple reviewer
+UI.
 
-On CI this report is published as an artifact. You can see the latest master report [here](https://gitlab.com/satoshilabs/trezor/trezor-firmware/-/jobs/artifacts/master/file/test_ui_report/index.html?job=core%20device%20ui%20test).
+On CI this report is published as an artifact. You can see the latest master report [here](https://gitlab.com/satoshilabs/trezor/trezor-firmware/-/jobs/artifacts/master/file/test_ui_report/index.html?job=core%20device%20ui%20test). The reviewer features work directly here.
+
+If needed, you can use `python3 -m tests.ui_tests` to regenerate the report from local
+recorded screens.
 
 ### Master diff
 

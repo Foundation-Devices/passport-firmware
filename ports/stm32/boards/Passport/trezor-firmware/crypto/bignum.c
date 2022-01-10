@@ -271,7 +271,8 @@ int bn_is_equal(const bignum256 *x, const bignum256 *y) {
 //   &truecase == &falsecase or &res == &truecase == &falsecase
 void bn_cmov(bignum256 *res, volatile uint32_t cond, const bignum256 *truecase,
              const bignum256 *falsecase) {
-  assert((cond == 1) | (cond == 0));
+  // Intentional use of bitwise OR operator to ensure constant-time
+  assert((int)(cond == 1) | (int)(cond == 0));
 
   uint32_t tmask = -cond;   // tmask = 0xFFFFFFFF if cond else 0x00000000
   uint32_t fmask = ~tmask;  // fmask = 0x00000000 if cond else 0xFFFFFFFF
@@ -290,7 +291,8 @@ void bn_cmov(bignum256 *res, volatile uint32_t cond, const bignum256 *truecase,
 // Assumes prime is normalized and
 //   0 < prime < 2**260 == 2**(BITS_PER_LIMB * LIMBS - 1)
 void bn_cnegate(volatile uint32_t cond, bignum256 *x, const bignum256 *prime) {
-  assert((cond == 1) | (cond == 0));
+  // Intentional use of bitwise OR operator to ensure constant time
+  assert((int)(cond == 1) | (int)(cond == 0));
 
   uint32_t tmask = -cond;   // tmask = 0xFFFFFFFF if cond else 0x00000000
   uint32_t fmask = ~tmask;  // fmask = 0x00000000 if cond else 0xFFFFFFFF
@@ -646,9 +648,9 @@ void bn_multiply_reduce_step(uint32_t res[2 * BN_LIMBS], const bignum256 *prime,
   // clang-format off
   // acc == 1 << shift
   // Proof:
-  //   acc 
-  //     == (1 << BITS_PER_LIMB * (LIMBS + 1) + shift) + res[d : d + LIMBS + 1] - coef * prime[:LIMBS] >> BITS_PER_LIMB * (LIMBS + 1) 
-  //     == (1 << BITS_PER_LIMB * (LIMBS + 1) + shift) + res[d : d + LIMBS + 1] - coef * prime >> BITS_PER_LIMB * (LIMBS + 1) 
+  //   acc
+  //     == (1 << BITS_PER_LIMB * (LIMBS + 1) + shift) + res[d : d + LIMBS + 1] - coef * prime[:LIMBS] >> BITS_PER_LIMB * (LIMBS + 1)
+  //     == (1 << BITS_PER_LIMB * (LIMBS + 1) + shift) + res[d : d + LIMBS + 1] - coef * prime >> BITS_PER_LIMB * (LIMBS + 1)
 
   //     == (1 << BITS_PER_LIMB * (LIMBS + 1) + shift) + (res[d : d + LIMBS + 1] - coef * prime) >> BITS_PER_LIMB * (LIMBS + 1)
   //     <= (1 << BITS_PER_LIMB * (LIMBS + 1) + shift) + (res[:d] + BASE**d * res[d : d + LIMBS + 1] - BASE**d * coef * prime)//BASE**d >> BITS_PER_LIMB * (LIMBS + 1)
@@ -966,6 +968,7 @@ void bn_divide_base(bignum256 *x, const bignum256 *prime) {
   // clang-format on
 }
 
+#if !USE_INVERSE_FAST
 // x = 1/x % prime if x != 0 else 0
 // Assumes x is normalized
 // Assumes prime is a prime number
@@ -973,7 +976,7 @@ void bn_divide_base(bignum256 *x, const bignum256 *prime) {
 // Assumes prime is normalized, 2**256 - 2**224 <= prime <= 2**256
 // The function doesn't have neither constant control flow nor constant memory
 //   access flow with regard to prime
-void bn_inverse_slow(bignum256 *x, const bignum256 *prime) {
+static void bn_inverse_slow(bignum256 *x, const bignum256 *prime) {
   // Uses formula 1/x % prime == x**(prime - 2) % prime
   // See https://en.wikipedia.org/wiki/Fermat%27s_little_theorem
 
@@ -989,6 +992,7 @@ void bn_inverse_slow(bignum256 *x, const bignum256 *prime) {
 
   memzero(&e, sizeof(e));
 }
+#endif
 
 #if false
 // x = 1/x % prime if x != 0 else 0
@@ -998,7 +1002,7 @@ void bn_inverse_slow(bignum256 *x, const bignum256 *prime) {
 // Assumes prime is odd, normalized, 2**256 - 2**224 <= prime <= 2**256
 // The function doesn't have neither constant control flow nor constant memory
 //   access flow with regard to prime and x
-void bn_inverse_fast(bignum256 *x, const bignum256 *prime) {
+static void bn_inverse_fast(bignum256 *x, const bignum256 *prime) {
   // "The Almost Montgomery Inverse" from the section 3 of "Constant Time
   // Modular Inversion" by Joppe W. Bos
   // See http://www.joppebos.com/files/CTInversion.pdf
@@ -1084,6 +1088,7 @@ void bn_inverse_fast(bignum256 *x, const bignum256 *prime) {
 }
 #endif
 
+#if USE_INVERSE_FAST
 // x = 1/x % prime if x != 0 else 0
 // Assumes x is is_normalized
 // Assumes GCD(x, prime) = 1
@@ -1091,7 +1096,7 @@ void bn_inverse_fast(bignum256 *x, const bignum256 *prime) {
 // Assumes prime is odd, normalized, 2**256 - 2**224 <= prime <= 2**256
 // The function has constant control flow but not constant memory access flow
 //   with regard to prime and x
-void bn_inverse_fast(bignum256 *x, const bignum256 *prime) {
+static void bn_inverse_fast(bignum256 *x, const bignum256 *prime) {
   // Custom constant time version of "The Almost Montgomery Inverse" from the
   // section 3 of "Constant Time Modular Inversion" by Joppe W. Bos
   // See http://www.joppebos.com/files/CTInversion.pdf
@@ -1196,6 +1201,7 @@ void bn_inverse_fast(bignum256 *x, const bignum256 *prime) {
   memzero(&r, sizeof(s));
   memzero(&s, sizeof(s));
 }
+#endif
 
 #if false
 // x = 1/x % prime if x != 0 else 0
@@ -1203,7 +1209,7 @@ void bn_inverse_fast(bignum256 *x, const bignum256 *prime) {
 // Assumes GCD(x, prime) = 1
 // Guarantees x is normalized and fully reduced modulo prime
 // Assumes prime is odd, normalized, 2**256 - 2**224 <= prime <= 2**256
-void bn_inverse_fast(bignum256 *x, const bignum256 *prime) {
+static void bn_inverse_fast(bignum256 *x, const bignum256 *prime) {
   // Custom constant time version of "The Almost Montgomery Inverse" from the
   // section 3 of "Constant Time Modular Inversion" by Joppe W. Bos
   // See http://www.joppebos.com/files/CTInversion.pdf

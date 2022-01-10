@@ -1,14 +1,14 @@
 from common import *
 
-from trezor.messages.TxInputType import TxInputType
-from trezor.messages import InputScriptType
+from trezor.messages import TxInput
+from trezor.enums import InputScriptType
 
 from apps.bitcoin import writers
 
 
 class TestWriters(unittest.TestCase):
     def test_tx_input(self):
-        inp = TxInputType(
+        inp = TxInput(
             address_n=[0],
             amount=390000,
             prev_hash=unhexlify(
@@ -28,7 +28,7 @@ class TestWriters(unittest.TestCase):
             self.assertRaises(AssertionError, writers.write_tx_input, b, inp, inp.script_sig)
 
     def test_tx_input_check(self):
-        inp = TxInputType(
+        inp = TxInput(
             address_n=[0],
             amount=390000,
             prev_hash=unhexlify(
@@ -37,12 +37,13 @@ class TestWriters(unittest.TestCase):
             prev_index=0,
             script_type=InputScriptType.SPENDWITNESS,
             sequence=0xffffffff,
+            script_pubkey=unhexlify("76a91424a56db43cf6f2b02e838ea493f95d8d6047423188ac"),
             script_sig=b"0123456789",
         )
 
         b = bytearray()
         writers.write_tx_input_check(b, inp)
-        self.assertEqual(len(b), 32 + 4 + 4 + 4 + 4 + 4 + 8)
+        self.assertEqual(len(b), 32 + 4 + 4 + 4 + 4 + 4 + 8 + 26)
 
         for bad_prevhash in (b"", b"x", b"hello", b"x" * 33):
             inp.prev_hash = bad_prevhash

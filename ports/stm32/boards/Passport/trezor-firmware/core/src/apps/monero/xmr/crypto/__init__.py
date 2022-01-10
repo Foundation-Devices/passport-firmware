@@ -7,11 +7,10 @@
 # https://tools.ietf.org/html/draft-josefsson-eddsa-ed25519-00#section-4
 # https://github.com/monero-project/research-lab
 
-from trezor.crypto import hmac, monero as tcry, random
+from trezor.crypto import monero as tcry, random
 from trezor.crypto.hashlib import sha3_256
 
 if False:
-    from typing import Tuple, Optional, Union
     from apps.monero.xmr.types import Sc25519, Ge25519
 
 
@@ -37,9 +36,27 @@ def keccak_2hash(inp, buff=None):
     return buff
 
 
-def compute_hmac(key, msg=None):
-    h = hmac.new(key, msg=msg, digestmod=keccak_factory)
-    return h.digest()
+def compute_hmac(key, msg):
+    digestmod = keccak_factory
+    inner = digestmod()
+    block_size = inner.block_size
+    if len(key) > block_size:
+        key = digestmod(key).digest()
+    key_block = bytearray(block_size)
+    for i in range(block_size):
+        key_block[i] = 0x36
+    for i in range(len(key)):
+        key_block[i] ^= key[i]
+    inner.update(key_block)
+    inner.update(msg)
+    outer = digestmod()
+    for i in range(block_size):
+        key_block[i] = 0x5C
+    for i in range(len(key)):
+        key_block[i] ^= key[i]
+    outer.update(key_block)
+    outer.update(inner.digest())
+    return outer.digest()
 
 
 #
@@ -164,7 +181,7 @@ def ge25519_double_scalarmult_base_vartime(a, A, b) -> Ge25519:
 ge25519_double_scalarmult_vartime2 = tcry.xmr_add_keys3
 
 
-def identity(byte_enc=False) -> Union[Ge25519, bytes]:
+def identity(byte_enc=False) -> Ge25519 | bytes:
     idd = tcry.ge25519_set_neutral()
     return idd if not byte_enc else encodepoint(idd)
 
@@ -185,7 +202,7 @@ http://elligator.cr.yp.to/elligator-20130828.pdf
 cn_fast_hash = keccak_hash
 
 
-def hash_to_scalar(data: bytes, length: Optional[int] = None):
+def hash_to_scalar(data: bytes, length: int | None = None):
     """
     H_s(P)
     """
@@ -193,18 +210,16 @@ def hash_to_scalar(data: bytes, length: Optional[int] = None):
     return tcry.xmr_hash_to_scalar(dt)
 
 
-def hash_to_scalar_into(r: Sc25519, data: bytes, length: Optional[int] = None):
+def hash_to_scalar_into(r: Sc25519, data: bytes, length: int | None = None):
     dt = data[:length] if length else data
     return tcry.xmr_hash_to_scalar(r, dt)
 
 
-"""
-H_p(buf)
-
-Code adapted from MiniNero: https://github.com/monero-project/mininero
-https://github.com/monero-project/research-lab/blob/master/whitepaper/ge_fromfe_writeup/ge_fromfe.pdf
-http://archive.is/yfINb
-"""
+# H_p(buf)
+#
+# Code adapted from MiniNero: https://github.com/monero-project/mininero
+# https://github.com/monero-project/research-lab/blob/master/whitepaper/ge_fromfe_writeup/ge_fromfe.pdf
+# http://archive.is/yfINb
 hash_to_point = tcry.xmr_hash_to_ec
 hash_to_point_into = tcry.xmr_hash_to_ec
 
@@ -271,7 +286,7 @@ def get_subaddress_secret_key(
     return tcry.xmr_get_subaddress_secret_key(major, minor, secret_key)
 
 
-def generate_signature(data: bytes, priv: Sc25519) -> Tuple[Sc25519, Sc25519, Ge25519]:
+def generate_signature(data: bytes, priv: Sc25519) -> tuple[Sc25519, Sc25519, Ge25519]:
     """
     Generate EC signature
     crypto_ops::generate_signature(const hash &prefix_hash, const public_key &pub, const secret_key &sec, signature &sig)
