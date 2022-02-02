@@ -95,16 +95,18 @@ def get_deriv_fmt_from_address(address, is_multisig):
 
     # Map the address prefix to a standard derivation path and insert the account number
     if is_multisig:
-        if address[0] == '3':
+        if (address[0] == '3' or address[0] == 'n'):
             return "m/48'/{coin_type}'/{acct}'/1'"
-        elif address[0] == 'b' and address[1] == 'c' and address[2] == '1':
+        elif ((address[0] == 'b' and address[1] == 'c' and address[2] == '1') or
+             (address[0] == 't' and address[1] == 'b' and address[2] == '1')):
             return "m/48'/{coin_type}'/{acct}'/2'"
     else:
-        if address[0] == '1':
+        if (address[0] == '1' or address[0] == 'm'):
             return "m/44'/{coin_type}'/{acct}'"
-        elif address[0] == '3':
+        elif (address[0] == '3' or address[0] == 'n'):
             return "m/49'/{coin_type}'/{acct}'"
-        elif address[0] == 'b' and address[1] == 'c' and address[2] == '1':
+        elif ((address[0] == 'b' and address[1] == 'c' and address[2] == '1') or
+             (address[0] == 't' and address[1] == 'b' and address[2] == '1')):
             return "m/84'/{coin_type}'/{acct}'"
 
     return None

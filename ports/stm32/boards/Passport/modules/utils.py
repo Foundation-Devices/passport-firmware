@@ -871,10 +871,8 @@ async def needs_microsd():
 def format_btc_address(address, addr_type):
     from public_constants import AF_P2WPKH
 
-    if addr_type == AF_P2WPKH:
-        width = 14
-    else:
-        width = 16
+    # The max number of characters on a single line
+    width = 14
 
     return split_to_lines(address, width)
 
@@ -903,5 +901,19 @@ def split_by_char_size(msg, font):
             # ok if empty string, just a blank line
             lines.append(ln)
     return lines
+
+def partition_evenly_by_max_size(total, max_part_size):
+  num_total_parts = (total + max_part_size - 1) // max_part_size
+  min_size = int(total / num_total_parts)
+  num_big_parts = total % num_total_parts
+  parts = []
+
+  for i in range(0, num_big_parts):
+    parts.append(min_size + 1)
+    
+  for i in range(num_big_parts, num_total_parts):
+    parts.append(min_size)
+
+  return parts
 
 # EOF
