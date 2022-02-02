@@ -743,7 +743,7 @@ This is a {} address at index {}.'''.format(address, 'change' if is_change == 1 
         return True
     else:
         system.turbo(False)
-        return 
+        return False
 
 
 def is_new_wallet_in_progress():

@@ -272,7 +272,6 @@ class VerifyAddressUX(UXStateMachine):
                 if address == None:
                     return
 
-                address = address.lower()
                 address, is_valid_btc = await is_valid_btc_address(address)
                 if is_valid_btc == False:
                     if not self.goto_prev():
@@ -286,7 +285,7 @@ class VerifyAddressUX(UXStateMachine):
                 deriv_path = get_deriv_path_from_addr_type_and_acct(addr_type, self.acct_num, is_multisig)
 
                 result = await do_address_verify(self.acct_num, address, addr_type, deriv_path, self.multisig_wallet)
-                if result == 'x':
+                if not result:
                     if not self.goto_prev():
                         return
                 else:
