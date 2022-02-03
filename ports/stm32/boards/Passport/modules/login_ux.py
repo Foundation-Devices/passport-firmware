@@ -8,12 +8,16 @@
 
 import version
 from display import Display, FontSmall, FontTiny
+from micropython import const
 from common import dis, pa, system, settings
 from uasyncio import sleep_ms
 from utils import UXStateMachine
 from ux import KeyInputHandler, ux_show_story, ux_show_word_list, ux_enter_pin, ux_shutdown, ux_confirm, ux_enter_text
 from pincodes import BootloaderError
 import utime
+
+# No. of PIN attempts left when the warning message will be shown
+BRICK_WARN_NUM_ATTEMPTS = const(5)
 
 # Separate PIN state machines to keep the logic cleaner in each and make it easier to change messaging in each
 
@@ -80,8 +84,12 @@ class LoginUX(UXStateMachine):
                     self.goto(self.SHOW_BRICK_MESSAGE)
                     continue
 
+                msg_brick_warning = '.'
+                if pa.attempts_left <= BRICK_WARN_NUM_ATTEMPTS:
+                  msg_brick_warning = ' until Passport is permanently disabled.'
+
                 result = await ux_show_story(
-                    'You have {} attempts remaining.'.format(pa.attempts_left),
+                    'You have {} attempts remaining{}'.format(pa.attempts_left, msg_brick_warning),
                     title="Wrong PIN",
                     left_btn='SHUTDOWN',
                     right_btn='RETRY',
