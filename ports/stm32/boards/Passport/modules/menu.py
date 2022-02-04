@@ -216,6 +216,9 @@ class MenuSystem:
     def down(self):
         if self.cursor < self.count-1:
             self.cursor += 1
+        else:
+          self.top()
+
         if self.cursor - self.ypos > (self.max_lines-1):
             self.ypos += 1
 
@@ -224,10 +227,16 @@ class MenuSystem:
             self.cursor -= 1
             if self.cursor < self.ypos:
                 self.ypos -= 1
+        else:
+          self.bottom()
 
     def top(self):
         self.cursor = 0
         self.ypos = 0
+
+    def bottom(self):
+      while self.cursor < self.count - 1:
+        self.down()
 
     def goto_n(self, n):
         # goto N from top of (current) screen
