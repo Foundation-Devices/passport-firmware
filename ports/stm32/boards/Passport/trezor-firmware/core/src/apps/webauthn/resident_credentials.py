@@ -3,10 +3,10 @@ from micropython import const
 import storage.resident_credentials
 from storage.resident_credentials import MAX_RESIDENT_CREDENTIALS
 
-from apps.webauthn.credential import Fido2Credential
+from .credential import Fido2Credential
 
 if False:
-    from typing import Iterator, Optional
+    from typing import Iterator
 
 
 RP_ID_HASH_LENGTH = const(32)
@@ -42,8 +42,8 @@ def find_by_rp_id_hash(rp_id_hash: bytes) -> Iterator[Fido2Credential]:
         yield _credential_from_data(index, data)
 
 
-def get_resident_credential(index: int) -> Optional[Fido2Credential]:
-    if not (0 <= index < MAX_RESIDENT_CREDENTIALS):
+def get_resident_credential(index: int) -> Fido2Credential | None:
+    if not 0 <= index < MAX_RESIDENT_CREDENTIALS:
         return None
 
     data = storage.resident_credentials.get(index)

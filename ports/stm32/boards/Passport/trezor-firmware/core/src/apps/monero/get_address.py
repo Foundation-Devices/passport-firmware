@@ -1,19 +1,16 @@
-from trezor.messages.MoneroAddress import MoneroAddress
+from trezor.messages import MoneroAddress
+from trezor.ui.layouts import show_address
 
 from apps.common import paths
-from apps.common.keychain import with_slip44_keychain
-from apps.common.layout import address_n_to_str, show_qr
-from apps.monero import CURVE, SLIP44_ID, misc
-from apps.monero.layout import confirms
+from apps.common.keychain import auto_keychain
+from apps.monero import misc
 from apps.monero.xmr import addresses, crypto, monero
 from apps.monero.xmr.networks import net_version
 
 
-@with_slip44_keychain(SLIP44_ID, CURVE, allow_testnet=True)
+@auto_keychain(__name__)
 async def get_address(ctx, msg, keychain):
-    await paths.validate_path(
-        ctx, misc.validate_full_path, keychain, msg.address_n, CURVE
-    )
+    await paths.validate_path(ctx, keychain, msg.address_n)
 
     creds = misc.get_creds(keychain, msg.address_n, msg.network_type)
     addr = creds.address
@@ -43,11 +40,12 @@ async def get_address(ctx, msg, keychain):
         )
 
     if msg.show_display:
-        desc = address_n_to_str(msg.address_n)
-        while True:
-            if await confirms.show_address(ctx, addr.decode(), desc=desc):
-                break
-            if await show_qr(ctx, "monero:" + addr.decode(), desc=desc):
-                break
+        title = paths.address_n_to_str(msg.address_n)
+        await show_address(
+            ctx,
+            address=addr.decode(),
+            address_qr="monero:" + addr.decode(),
+            title=title,
+        )
 
     return MoneroAddress(address=addr)

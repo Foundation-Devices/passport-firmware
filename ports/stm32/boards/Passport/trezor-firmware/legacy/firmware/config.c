@@ -62,29 +62,28 @@ static const uint32_t META_MAGIC_V10 = 0xFFFFFFFF;
 #define FLAG_PUBLIC_SHIFTED (FLAG_PUBLIC << 8)
 #define FLAGS_WRITE_SHIFTED (FLAGS_WRITE << 8)
 
-#define KEY_UUID (0 | APP | FLAG_PUBLIC_SHIFTED)      // bytes(12)
-#define KEY_VERSION (1 | APP)                         // uint32
-#define KEY_MNEMONIC (2 | APP)                        // string(241)
-#define KEY_LANGUAGE (3 | APP | FLAG_PUBLIC_SHIFTED)  // string(17)
-#define KEY_LABEL (4 | APP | FLAG_PUBLIC_SHIFTED)     // string(33)
+// clang-format off
+#define KEY_UUID (0 | APP | FLAG_PUBLIC_SHIFTED)                   // bytes(12)
+#define KEY_VERSION (1 | APP)                                      // uint32
+#define KEY_MNEMONIC (2 | APP)                                     // string(241)
+#define KEY_LANGUAGE (3 | APP | FLAG_PUBLIC_SHIFTED)               // string(17)
+#define KEY_LABEL (4 | APP | FLAG_PUBLIC_SHIFTED)                  // string(33)
 #define KEY_PASSPHRASE_PROTECTION (5 | APP | FLAG_PUBLIC_SHIFTED)  // bool
-#define KEY_HOMESCREEN (6 | APP | FLAG_PUBLIC_SHIFTED)        // bytes(1024)
-#define KEY_NEEDS_BACKUP (7 | APP)                            // bool
-#define KEY_FLAGS (8 | APP)                                   // uint32
-#define KEY_U2F_COUNTER (9 | APP | FLAGS_WRITE_SHIFTED)       // uint32
-#define KEY_UNFINISHED_BACKUP (11 | APP)                      // bool
-#define KEY_AUTO_LOCK_DELAY_MS (12 | APP)                     // uint32
-#define KEY_NO_BACKUP (13 | APP)                              // bool
-#define KEY_INITIALIZED (14 | APP | FLAG_PUBLIC_SHIFTED)      // uint32
-#define KEY_NODE (15 | APP)                                   // node
-#define KEY_IMPORTED (16 | APP)                               // bool
-#define KEY_U2F_ROOT (17 | APP | FLAG_PUBLIC_SHIFTED)         // node
-#define KEY_DEBUG_LINK_PIN (255 | APP | FLAG_PUBLIC_SHIFTED)  // string(10)
+#define KEY_HOMESCREEN (6 | APP | FLAG_PUBLIC_SHIFTED)             // bytes(1024)
+#define KEY_NEEDS_BACKUP (7 | APP)                                 // bool
+#define KEY_FLAGS (8 | APP)                                        // uint32
+#define KEY_U2F_COUNTER (9 | APP | FLAGS_WRITE_SHIFTED)            // uint32
+#define KEY_UNFINISHED_BACKUP (11 | APP)                           // bool
+#define KEY_AUTO_LOCK_DELAY_MS (12 | APP)                          // uint32
+#define KEY_NO_BACKUP (13 | APP)                                   // bool
+#define KEY_INITIALIZED (14 | APP | FLAG_PUBLIC_SHIFTED)           // uint32
+#define KEY_NODE (15 | APP)                                        // node
+#define KEY_IMPORTED (16 | APP)                                    // bool
+#define KEY_U2F_ROOT (17 | APP | FLAG_PUBLIC_SHIFTED)              // node
+#define KEY_DEBUG_LINK_PIN (255 | APP | FLAG_PUBLIC_SHIFTED)       // string(10)
+// clang-format on
 
 #define MAX_SESSIONS_COUNT 10
-
-// The PIN value corresponding to an empty PIN.
-static const uint32_t PIN_EMPTY = 1;
 
 static uint32_t config_uuid[UUID_SIZE / sizeof(uint32_t)];
 _Static_assert(sizeof(config_uuid) == UUID_SIZE, "config_uuid has wrong size");
@@ -144,27 +143,12 @@ static uint32_t sessionUseCounter = 0;
 static secbool autoLockDelayMsCached = secfalse;
 static uint32_t autoLockDelayMs = autoLockDelayMsDefault;
 
+static SafetyCheckLevel safetyCheckLevel = SafetyCheckLevel_Strict;
+
 static const uint32_t CONFIG_VERSION = 11;
 
 static const uint8_t FALSE_BYTE = '\x00';
 static const uint8_t TRUE_BYTE = '\x01';
-
-static uint32_t pin_to_int(const char *pin) {
-  uint32_t val = 1;
-  size_t i = 0;
-  for (i = 0; i < MAX_PIN_LEN && pin[i] != '\0'; ++i) {
-    if (pin[i] < '0' || pin[i] > '9') {
-      return 0;
-    }
-    val = 10 * val + pin[i] - '0';
-  }
-
-  if (pin[i] != '\0') {
-    return 0;
-  }
-
-  return val;
-}
 
 static secbool config_set_bool(uint16_t key, bool value) {
   if (value) {
@@ -332,9 +316,12 @@ static secbool config_upgrade_v10(void) {
   }
 
   storage_init(NULL, HW_ENTROPY_DATA, HW_ENTROPY_LEN);
-  storage_unlock(PIN_EMPTY, NULL);
+  storage_unlock(PIN_EMPTY, PIN_EMPTY_LEN, NULL);
   if (config.has_pin) {
-    storage_change_pin(PIN_EMPTY, pin_to_int(config.pin), NULL, NULL);
+    size_t pin_len =
+        MIN(strnlen(config.pin, sizeof(config.pin)), (size_t)MAX_PIN_LEN);
+    storage_change_pin(PIN_EMPTY, PIN_EMPTY_LEN, (const uint8_t *)config.pin,
+                       pin_len, NULL, NULL);
   }
 
   while (pin_wait != 0) {
@@ -408,7 +395,7 @@ void config_init(void) {
 
   // Auto-unlock storage if no PIN is set.
   if (storage_is_unlocked() == secfalse && storage_has_pin() == secfalse) {
-    storage_unlock(PIN_EMPTY, NULL);
+    storage_unlock(PIN_EMPTY, PIN_EMPTY_LEN, NULL);
   }
 
   uint16_t len = 0;
@@ -420,7 +407,7 @@ void config_init(void) {
     storage_set(KEY_UUID, config_uuid, sizeof(config_uuid));
     storage_set(KEY_VERSION, &CONFIG_VERSION, sizeof(CONFIG_VERSION));
   }
-  data2hex(config_uuid, sizeof(config_uuid), config_uuid_str);
+  data2hex((const uint8_t *)config_uuid, sizeof(config_uuid), config_uuid_str);
 
   session_clear(false);
 
@@ -780,7 +767,8 @@ bool config_containsMnemonic(const char *mnemonic) {
  */
 bool config_unlock(const char *pin) {
   char oldTiny = usbTiny(1);
-  secbool ret = storage_unlock(pin_to_int(pin), NULL);
+  secbool ret =
+      storage_unlock((const uint8_t *)pin, strnlen(pin, MAX_PIN_LEN), NULL);
   usbTiny(oldTiny);
   return sectrue == ret;
 }
@@ -788,27 +776,21 @@ bool config_unlock(const char *pin) {
 bool config_hasPin(void) { return sectrue == storage_has_pin(); }
 
 bool config_changePin(const char *old_pin, const char *new_pin) {
-  uint32_t new_pin_int = pin_to_int(new_pin);
-  if (new_pin_int == 0) {
-    return false;
-  }
-
   char oldTiny = usbTiny(1);
-  secbool ret =
-      storage_change_pin(pin_to_int(old_pin), new_pin_int, NULL, NULL);
+  secbool ret = storage_change_pin(
+      (const uint8_t *)old_pin, strnlen(old_pin, MAX_PIN_LEN),
+      (const uint8_t *)new_pin, strnlen(new_pin, MAX_PIN_LEN), NULL, NULL);
   usbTiny(oldTiny);
 
 #if DEBUG_LINK
   if (sectrue == ret) {
-    if (new_pin_int != PIN_EMPTY) {
+    if (new_pin[0] != '\0') {
       storage_set(KEY_DEBUG_LINK_PIN, new_pin, strnlen(new_pin, MAX_PIN_LEN));
     } else {
       storage_delete(KEY_DEBUG_LINK_PIN);
     }
   }
 #endif
-
-  memzero(&new_pin_int, sizeof(new_pin_int));
 
   return sectrue == ret;
 }
@@ -822,16 +804,11 @@ bool config_getPin(char *dest, uint16_t dest_size) {
 bool config_hasWipeCode(void) { return sectrue == storage_has_wipe_code(); }
 
 bool config_changeWipeCode(const char *pin, const char *wipe_code) {
-  uint32_t wipe_code_int = pin_to_int(wipe_code);
-  if (wipe_code_int == 0) {
-    return false;
-  }
-
   char oldTiny = usbTiny(1);
-  secbool ret = storage_change_wipe_code(pin_to_int(pin), NULL, wipe_code_int);
+  secbool ret = storage_change_wipe_code(
+      (const uint8_t *)pin, strnlen(pin, MAX_PIN_LEN), NULL,
+      (const uint8_t *)wipe_code, strnlen(wipe_code, MAX_PIN_LEN));
   usbTiny(oldTiny);
-
-  memzero(&wipe_code_int, sizeof(wipe_code_int));
   return sectrue == ret;
 }
 
@@ -962,6 +939,7 @@ uint32_t config_getAutoLockDelayMs() {
   if (sectrue != config_get_uint32(KEY_AUTO_LOCK_DELAY_MS, &autoLockDelayMs)) {
     autoLockDelayMs = autoLockDelayMsDefault;
   }
+  autoLockDelayMs = MAX(autoLockDelayMs, MIN_AUTOLOCK_DELAY_MS);
   autoLockDelayMsCached = sectrue;
   return autoLockDelayMs;
 }
@@ -975,16 +953,23 @@ void config_setAutoLockDelayMs(uint32_t auto_lock_delay_ms) {
   }
 }
 
+SafetyCheckLevel config_getSafetyCheckLevel(void) { return safetyCheckLevel; }
+
+void config_setSafetyCheckLevel(SafetyCheckLevel safety_check_level) {
+  safetyCheckLevel = safety_check_level;
+}
+
 void config_wipe(void) {
   char oldTiny = usbTiny(1);
   storage_wipe();
   if (storage_is_unlocked() != sectrue) {
-    storage_unlock(PIN_EMPTY, NULL);
+    storage_unlock(PIN_EMPTY, PIN_EMPTY_LEN, NULL);
   }
   usbTiny(oldTiny);
   random_buffer((uint8_t *)config_uuid, sizeof(config_uuid));
-  data2hex(config_uuid, sizeof(config_uuid), config_uuid_str);
+  data2hex((const uint8_t *)config_uuid, sizeof(config_uuid), config_uuid_str);
   autoLockDelayMsCached = secfalse;
+  safetyCheckLevel = SafetyCheckLevel_Strict;
   storage_set(KEY_UUID, config_uuid, sizeof(config_uuid));
   storage_set(KEY_VERSION, &CONFIG_VERSION, sizeof(CONFIG_VERSION));
   session_clear(false);

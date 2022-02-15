@@ -732,8 +732,8 @@ Generate a new receive address in {} and scan the QR code on the next page.'''.f
                 # Use address to nail down deriv_path and addr_type, if not yet known
                 self.infer_wallet_info(address=address)
 
-                result = do_address_verify(self.acct_num, address, self.addr_type, self.deriv_path, self.multisig_wallet)
-                if result == False:
+                result = await do_address_verify(self.acct_num, address, self.addr_type, self.deriv_path, self.multisig_wallet)
+                if not result:
                     result = await ux_show_story('Do you want to SKIP address verification or SCAN another address?', title='Not Found', left_btn='SKIP',
                                                  right_btn='SCAN', center=True, center_vertically=True)
                     if result == 'x':

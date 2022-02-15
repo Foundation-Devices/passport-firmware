@@ -8,7 +8,7 @@
 # the actual data follow. This currently only supports the Payment
 # transaction type and the fields that are required for it.
 
-from trezor.messages.RippleSignTx import RippleSignTx
+from trezor.messages import RippleSignTx
 
 from . import helpers
 
@@ -124,4 +124,4 @@ def rshift(val, n):
     Implements signed right-shift.
     See: http://stackoverflow.com/a/5833119/15677
     """
-    return (val % 0x100000000) >> n
+    return (val % 0x1_0000_0000) >> n

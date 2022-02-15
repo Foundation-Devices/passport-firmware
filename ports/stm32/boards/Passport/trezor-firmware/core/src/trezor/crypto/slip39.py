@@ -20,10 +20,10 @@
 
 """
 This implements the high-level functions for SLIP-39, also called "Shamir Backup".
-It uses crypto/shamir.c for the cryptographic operations and crypto.slip39.c for
+It uses crypto/shamir.c for the cryptographic operations and crypto/slip39.c for
 performance-heavy operations (mostly regarding the wordlist).
 
-This consideres the Encrypted Master Secret, as defined in SLIP-39, as what is
+This considers the Encrypted Master Secret, as defined in SLIP-39, as what is
 stored in the storage, then "decrypted" using a passphrase into a Master Secret,
 which is then fed into BIP-32 for example.
 
@@ -33,18 +33,17 @@ See https://github.com/satoshilabs/slips/blob/master/slip-0039.md.
 from micropython import const
 from trezorcrypto import shamir, slip39
 
-from trezor.crypto import hashlib, hmac, pbkdf2, random
+from trezor.crypto import hmac, pbkdf2, random
 from trezor.errors import MnemonicError
 
 if False:
-    from typing import Dict, Iterable, List, Optional, Set, Tuple
+    from typing import Callable, Iterable, Tuple
 
     Indices = Tuple[int, ...]
-    MnemonicGroups = Dict[int, Tuple[int, Set[Tuple[int, bytes]]]]
+    MnemonicGroups = dict[int, tuple[int, set[tuple[int, bytes]]]]
 
-"""
-## Simple helpers
-"""
+
+# === Simple helpers ===
 
 _RADIX_BITS = const(10)
 """The length of the radix in bits."""
@@ -62,9 +61,7 @@ def _xor(a: bytes, b: bytes) -> bytes:
     return bytes(x ^ y for x, y in zip(a, b))
 
 
-"""
-## Constants
-"""
+# === Constants ===
 
 _ID_LENGTH_BITS = const(15)
 """The length of the random identifier in bits."""
@@ -93,7 +90,7 @@ _MIN_STRENGTH_BITS = const(128)
 _MIN_MNEMONIC_LENGTH_WORDS = _METADATA_LENGTH_WORDS + _bits_to_words(_MIN_STRENGTH_BITS)
 """The minimum allowed length of the mnemonic in words."""
 
-_BASE_ITERATION_COUNT = const(10000)
+_BASE_ITERATION_COUNT = const(10_000)
 """The minimum number of iterations to use in PBKDF2."""
 
 _ROUND_COUNT = const(4)
@@ -106,18 +103,16 @@ _DIGEST_INDEX = const(254)
 """The index of the share containing the digest of the shared secret."""
 
 
-"""
-# Keyboard functions
-"""
+# === Keyboard functions ===
 
 KEYBOARD_FULL_MASK = const(0x1FF)
 """All buttons are allowed. 9-bit bitmap all set to 1."""
 
 
-def compute_mask(prefix: str) -> int:
+def word_completion_mask(prefix: str) -> int:
     if not prefix:
         return KEYBOARD_FULL_MASK
-    return slip39.compute_mask(int(prefix))
+    return slip39.word_completion_mask(int(prefix))
 
 
 def button_sequence_to_word(prefix: str) -> str:
@@ -126,9 +121,7 @@ def button_sequence_to_word(prefix: str) -> str:
     return slip39.button_sequence_to_word(int(prefix))
 
 
-"""
-# External API
-"""
+# === External API ===
 
 MAX_SHARE_COUNT = const(16)
 """The maximum number of shares that can be created."""
@@ -169,6 +162,7 @@ def decrypt(
     passphrase: bytes,
     iteration_exponent: int,
     identifier: int,
+    progress_callback: Callable[[int, int], None] | None = None,
 ) -> bytes:
     """
     Converts the Encrypted Master Secret to a Master Secret by applying the passphrase.
@@ -184,6 +178,8 @@ def decrypt(
             r,
             _xor(l, _round_function(i, passphrase, iteration_exponent, salt, r)),
         )
+        if progress_callback:
+            progress_callback(_ROUND_COUNT - i, _ROUND_COUNT)
     return r + l
 
 
@@ -196,11 +192,11 @@ def generate_random_identifier() -> int:
 
 def split_ems(
     group_threshold: int,  # The number of groups required to reconstruct the master secret.
-    groups: List[Tuple[int, int]],  # A list of (member_threshold, member_count).
+    groups: list[tuple[int, int]],  # A list of (member_threshold, member_count).
     identifier: int,
     iteration_exponent: int,
     encrypted_master_secret: bytes,  # The encrypted master secret to split.
-) -> List[List[str]]:
+) -> list[list[str]]:
     """
     Splits an encrypted master secret into mnemonic shares using Shamir's secret sharing scheme.
 
@@ -213,9 +209,7 @@ def split_ems(
 
     if group_threshold > len(groups):
         raise ValueError(
-            "The requested group threshold ({}) must not exceed the number of groups ({}).".format(
-                group_threshold, len(groups)
-            )
+            f"The requested group threshold ({group_threshold}) must not exceed the number of groups ({len(groups)})."
         )
 
     if any(
@@ -229,7 +223,7 @@ def split_ems(
     # Split the Encrypted Master Secret on the group level.
     group_shares = _split_secret(group_threshold, len(groups), encrypted_master_secret)
 
-    mnemonics = []  # type: List[List[str]]
+    mnemonics: list[list[str]] = []
     for (member_threshold, member_count), (group_index, group_secret) in zip(
         groups, group_shares
     ):
@@ -253,7 +247,7 @@ def split_ems(
     return mnemonics
 
 
-def recover_ems(mnemonics: List[str]) -> Tuple[int, int, bytes]:
+def recover_ems(mnemonics: list[str]) -> tuple[int, int, bytes]:
     """
     Combines mnemonic shares to obtain the encrypted master secret which was previously
     split using Shamir's secret sharing scheme.
@@ -267,23 +261,19 @@ def recover_ems(mnemonics: List[str]) -> Tuple[int, int, bytes]:
         identifier,
         iteration_exponent,
         group_threshold,
-        group_count,
+        _group_count,
         groups,
     ) = _decode_mnemonics(mnemonics)
 
     if len(groups) != group_threshold:
         raise MnemonicError(
-            "Wrong number of mnemonic groups. Expected {} groups, but {} were provided.".format(
-                group_threshold, len(groups)
-            )
+            f"Wrong number of mnemonic groups. Expected {group_threshold} groups, but {len(groups)} were provided."
         )
 
-    for group_index, group in groups.items():
+    for group in groups.values():
         if len(group[1]) != group[0]:  # group[0] is threshold
             raise MnemonicError(
-                "Wrong number of mnemonics. Expected {} mnemonics, but {} were provided.".format(
-                    group[0], len(group[1])
-                )
+                f"Wrong number of mnemonics. Expected {group[0]} mnemonics, but {len(group[1])} were provided."
             )
 
     group_shares = [
@@ -302,9 +292,7 @@ def decode_mnemonic(mnemonic: str) -> Share:
 
     if len(mnemonic_data) < _MIN_MNEMONIC_LENGTH_WORDS:
         raise MnemonicError(
-            "Invalid mnemonic length. The length of each mnemonic must be at least {} words.".format(
-                _MIN_MNEMONIC_LENGTH_WORDS
-            )
+            f"Invalid mnemonic length. The length of each mnemonic must be at least {_MIN_MNEMONIC_LENGTH_WORDS} words."
         )
 
     padding_len = (_RADIX_BITS * (len(mnemonic_data) - _METADATA_LENGTH_WORDS)) % 16
@@ -352,9 +340,7 @@ def decode_mnemonic(mnemonic: str) -> Share:
     )
 
 
-"""
-## Convert mnemonics or integers to incices and back
-"""
+# === Convert mnemonics or integers to indices and back ===
 
 
 def _int_from_indices(indices: Indices) -> int:
@@ -379,9 +365,7 @@ def _mnemonic_to_indices(mnemonic: str) -> Iterable[int]:
     return (slip39.word_index(word.lower()) for word in mnemonic.split())
 
 
-"""
-## Checksum functions
-"""
+# === Checksum functions ===
 
 
 def _rs1024_create_checksum(data: Indices) -> Indices:
@@ -399,21 +383,21 @@ def _rs1024_create_checksum(data: Indices) -> Indices:
 
 def _rs1024_polymod(values: Indices) -> int:
     GEN = (
-        0xE0E040,
-        0x1C1C080,
-        0x3838100,
-        0x7070200,
-        0xE0E0009,
-        0x1C0C2412,
-        0x38086C24,
-        0x3090FC48,
-        0x21B1F890,
-        0x3F3F120,
+        0xE0_E040,
+        0x1C1_C080,
+        0x383_8100,
+        0x707_0200,
+        0xE0E_0009,
+        0x1C0C_2412,
+        0x3808_6C24,
+        0x3090_FC48,
+        0x21B1_F890,
+        0x3F3_F120,
     )
     chk = 1
     for v in values:
         b = chk >> 20
-        chk = (chk & 0xFFFFF) << 10 ^ v
+        chk = (chk & 0xF_FFFF) << 10 ^ v
         for i in range(10):
             chk ^= GEN[i] if ((b >> i) & 1) else 0
     return chk
@@ -426,22 +410,22 @@ def _rs1024_verify_checksum(data: Indices) -> bool:
     return _rs1024_polymod(tuple(_CUSTOMIZATION_STRING) + data) == 1
 
 
-def _rs1024_error_index(data: Indices) -> Optional[int]:
+def _rs1024_error_index(data: Indices) -> int | None:
     """
     Returns the index where an error possibly occurred.
     Currently unused.
     """
     GEN = (
-        0x91F9F87,
-        0x122F1F07,
-        0x244E1E07,
-        0x81C1C07,
-        0x10281C0E,
-        0x20401C1C,
-        0x103838,
-        0x207070,
-        0x40E0E0,
-        0x81C1C0,
+        0x91F_9F87,
+        0x122F_1F07,
+        0x244E_1E07,
+        0x81C_1C07,
+        0x1028_1C0E,
+        0x2040_1C1C,
+        0x10_3838,
+        0x20_7070,
+        0x40_E0E0,
+        0x81_C1C0,
     )
     chk = _rs1024_polymod(tuple(_CUSTOMIZATION_STRING) + data) ^ 1
     if chk == 0:
@@ -457,9 +441,7 @@ def _rs1024_error_index(data: Indices) -> Optional[int]:
     return None
 
 
-"""
-## Internal functions
-"""
+# === Internal functions ===
 
 
 def _round_function(i: int, passphrase: bytes, e: int, salt: bytes, r: bytes) -> bytes:
@@ -479,31 +461,25 @@ def _get_salt(identifier: int) -> bytes:
 
 
 def _create_digest(random_data: bytes, shared_secret: bytes) -> bytes:
-    return hmac.new(random_data, shared_secret, hashlib.sha256).digest()[
-        :_DIGEST_LENGTH_BYTES
-    ]
+    return hmac(hmac.SHA256, random_data, shared_secret).digest()[:_DIGEST_LENGTH_BYTES]
 
 
 def _split_secret(
     threshold: int, share_count: int, shared_secret: bytes
-) -> List[Tuple[int, bytes]]:
+) -> list[tuple[int, bytes]]:
     if threshold < 1:
         raise ValueError(
-            "The requested threshold ({}) must be a positive integer.".format(threshold)
+            f"The requested threshold ({threshold}) must be a positive integer."
         )
 
     if threshold > share_count:
         raise ValueError(
-            "The requested threshold ({}) must not exceed the number of shares ({}).".format(
-                threshold, share_count
-            )
+            f"The requested threshold ({threshold}) must not exceed the number of shares ({share_count})."
         )
 
     if share_count > MAX_SHARE_COUNT:
         raise ValueError(
-            "The requested number of shares ({}) must not exceed {}.".format(
-                share_count, MAX_SHARE_COUNT
-            )
+            f"The requested number of shares ({share_count}) must not exceed {MAX_SHARE_COUNT}."
         )
 
     # If the threshold is 1, then the digest of the shared secret is not used.
@@ -528,7 +504,7 @@ def _split_secret(
     return shares
 
 
-def _recover_secret(threshold: int, shares: List[Tuple[int, bytes]]) -> bytes:
+def _recover_secret(threshold: int, shares: list[tuple[int, bytes]]) -> bytes:
     # If the threshold is 1, then the digest of the shared secret is not used.
     if threshold == 1:
         return shares[0][1]
@@ -593,15 +569,15 @@ def _encode_mnemonic(
 
 
 def _decode_mnemonics(
-    mnemonics: List[str],
-) -> Tuple[int, int, int, int, MnemonicGroups]:
+    mnemonics: list[str],
+) -> tuple[int, int, int, int, MnemonicGroups]:
     identifiers = set()
     iteration_exponents = set()
     group_thresholds = set()
     group_counts = set()
 
     # { group_index : [threshold, set_of_member_shares] }
-    groups = {}  # type: MnemonicGroups
+    groups: MnemonicGroups = {}
     for mnemonic in mnemonics:
         share = decode_mnemonic(mnemonic)
         identifiers.add(share.identifier)
@@ -617,9 +593,7 @@ def _decode_mnemonics(
 
     if len(identifiers) != 1 or len(iteration_exponents) != 1:
         raise MnemonicError(
-            "Invalid set of mnemonics. All mnemonics must begin with the same {} words.".format(
-                _ID_EXP_LENGTH_WORDS
-            )
+            f"Invalid set of mnemonics. All mnemonics must begin with the same {_ID_EXP_LENGTH_WORDS} words."
         )
 
     if len(group_thresholds) != 1:
@@ -632,7 +606,7 @@ def _decode_mnemonics(
             "Invalid set of mnemonics. All mnemonics must have the same group count."
         )
 
-    for group_index, group in groups.items():
+    for group in groups.values():
         if len(set(share[0] for share in group[1])) != len(group[1]):
             raise MnemonicError(
                 "Invalid set of shares. Member indices in each group must be unique."

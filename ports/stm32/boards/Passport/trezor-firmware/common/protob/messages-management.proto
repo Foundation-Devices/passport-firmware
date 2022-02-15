@@ -5,6 +5,10 @@ package hw.trezor.messages.management;
 option java_package = "com.satoshilabs.trezor.lib.protobuf";
 option java_outer_classname = "TrezorMessageManagement";
 
+option (include_in_bitcoin_only) = true;
+
+import "messages.proto";
+
 /**
  * Type of the mnemonic backup given/received by the device during reset/recovery.
  */
@@ -15,12 +19,23 @@ enum BackupType {
 }
 
 /**
+ * Level of safety checks for unsafe actions like spending from invalid path namespace or setting high transaction fee.
+ */
+enum SafetyCheckLevel {
+    Strict = 0;             // disallow unsafe actions, this is the default
+    PromptAlways = 1;       // ask user before unsafe action
+    PromptTemporarily = 2;  // like PromptAlways but reverts to Strict after reboot
+}
+
+/**
  * Request: Reset device to default state and ask for device details
  * @start
  * @next Features
  */
 message Initialize {
-    optional bytes session_id = 1;           // assumed device session id; Trezor clears caches if it is different or empty
+    optional bytes session_id = 1;     // assumed device session id; Trezor clears caches if it is different or empty
+    optional bool _skip_passphrase = 2 [deprecated=true]; // removed as part of passphrase redesign
+    optional bool derive_cardano = 3;  // whether to derive Cardano Icarus root keys in this session
 }
 
 /**
@@ -37,9 +52,9 @@ message GetFeatures {
  */
 message Features {
     optional string vendor = 1;                 // name of the manufacturer, e.g. "trezor.io"
-    optional uint32 major_version = 2;          // major version of the firmware/bootloader, e.g. 1
-    optional uint32 minor_version = 3;          // minor version of the firmware/bootloader, e.g. 0
-    optional uint32 patch_version = 4;          // patch version of the firmware/bootloader, e.g. 0
+    required uint32 major_version = 2;          // major version of the firmware/bootloader, e.g. 1
+    required uint32 minor_version = 3;          // minor version of the firmware/bootloader, e.g. 0
+    required uint32 patch_version = 4;          // patch version of the firmware/bootloader, e.g. 0
     optional bool bootloader_mode = 5;          // is device in bootloader mode?
     optional string device_id = 6;              // device's unique identifier
     optional bool pin_protection = 7;           // is device protected by PIN?
@@ -51,7 +66,7 @@ message Features {
     optional bytes bootloader_hash = 14;        // hash of the bootloader
     optional bool imported = 15;                // was storage imported from an external source?
     optional bool unlocked = 16;                // is the device unlocked? called "pin_cached" previously
-//    optional bool passphrase_cached = 17;       // is passphrase already cached in session?  DEPRECATED
+    optional bool _passphrase_cached = 17 [deprecated=true]; // is passphrase already cached in session?
     optional bool firmware_present = 18;        // is valid firmware loaded?
     optional bool needs_backup = 19;            // does storage need backup? (equals to Storage.needs_backup)
     optional uint32 flags = 20;                 // device flags (equals to Storage.flags)
@@ -66,23 +81,25 @@ message Features {
     optional bool recovery_mode = 29;           // is recovery mode in progress
     repeated Capability capabilities = 30;      // list of supported capabilities
     enum Capability {
-        Capability_Bitcoin = 1;
-        Capability_Bitcoin_like = 2;            // Altcoins based on the Bitcoin source code
+        option (has_bitcoin_only_values) = true;
+
+        Capability_Bitcoin = 1 [(bitcoin_only) = true];
+        Capability_Bitcoin_like = 2;                    // Altcoins based on the Bitcoin source code
         Capability_Binance = 3;
         Capability_Cardano = 4;
-        Capability_Crypto = 5;                  // generic crypto operations for GPG, SSH, etc.
+        Capability_Crypto = 5 [(bitcoin_only) = true];  // generic crypto operations for GPG, SSH, etc.
         Capability_EOS = 6;
         Capability_Ethereum = 7;
-        Capability_Lisk = 8;
+        Capability_Lisk = 8 [deprecated = true];
         Capability_Monero = 9;
         Capability_NEM = 10;
         Capability_Ripple = 11;
         Capability_Stellar = 12;
         Capability_Tezos = 13;
         Capability_U2F = 14;
-        Capability_Shamir = 15;
-        Capability_ShamirGroups = 16;
-        Capability_PassphraseEntry = 17;        // the device is capable of passphrase entry directly on the device
+        Capability_Shamir = 15 [(bitcoin_only) = true];
+        Capability_ShamirGroups = 16 [(bitcoin_only) = true];
+        Capability_PassphraseEntry = 17 [(bitcoin_only) = true];  // the device is capable of passphrase entry directly on the device
     }
     optional BackupType backup_type = 31;       // type of device backup (BIP-39 / SLIP-39 basic / SLIP-39 advanced)
     optional bool sd_card_present = 32;         // is SD card present
@@ -90,6 +107,10 @@ message Features {
     optional bool wipe_code_protection = 34;    // is wipe code protection enabled
     optional bytes session_id = 35;
     optional bool passphrase_always_on_device = 36;  // device enforces passphrase entry on Trezor
+    optional SafetyCheckLevel safety_checks = 37;            // safety check level, set to Prompt to limit path namespace enforcement
+    optional uint32 auto_lock_delay_ms = 38;    // number of milliseconds after which the device locks itself
+    optional uint32 display_rotation = 39;      // in degrees from North
+    optional bool experimental_features = 40;   // are experimental message types enabled?
 }
 
 /**
@@ -121,16 +142,12 @@ message ApplySettings {
     optional string label = 2;
     optional bool use_passphrase = 3;
     optional bytes homescreen = 4;
-//    optional PassphraseSourceType passphrase_source = 5;  DEPRECATED
+    optional uint32 _passphrase_source = 5 [deprecated=true];   // ASK = 0; DEVICE = 1; HOST = 2;
     optional uint32 auto_lock_delay_ms = 6;
     optional uint32 display_rotation = 7;  // in degrees from North
     optional bool passphrase_always_on_device = 8;  // do not prompt for passphrase, enforce device entry
     optional SafetyCheckLevel safety_checks = 9;  // Safety check level, set to Prompt to limit path namespace enforcement
-
-    enum SafetyCheckLevel {
-        Strict = 0;
-        Prompt = 1;
-    }
+    optional bool experimental_features = 10;  // enable experimental message types
 }
 
 /**
@@ -140,7 +157,7 @@ message ApplySettings {
  * @next Failure
  */
 message ApplyFlags {
-    optional uint32 flags = 1;  // bitmask, can only set bits, not unset
+    required uint32 flags = 1;  // bitmask, can only set bits, not unset
 }
 
 /**
@@ -170,7 +187,7 @@ message ChangeWipeCode {
  * @next Failure
  */
 message SdProtect {
-    optional SdProtectOperationType operation = 1;
+    required SdProtectOperationType operation = 1;
     /**
     * Structure representing SD card protection operation
     */
@@ -187,7 +204,7 @@ message SdProtect {
  * @next Success
  */
 message Ping {
-    optional string message = 1;                // message to send back in Success message
+    optional string message = 1 [default=""];   // message to send back in Success message
     optional bool button_protection = 2;        // ask for button press
 }
 
@@ -283,7 +300,7 @@ message EntropyRequest {
  * @next Success
  */
 message EntropyAck {
-    optional bytes entropy = 1;     // 256 bits (32 bytes) of random data
+    required bytes entropy = 1;     // 256 bits (32 bytes) of random data
 }
 
 /**
@@ -296,7 +313,7 @@ message RecoveryDevice {
     optional uint32 word_count = 1;                     // number of words in BIP-39 mnemonic
     optional bool passphrase_protection = 2;            // enable master node encryption using passphrase
     optional bool pin_protection = 3;                   // enable PIN protection
-    optional string language = 4 [default='en-US'];     // device language (IETF BCP 47 language tag)
+    optional string language = 4;                       // device language (IETF BCP 47 language tag)
     optional string label = 5;                          // device label
     optional bool enforce_wordlist = 6;                 // enforce BIP-39 wordlist during the process
     // 7 reserved for unused recovery method
@@ -324,7 +341,7 @@ message RecoveryDevice {
  * @next WordAck
  */
 message WordRequest {
-    optional WordRequestType type = 1;
+    required WordRequestType type = 1;
     /**
     * Type of Recovery Word request
     */
@@ -351,7 +368,7 @@ message WordAck {
  * @next Success
  */
 message SetU2FCounter {
-    optional uint32 u2f_counter = 1;
+    required uint32 u2f_counter = 1;
 }
 
 /**
@@ -367,7 +384,7 @@ message GetNextU2FCounter {
  * @end
  */
 message NextU2FCounter {
-    optional uint32 u2f_counter = 1;
+    required uint32 u2f_counter = 1;
 }
 
 /**
@@ -395,4 +412,12 @@ message PreauthorizedRequest {
  * @next Failure
  */
 message CancelAuthorization {
+}
+
+/**
+ * Request: Reboot firmware to bootloader
+ * @start
+ * @next Success
+ */
+message RebootToBootloader {
 }

@@ -1725,23 +1725,23 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(bip39_get_words_matching_prefix_obj, 
 
 #include "bip39.h"
 
-/// def mnemonic_to_entropy(self) -> None
+/// def mnemonic_to_bits(self) -> None
 ///     '''
-///     Call trezorcrypto's mnemonic_to_entropy() C function since it's not exposed through their
+///     Call trezorcrypto's mnemonic_to_bits() C function since it's not exposed through their
 ///     Python interface.
 ///     '''
 STATIC mp_obj_t
-bip39_mnemonic_to_entropy(mp_obj_t self, mp_obj_t mnemonic, mp_obj_t entropy)
+bip39_mnemonic_to_bits(mp_obj_t self, mp_obj_t mnemonic, mp_obj_t entropy)
 {
     mp_check_self(mp_obj_is_str_or_bytes(mnemonic));
     GET_STR_DATA_LEN(mnemonic, mnemonic_str, mnemonic_len);
     mp_buffer_info_t entropy_info;
     mp_get_buffer_raise(entropy, &entropy_info, MP_BUFFER_WRITE);
 
-    int len = mnemonic_to_entropy((const char*)mnemonic_str, entropy_info.buf);
+    int len = mnemonic_to_bits((const char*)mnemonic_str, entropy_info.buf);
     return mp_obj_new_int(len);
 }
-STATIC MP_DEFINE_CONST_FUN_OBJ_3(bip39_mnemonic_to_entropy_obj, bip39_mnemonic_to_entropy);
+STATIC MP_DEFINE_CONST_FUN_OBJ_3(bip39_mnemonic_to_bits_obj, bip39_mnemonic_to_bits);
 
 STATIC mp_obj_t
 bip39___del__(mp_obj_t self)
@@ -1754,7 +1754,7 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_1(bip39___del___obj, bip39___del__);
 STATIC const mp_rom_map_elem_t bip39_locals_dict_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_foundation) },
     { MP_ROM_QSTR(MP_QSTR_get_words_matching_prefix), MP_ROM_PTR(&bip39_get_words_matching_prefix_obj) },
-    { MP_ROM_QSTR(MP_QSTR_mnemonic_to_entropy), MP_ROM_PTR(&bip39_mnemonic_to_entropy_obj) },
+    { MP_ROM_QSTR(MP_QSTR_mnemonic_to_bits), MP_ROM_PTR(&bip39_mnemonic_to_bits_obj) },
     { MP_ROM_QSTR(MP_QSTR___del__), MP_ROM_PTR(&bip39___del___obj) },
 };
 STATIC MP_DEFINE_CONST_DICT(bip39_locals_dict, bip39_locals_dict_table);

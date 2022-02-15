@@ -1,30 +1,27 @@
 from trezor import wire
-from trezor.messages.GetOwnershipId import GetOwnershipId
-from trezor.messages.OwnershipId import OwnershipId
+from trezor.enums import InputScriptType
+from trezor.messages import GetOwnershipId, OwnershipId
 
-from apps.common import coininfo
 from apps.common.paths import validate_path
 
 from . import addresses, common, scripts
-from .keychain import with_keychain
+from .keychain import validate_path_against_script_type, with_keychain
 from .ownership import get_identifier
 
 if False:
+    from apps.common.coininfo import CoinInfo
     from apps.common.keychain import Keychain
 
 
 @with_keychain
 async def get_ownership_id(
-    ctx, msg: GetOwnershipId, keychain: Keychain, coin: coininfo.CoinInfo
+    ctx: wire.Context, msg: GetOwnershipId, keychain: Keychain, coin: CoinInfo
 ) -> OwnershipId:
     await validate_path(
         ctx,
-        addresses.validate_full_path,
         keychain,
         msg.address_n,
-        coin.curve_name,
-        coin=coin,
-        script_type=msg.script_type,
+        validate_path_against_script_type(coin, msg),
     )
 
     if msg.script_type not in common.INTERNAL_INPUT_SCRIPT_TYPES:
@@ -32,6 +29,9 @@ async def get_ownership_id(
 
     if msg.script_type in common.SEGWIT_INPUT_SCRIPT_TYPES and not coin.segwit:
         raise wire.DataError("Segwit not enabled on this coin")
+
+    if msg.script_type == InputScriptType.SPENDTAPROOT and not coin.taproot:
+        raise wire.DataError("Taproot not enabled on this coin")
 
     node = keychain.derive(msg.address_n)
     address = addresses.get_address(msg.script_type, coin, node, msg.multisig)

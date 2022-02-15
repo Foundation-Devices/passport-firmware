@@ -1,21 +1,17 @@
 from trezor import log, wire
-from trezor.messages.CardanoAddress import CardanoAddress
+from trezor.messages import CardanoAddress
 
-from apps.common import paths
-from apps.common.layout import address_n_to_str, show_qr
-
-from . import CURVE, seed
-from .address import derive_human_readable_address, validate_full_path
-from .helpers import protocol_magics, staking_use_cases
-from .helpers.utils import to_account_path
-from .layout import (
-    show_address,
-    show_warning_address_foreign_staking_key,
-    show_warning_address_pointer,
-)
+from . import seed
+from .address import derive_human_readable_address, validate_address_parameters
+from .helpers.credential import Credential, should_show_address_credentials
+from .layout import show_cardano_address, show_credentials
+from .sign_tx import validate_network_info
 
 if False:
-    from trezor.messages import CardanoAddressParametersType, CardanoGetAddress
+    from trezor.messages import (
+        CardanoAddressParametersType,
+        CardanoGetAddress,
+    )
 
 
 @seed.with_keychain
@@ -24,9 +20,8 @@ async def get_address(
 ) -> CardanoAddress:
     address_parameters = msg.address_parameters
 
-    await paths.validate_path(
-        ctx, validate_full_path, keychain, address_parameters.address_n, CURVE
-    )
+    validate_network_info(msg.network_id, msg.protocol_magic)
+    validate_address_parameters(address_parameters)
 
     try:
         address = derive_human_readable_address(
@@ -38,53 +33,22 @@ async def get_address(
         raise wire.ProcessError("Deriving address failed")
 
     if msg.show_display:
-        await _display_address(
-            ctx, keychain, address_parameters, address, msg.protocol_magic
-        )
+        await _display_address(ctx, address_parameters, address, msg.protocol_magic)
 
     return CardanoAddress(address=address)
 
 
 async def _display_address(
     ctx: wire.Context,
-    keychain: seed.Keychain,
     address_parameters: CardanoAddressParametersType,
     address: str,
     protocol_magic: int,
 ) -> None:
-    await _show_staking_warnings(ctx, keychain, address_parameters)
-
-    network = None
-    if not protocol_magics.is_mainnet(protocol_magic):
-        network = protocol_magic
-
-    while True:
-        if await show_address(
+    if should_show_address_credentials(address_parameters):
+        await show_credentials(
             ctx,
-            address,
-            address_parameters.address_type,
-            address_parameters.address_n,
-            network=network,
-        ):
-            break
-        if await show_qr(
-            ctx, address, desc=address_n_to_str(address_parameters.address_n)
-        ):
-            break
-
-
-async def _show_staking_warnings(
-    ctx: wire.Context,
-    keychain: seed.Keychain,
-    address_parameters: CardanoAddressParametersType,
-) -> None:
-    staking_type = staking_use_cases.get(keychain, address_parameters)
-    if staking_type == staking_use_cases.MISMATCH:
-        await show_warning_address_foreign_staking_key(
-            ctx,
-            to_account_path(address_parameters.address_n),
-            to_account_path(address_parameters.address_n_staking),
-            address_parameters.staking_key_hash,
+            Credential.payment_credential(address_parameters),
+            Credential.stake_credential(address_parameters),
         )
-    elif staking_type == staking_use_cases.POINTER_ADDRESS:
-        await show_warning_address_pointer(ctx, address_parameters.certificate_pointer)
+
+    await show_cardano_address(ctx, address_parameters, address, protocol_magic)

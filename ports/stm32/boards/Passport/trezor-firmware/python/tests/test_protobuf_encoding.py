@@ -1,6 +1,6 @@
 # This file is part of the Trezor project.
 #
-# Copyright (C) 2012-2019 SatoshiLabs and contributors
+# Copyright (C) 2012-2022 SatoshiLabs and contributors
 #
 # This library is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Lesser General Public License version 3
@@ -14,47 +14,97 @@
 # You should have received a copy of the License along with this library.
 # If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.
 
+from enum import IntEnum
 from io import BytesIO
 import logging
 
 import pytest
 
-from trezorlib import protobuf
+from trezorlib import messages, protobuf
+
+
+class SomeEnum(IntEnum):
+    Zero = 0
+    Five = 5
+    TwentyFive = 25
+
+
+class WiderEnum(IntEnum):
+    One = 1
+    Two = 2
+    Three = 3
+    Four = 4
+    Five = 5
+
+
+class NarrowerEnum(IntEnum):
+    One = 1
+    Five = 5
 
 
 class PrimitiveMessage(protobuf.MessageType):
-    @classmethod
-    def get_fields(cls):
-        return {
-            1: ("uvarint", protobuf.UVarintType, 0),
-            2: ("svarint", protobuf.SVarintType, 0),
-            3: ("bool", protobuf.BoolType, 0),
-            4: ("bytes", protobuf.BytesType, 0),
-            5: ("unicode", protobuf.UnicodeType, 0),
-            6: ("enum", protobuf.EnumType("t", (0, 5, 25)), 0),
-        }
+    FIELDS = {
+        1: protobuf.Field("uvarint", "uint64"),
+        2: protobuf.Field("svarint", "sint64"),
+        3: protobuf.Field("bool", "bool"),
+        4: protobuf.Field("bytes", "bytes"),
+        5: protobuf.Field("unicode", "string"),
+        6: protobuf.Field("enum", "SomeEnum"),
+    }
 
 
 class EnumMessageMoreValues(protobuf.MessageType):
-    @classmethod
-    def get_fields(cls):
-        return {1: ("enum", protobuf.EnumType("t", (0, 1, 2, 3, 4, 5)), 0)}
+    FIELDS = {1: protobuf.Field("enum", "WiderEnum")}
 
 
 class EnumMessageLessValues(protobuf.MessageType):
-    @classmethod
-    def get_fields(cls):
-        return {1: ("enum", protobuf.EnumType("t", (0, 5)), 0)}
+    FIELDS = {1: protobuf.Field("enum", "NarrowerEnum")}
 
 
 class RepeatedFields(protobuf.MessageType):
-    @classmethod
-    def get_fields(cls):
-        return {
-            1: ("uintlist", protobuf.UVarintType, protobuf.FLAG_REPEATED),
-            2: ("enumlist", protobuf.EnumType("t", (0, 1)), protobuf.FLAG_REPEATED),
-            3: ("strlist", protobuf.UnicodeType, protobuf.FLAG_REPEATED),
-        }
+    FIELDS = {
+        1: protobuf.Field("uintlist", "uint64", repeated=True),
+        2: protobuf.Field("enumlist", "SomeEnum", repeated=True),
+        3: protobuf.Field("strlist", "string", repeated=True),
+    }
+
+
+class RequiredFields(protobuf.MessageType):
+    FIELDS = {
+        1: protobuf.Field("uvarint", "uint64", required=True),
+        2: protobuf.Field("nested", "PrimitiveMessage", required=True),
+    }
+
+
+class DefaultFields(protobuf.MessageType):
+    FIELDS = {
+        1: protobuf.Field("uvarint", "uint32", default=42),
+        2: protobuf.Field("svarint", "sint32", default=-42),
+        3: protobuf.Field("bool", "bool", default=True),
+        4: protobuf.Field("bytes", "bytes", default=b"hello"),
+        5: protobuf.Field("unicode", "string", default="hello"),
+        6: protobuf.Field("enum", "SomeEnum", default=SomeEnum.Five),
+    }
+
+
+class RecursiveMessage(protobuf.MessageType):
+    FIELDS = {
+        1: protobuf.Field("uvarint", "uint64"),
+        2: protobuf.Field("recursivefield", "RecursiveMessage", required=False)
+    }
+
+
+# message types are read from the messages module so we need to "include" these messages there for now
+messages.SomeEnum = SomeEnum
+messages.WiderEnum = WiderEnum
+messages.NarrowerEnum = NarrowerEnum
+messages.PrimitiveMessage = PrimitiveMessage
+messages.EnumMessageMoreValues = EnumMessageMoreValues
+messages.EnumMessageLessValues = EnumMessageLessValues
+messages.RepeatedFields = RepeatedFields
+messages.RequiredFields = RequiredFields
+messages.DefaultFields = DefaultFields
+messages.RecursiveMessage = RecursiveMessage
 
 
 def load_uvarint(buffer):
@@ -65,6 +115,17 @@ def load_uvarint(buffer):
 def dump_uvarint(value):
     writer = BytesIO()
     protobuf.dump_uvarint(writer, value)
+    return writer.getvalue()
+
+
+def load_message(buffer, msg_type):
+    reader = BytesIO(buffer)
+    return protobuf.load_message(reader, msg_type)
+
+
+def dump_message(msg):
+    writer = BytesIO()
+    protobuf.dump_message(writer, msg)
     return writer.getvalue()
 
 
@@ -109,7 +170,7 @@ def test_sint_uint():
 
     # roundtrip:
     assert protobuf.uint_to_sint(protobuf.sint_to_uint(1234567891011)) == 1234567891011
-    assert protobuf.uint_to_sint(protobuf.sint_to_uint(-2 ** 32)) == -2 ** 32
+    assert protobuf.uint_to_sint(protobuf.sint_to_uint(-(2 ** 32))) == -(2 ** 32)
 
 
 def test_simple_message():
@@ -119,14 +180,11 @@ def test_simple_message():
         bool=True,
         bytes=b"\xDE\xAD\xCA\xFE",
         unicode="Příliš žluťoučký kůň úpěl ďábelské ódy 😊",
-        enum=5,
+        enum=SomeEnum.Five,
     )
 
-    buf = BytesIO()
-
-    protobuf.dump_message(buf, msg)
-    buf.seek(0)
-    retr = protobuf.load_message(buf, PrimitiveMessage)
+    buf = dump_message(msg)
+    retr = load_message(buf, PrimitiveMessage)
 
     assert msg == retr
     assert retr.uvarint == 12345678910
@@ -134,65 +192,46 @@ def test_simple_message():
     assert retr.bool is True
     assert retr.bytes == b"\xDE\xAD\xCA\xFE"
     assert retr.unicode == "Příliš žluťoučký kůň úpěl ďábelské ódy 😊"
+    assert retr.enum == SomeEnum.Five
     assert retr.enum == 5
 
 
 def test_validate_enum(caplog):
     caplog.set_level(logging.INFO)
     # round-trip of a valid value
-    msg = EnumMessageMoreValues(enum=0)
-    buf = BytesIO()
-    protobuf.dump_message(buf, msg)
-    buf.seek(0)
-    retr = protobuf.load_message(buf, EnumMessageLessValues)
+    msg = EnumMessageMoreValues(enum=WiderEnum.Five)
+    buf = dump_message(msg)
+    retr = load_message(buf, EnumMessageLessValues)
     assert retr.enum == msg.enum
 
     assert not caplog.records
 
     # dumping an invalid enum value fails
     msg.enum = 19
-    buf.seek(0)
-    protobuf.dump_message(buf, msg)
+    with pytest.raises(
+        ValueError, match="Value 19 in field enum unknown for WiderEnum"
+    ):
+        dump_message(msg)
+
+    msg.enum = WiderEnum.Three
+    buf = dump_message(msg)
+    retr = load_message(buf, EnumMessageLessValues)
 
     assert len(caplog.records) == 1
     record = caplog.records.pop(0)
     assert record.levelname == "INFO"
-    assert record.getMessage() == "Value 19 unknown for type t"
-
-    msg.enum = 3
-    buf.seek(0)
-    protobuf.dump_message(buf, msg)
-    buf.seek(0)
-    protobuf.load_message(buf, EnumMessageLessValues)
-
-    assert len(caplog.records) == 1
-    record = caplog.records.pop(0)
-    assert record.levelname == "INFO"
-    assert record.getMessage() == "Value 3 unknown for type t"
+    assert record.getMessage() == "On field enum: 3 is not a valid NarrowerEnum"
+    assert retr.enum == 3
 
 
 def test_repeated():
     msg = RepeatedFields(
-        uintlist=[1, 2, 3], enumlist=[0, 1, 0, 1], strlist=["hello", "world"]
+        uintlist=[1, 2, 3], enumlist=[0, 5, 0, 5], strlist=["hello", "world"]
     )
-    buf = BytesIO()
-    protobuf.dump_message(buf, msg)
-    buf.seek(0)
-    retr = protobuf.load_message(buf, RepeatedFields)
+    buf = dump_message(msg)
+    retr = load_message(buf, RepeatedFields)
 
     assert retr == msg
-
-
-def test_enum_in_repeated(caplog):
-    caplog.set_level(logging.INFO)
-
-    msg = RepeatedFields(enumlist=[0, 1, 2, 3])
-    buf = BytesIO()
-    protobuf.dump_message(buf, msg)
-    assert len(caplog.records) == 2
-    for record in caplog.records:
-        assert record.levelname == "INFO"
-        assert "unknown for type t" in record.getMessage()
 
 
 def test_packed():
@@ -202,8 +241,7 @@ def test_packed():
     field_len = len(packed_values)
     message_bytes = dump_uvarint(field_id) + dump_uvarint(field_len) + packed_values
 
-    buf = BytesIO(message_bytes)
-    msg = protobuf.load_message(buf, RepeatedFields)
+    msg = load_message(message_bytes, RepeatedFields)
     assert msg
     assert msg.uintlist == values
     assert not msg.enumlist
@@ -217,9 +255,78 @@ def test_packed_enum():
     field_len = len(packed_values)
     message_bytes = dump_uvarint(field_id) + dump_uvarint(field_len) + packed_values
 
-    buf = BytesIO(message_bytes)
-    msg = protobuf.load_message(buf, RepeatedFields)
+    msg = load_message(message_bytes, RepeatedFields)
     assert msg
     assert msg.enumlist == values
     assert not msg.uintlist
     assert not msg.strlist
+
+
+def test_required():
+    msg = RequiredFields(uvarint=3, nested=PrimitiveMessage())
+    buf = dump_message(msg)
+    msg_ok = load_message(buf, RequiredFields)
+
+    assert msg_ok == msg
+
+    with pytest.deprecated_call():
+        msg = RequiredFields(uvarint=3)
+    with pytest.raises(ValueError):
+        # cannot encode instance without the required fields
+        dump_message(msg)
+
+    msg = RequiredFields(uvarint=3, nested=None)
+    # we can always encode an invalid message
+    buf = dump_message(msg)
+    with pytest.raises(ValueError):
+        # required field `nested` is also not sent
+        load_message(buf, RequiredFields)
+
+    msg = RequiredFields(uvarint=None, nested=PrimitiveMessage())
+    buf = dump_message(msg)
+    with pytest.raises(ValueError):
+        # required field `uvarint` is not sent
+        load_message(buf, RequiredFields)
+
+
+def test_default():
+    # load empty message
+    retr = load_message(b"", DefaultFields)
+    assert retr.uvarint == 42
+    assert retr.svarint == -42
+    assert retr.bool is True
+    assert retr.bytes == b"hello"
+    assert retr.unicode == "hello"
+    assert retr.enum == SomeEnum.Five
+
+    msg = DefaultFields(uvarint=0)
+    buf = dump_message(msg)
+    retr = load_message(buf, DefaultFields)
+    assert retr.uvarint == 0
+
+    msg = DefaultFields(uvarint=None)
+    buf = dump_message(msg)
+    retr = load_message(buf, DefaultFields)
+    assert retr.uvarint == 42
+
+
+def test_recursive():
+    msg = RecursiveMessage(
+        uvarint=1,
+        recursivefield=RecursiveMessage(
+            uvarint=2,
+            recursivefield=RecursiveMessage(
+                uvarint=3
+            )
+        )
+    )
+
+    buf = dump_message(msg)
+    retr = load_message(buf, RecursiveMessage)
+
+    assert msg == retr
+    assert retr.uvarint == 1
+    assert type(retr.recursivefield) == RecursiveMessage
+    assert retr.recursivefield.uvarint == 2
+    assert type(retr.recursivefield.recursivefield) == RecursiveMessage
+    assert retr.recursivefield.recursivefield.uvarint == 3

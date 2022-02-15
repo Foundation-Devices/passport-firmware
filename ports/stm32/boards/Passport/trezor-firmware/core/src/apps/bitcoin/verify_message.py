@@ -1,10 +1,11 @@
 from trezor import wire
 from trezor.crypto.curve import secp256k1
-from trezor.messages.InputScriptType import SPENDADDRESS, SPENDP2SHWITNESS, SPENDWITNESS
-from trezor.messages.Success import Success
+from trezor.enums import InputScriptType
+from trezor.messages import Success
+from trezor.ui.layouts import confirm_signverify
 
 from apps.common import coins
-from apps.common.signverify import message_digest, require_confirm_verify_message
+from apps.common.signverify import decode_message, message_digest
 
 from .addresses import (
     address_p2wpkh,
@@ -14,8 +15,11 @@ from .addresses import (
     address_to_cashaddr,
 )
 
+if False:
+    from trezor.messages import VerifyMessage
 
-async def verify_message(ctx, msg):
+
+async def verify_message(ctx: wire.Context, msg: VerifyMessage) -> Success:
     message = msg.message
     address = msg.address
     signature = msg.signature
@@ -24,15 +28,17 @@ async def verify_message(ctx, msg):
 
     digest = message_digest(coin, message)
 
-    script_type = None
     recid = signature[0]
-    if recid >= 27 and recid <= 34:
-        script_type = SPENDADDRESS  # p2pkh
-    elif recid >= 35 and recid <= 38:
-        script_type = SPENDP2SHWITNESS  # segwit-in-p2sh
+    if 27 <= recid <= 34:
+        # p2pkh
+        script_type = InputScriptType.SPENDADDRESS
+    elif 35 <= recid <= 38:
+        # segwit-in-p2sh
+        script_type = InputScriptType.SPENDP2SHWITNESS
         signature = bytes([signature[0] - 4]) + signature[1:]
-    elif recid >= 39 and recid <= 42:
-        script_type = SPENDWITNESS  # native segwit
+    elif 39 <= recid <= 42:
+        # native segwit
+        script_type = InputScriptType.SPENDWITNESS
         signature = bytes([signature[0] - 8]) + signature[1:]
     else:
         raise wire.ProcessError("Invalid signature")
@@ -42,13 +48,13 @@ async def verify_message(ctx, msg):
     if not pubkey:
         raise wire.ProcessError("Invalid signature")
 
-    if script_type == SPENDADDRESS:
+    if script_type == InputScriptType.SPENDADDRESS:
         addr = address_pkh(pubkey, coin)
         if coin.cashaddr_prefix is not None:
             addr = address_to_cashaddr(addr, coin)
-    elif script_type == SPENDP2SHWITNESS:
+    elif script_type == InputScriptType.SPENDP2SHWITNESS:
         addr = address_p2wpkh_in_p2sh(pubkey, coin)
-    elif script_type == SPENDWITNESS:
+    elif script_type == InputScriptType.SPENDWITNESS:
         addr = address_p2wpkh(pubkey, coin)
     else:
         raise wire.ProcessError("Invalid signature")
@@ -56,8 +62,12 @@ async def verify_message(ctx, msg):
     if addr != address:
         raise wire.ProcessError("Invalid signature")
 
-    await require_confirm_verify_message(
-        ctx, address_short(coin, address), coin.coin_shortcut, message
+    await confirm_signverify(
+        ctx,
+        coin.coin_shortcut,
+        decode_message(message),
+        address=address_short(coin, address),
+        verify=True,
     )
 
     return Success(message="Message verified")

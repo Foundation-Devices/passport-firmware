@@ -17,40 +17,43 @@
 import pytest
 
 from trezorlib import debuglink, device, messages, misc
+from trezorlib.transport import udp
 
 from ..common import MNEMONIC12
 
 
 @pytest.mark.skip_t2
-class TestDebuglink:
-    def test_layout(self, client):
-        layout = client.debug.state().layout
-        assert len(layout) == 1024
-
-    @pytest.mark.setup_client(mnemonic=MNEMONIC12)
-    def test_mnemonic(self, client):
-        client.ensure_unlocked()
-        mnemonic = client.debug.state().mnemonic_secret
-        assert mnemonic == MNEMONIC12.encode()
-
-    @pytest.mark.setup_client(mnemonic=MNEMONIC12, pin="1234", passphrase=True)
-    def test_pin(self, client):
-        resp = client.call_raw(messages.GetAddress())
-        assert isinstance(resp, messages.PinMatrixRequest)
-
-        state = client.debug.state()
-        assert state.pin == "1234"
-        assert state.matrix != ""
-
-        pin_encoded = client.debug.encode_pin("1234")
-        resp = client.call_raw(messages.PinMatrixAck(pin=pin_encoded))
-        assert isinstance(resp, messages.PassphraseRequest)
-
-        resp = client.call_raw(messages.PassphraseAck(passphrase=""))
-        assert isinstance(resp, messages.Address)
+def test_layout(client):
+    layout = client.debug.state().layout
+    assert len(layout) == 1024
 
 
-@pytest.mark.skip_ui
+@pytest.mark.skip_t2
+@pytest.mark.setup_client(mnemonic=MNEMONIC12)
+def test_mnemonic(client):
+    client.ensure_unlocked()
+    mnemonic = client.debug.state().mnemonic_secret
+    assert mnemonic == MNEMONIC12.encode()
+
+
+@pytest.mark.skip_t2
+@pytest.mark.setup_client(mnemonic=MNEMONIC12, pin="1234", passphrase="")
+def test_pin(client):
+    resp = client.call_raw(messages.GetAddress())
+    assert isinstance(resp, messages.PinMatrixRequest)
+
+    state = client.debug.state()
+    assert state.pin == "1234"
+    assert state.matrix != ""
+
+    pin_encoded = client.debug.encode_pin("1234")
+    resp = client.call_raw(messages.PinMatrixAck(pin=pin_encoded))
+    assert isinstance(resp, messages.PassphraseRequest)
+
+    resp = client.call_raw(messages.PassphraseAck(passphrase=""))
+    assert isinstance(resp, messages.Address)
+
+
 @pytest.mark.skip_t1
 def test_softlock_instability(client):
     def load_device():
@@ -63,7 +66,11 @@ def test_softlock_instability(client):
         )
 
     # start from a clean slate:
-    client.debug.reseed(0)
+    resp = client.debug.reseed(0)
+    if isinstance(resp, messages.Failure) and not isinstance(
+        client.transport, udp.UdpTransport
+    ):
+        pytest.xfail("reseed only supported on emulator")
     device.wipe(client)
     entropy_after_wipe = misc.get_entropy(client, 16)
 

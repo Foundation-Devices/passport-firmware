@@ -41,8 +41,8 @@ __version__ = "1.0.dev1"
 
 
 b = 256
-q = 2 ** 255 - 19
-l = 2 ** 252 + 27742317777372353535851937790883648493
+q: int = 2 ** 255 - 19
+l: int = 2 ** 252 + 27742317777372353535851937790883648493
 
 COORD_MASK = ~(1 + 2 + 4 + (1 << b - 1))
 COORD_HIGH_BIT = 1 << b - 2
@@ -154,7 +154,7 @@ def scalarmult(P: Point, e: int) -> Point:
 
 
 # Bpow[i] == scalarmult(B, 2**i)
-Bpow = []  # type: List[Point]
+Bpow: List[Point] = []
 
 
 def make_Bpow() -> None:

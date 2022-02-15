@@ -30,10 +30,16 @@ void fsm_msgEthereumGetPublicKey(const EthereumGetPublicKey *msg) {
 
   const char *curve = coin->curve_name;
   uint32_t fingerprint;
-  HDNode *node = node = fsm_getDerivedNode(curve, msg->address_n,
-                                           msg->address_n_count, &fingerprint);
+  HDNode *node = fsm_getDerivedNode(curve, msg->address_n, msg->address_n_count,
+                                    &fingerprint);
   if (!node) return;
-  hdnode_fill_public_key(node);
+
+  if (hdnode_fill_public_key(node) != 0) {
+    fsm_sendFailure(FailureType_Failure_ProcessError,
+                    _("Failed to derive public key"));
+    layoutHome();
+    return;
+  }
 
   if (msg->has_show_display && msg->show_display) {
     layoutPublicKey(node->public_key);
@@ -44,18 +50,15 @@ void fsm_msgEthereumGetPublicKey(const EthereumGetPublicKey *msg) {
     }
   }
 
-  resp->has_node = true;
   resp->node.depth = node->depth;
   resp->node.fingerprint = fingerprint;
   resp->node.child_num = node->child_num;
   resp->node.chain_code.size = 32;
   memcpy(resp->node.chain_code.bytes, node->chain_code, 32);
   resp->node.has_private_key = false;
-  resp->node.has_public_key = true;
   resp->node.public_key.size = 33;
   memcpy(resp->node.public_key.bytes, node->public_key, 33);
 
-  resp->has_xpub = true;
   hdnode_serialize_public(node, fingerprint, coin->xpub_magic, resp->xpub,
                           sizeof(resp->xpub));
 
@@ -63,7 +66,7 @@ void fsm_msgEthereumGetPublicKey(const EthereumGetPublicKey *msg) {
   layoutHome();
 }
 
-void fsm_msgEthereumSignTx(EthereumSignTx *msg) {
+void fsm_msgEthereumSignTx(const EthereumSignTx *msg) {
   CHECK_INITIALIZED
 
   CHECK_PIN
@@ -73,6 +76,18 @@ void fsm_msgEthereumSignTx(EthereumSignTx *msg) {
   if (!node) return;
 
   ethereum_signing_init(msg, node);
+}
+
+void fsm_msgEthereumSignTxEIP1559(const EthereumSignTxEIP1559 *msg) {
+  CHECK_INITIALIZED
+
+  CHECK_PIN
+
+  const HDNode *node = fsm_getDerivedNode(SECP256K1_NAME, msg->address_n,
+                                          msg->address_n_count, NULL);
+  if (!node) return;
+
+  ethereum_signing_init_eip1559(msg, node);
 }
 
 void fsm_msgEthereumTxAck(const EthereumTxAck *msg) {
@@ -97,7 +112,7 @@ void fsm_msgEthereumGetAddress(const EthereumGetAddress *msg) {
   uint32_t slip44 =
       (msg->address_n_count > 1) ? (msg->address_n[1] & 0x7fffffff) : 0;
   bool rskip60 = false;
-  uint32_t chain_id = 0;
+  uint64_t chain_id = 0;
   // constants from trezor-common/defs/ethereum/networks.json
   switch (slip44) {
     case 137:
@@ -121,7 +136,7 @@ void fsm_msgEthereumGetAddress(const EthereumGetAddress *msg) {
     strlcpy(desc, "Address:", sizeof(desc));
 
     if (!fsm_layoutAddress(resp->address, desc, false, 0, msg->address_n,
-                           msg->address_n_count, true, NULL, 0, NULL)) {
+                           msg->address_n_count, true, NULL, 0, 0, NULL)) {
       return;
     }
   }
@@ -135,27 +150,40 @@ void fsm_msgEthereumSignMessage(const EthereumSignMessage *msg) {
 
   CHECK_INITIALIZED
 
-  layoutSignMessage(msg->message.bytes, msg->message.size);
-  if (!protectButton(ButtonRequestType_ButtonRequest_ProtectCall, false)) {
-    fsm_sendFailure(FailureType_Failure_ActionCancelled, NULL);
-    layoutHome();
-    return;
-  }
-
   CHECK_PIN
 
   const HDNode *node = fsm_getDerivedNode(SECP256K1_NAME, msg->address_n,
                                           msg->address_n_count, NULL);
   if (!node) return;
 
+  uint8_t pubkeyhash[20] = {0};
+  if (!hdnode_get_ethereum_pubkeyhash(node, pubkeyhash)) {
+    return;
+  }
+
+  resp->address[0] = '0';
+  resp->address[1] = 'x';
+  ethereum_address_checksum(pubkeyhash, resp->address + 2, false, 0);
+  // ethereum_address_checksum adds trailing zero
+
+  layoutVerifyAddress(NULL, resp->address);
+  if (!protectButton(ButtonRequestType_ButtonRequest_Other, false)) {
+    fsm_sendFailure(FailureType_Failure_ActionCancelled, NULL);
+    layoutHome();
+    return;
+  }
+
+  if (!fsm_layoutSignMessage(msg->message.bytes, msg->message.size)) {
+    fsm_sendFailure(FailureType_Failure_ActionCancelled, NULL);
+    layoutHome();
+    return;
+  }
+
   ethereum_message_sign(msg, node, resp);
   layoutHome();
 }
 
 void fsm_msgEthereumVerifyMessage(const EthereumVerifyMessage *msg) {
-  CHECK_PARAM(msg->has_address, _("No address provided"));
-  CHECK_PARAM(msg->has_message, _("No message provided"));
-
   if (ethereum_message_verify(msg) != 0) {
     fsm_sendFailure(FailureType_Failure_DataError, _("Invalid signature"));
     return;
@@ -173,12 +201,13 @@ void fsm_msgEthereumVerifyMessage(const EthereumVerifyMessage *msg) {
     layoutHome();
     return;
   }
-  layoutVerifyMessage(msg->message.bytes, msg->message.size);
-  if (!protectButton(ButtonRequestType_ButtonRequest_Other, false)) {
+
+  if (!fsm_layoutVerifyMessage(msg->message.bytes, msg->message.size)) {
     fsm_sendFailure(FailureType_Failure_ActionCancelled, NULL);
     layoutHome();
     return;
   }
+
   fsm_sendSuccess(_("Message verified"));
 
   layoutHome();

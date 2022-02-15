@@ -37,7 +37,7 @@ typedef struct _mp_obj_Sha512_t {
 
 STATIC mp_obj_t mod_trezorcrypto_Sha512_update(mp_obj_t self, mp_obj_t data);
 
-/// def __init__(self, data: bytes = None) -> None:
+/// def __init__(self, data: bytes | None = None) -> None:
 ///     """
 ///     Creates a hash context object.
 ///     """
@@ -76,12 +76,13 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_2(mod_trezorcrypto_Sha512_update_obj,
 ///     """
 STATIC mp_obj_t mod_trezorcrypto_Sha512_digest(mp_obj_t self) {
   mp_obj_Sha512_t *o = MP_OBJ_TO_PTR(self);
-  uint8_t out[SHA512_DIGEST_LENGTH] = {0};
+  vstr_t hash = {0};
+  vstr_init_len(&hash, SHA512_DIGEST_LENGTH);
   SHA512_CTX ctx = {0};
   memcpy(&ctx, &(o->ctx), sizeof(SHA512_CTX));
-  sha512_Final(&ctx, out);
+  sha512_Final(&ctx, (uint8_t *)hash.buf);
   memzero(&ctx, sizeof(SHA512_CTX));
-  return mp_obj_new_bytes(out, sizeof(out));
+  return mp_obj_new_str_from_vstr(&mp_type_bytes, &hash);
 }
 STATIC MP_DEFINE_CONST_FUN_OBJ_1(mod_trezorcrypto_Sha512_digest_obj,
                                  mod_trezorcrypto_Sha512_digest);

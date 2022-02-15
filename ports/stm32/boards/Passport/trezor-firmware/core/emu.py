@@ -29,6 +29,11 @@ PROFILING_WRAPPER = HERE / "prof" / "prof.py"
 
 PROFILE_BASE = Path.home() / ".trezoremu"
 
+TREZOR_STORAGE_FILES = (
+    "trezor.flash",
+    "trezor.sdcard",
+)
+
 
 def run_command_with_emulator(emulator, command):
     with emulator:
@@ -87,8 +92,10 @@ def _from_env(name):
 @click.option("-c", "--command", "run_command", is_flag=True, help="Run command while emulator is running")
 @click.option("-d", "--production/--no-production", default=_from_env("PYOPT"), help="Production mode (debuglink disabled)")
 @click.option("-D", "--debugger", is_flag=True, help="Run emulator in debugger (gdb/lldb)")
+@click.option("-e", "--erase", is_flag=True, help="Erase profile before running")
 @click.option("--executable", type=click.Path(exists=True, dir_okay=False), default=os.environ.get("MICROPYTHON"), help="Alternate emulator executable")
 @click.option("-g", "--profiling/--no-profiling", default=_from_env("TREZOR_PROFILING"), help="Run with profiler wrapper")
+@click.option("-G", "--alloc-profiling/--no-alloc-profiling", default=_from_env("TREZOR_MEMPERF"), help="Profile memory allocation (requires special micropython build)")
 @click.option("-h", "--headless", is_flag=True, help="Headless mode (no display)")
 @click.option("--heap-size", metavar="SIZE", default="20M", help="Configure heap size")
 @click.option("--main", help="Path to python main file")
@@ -109,8 +116,10 @@ def cli(
     run_command,
     production,
     debugger,
+    erase,
     executable,
     profiling,
+    alloc_profiling,
     headless,
     heap_size,
     main,
@@ -130,7 +139,7 @@ def cli(
 
     If -c is specified, extra arguments are treated as a command that is executed with
     the running emulator. This command can access the following environment variables:
-    
+
     \b
     TREZOR_PROFILE_DIR - path to storage directory
     TREZOR_PATH - trezorlib connection string
@@ -154,7 +163,7 @@ def cli(
     if watch and inotify is None:
         raise click.ClickException("inotify module is missing, install with pip")
 
-    if main and profiling:
+    if main and (profiling or alloc_profiling):
         raise click.ClickException("Cannot use --main and -g together")
 
     if slip0014 and mnemonics:
@@ -169,7 +178,7 @@ def cli(
     if mnemonics and production:
         raise click.ClickException("Cannot load mnemonics in production mode")
 
-    if profiling:
+    if profiling or alloc_profiling:
         main_args = [str(PROFILING_WRAPPER)]
     elif main:
         main_args = [main]
@@ -195,6 +204,10 @@ def cli(
 
     else:
         profile_dir = Path("/var/tmp")
+
+    if erase:
+        for entry in TREZOR_STORAGE_FILES:
+            (profile_dir / entry).unlink(missing_ok=True)
 
     if quiet:
         output = None
@@ -230,6 +243,9 @@ def cli(
 
     if log_memory:
         os.environ["TREZOR_LOG_MEMORY"] = "1"
+
+    if alloc_profiling:
+        os.environ["TREZOR_MEMPERF"] = "1"
 
     if debugger:
         run_debugger(emulator)
