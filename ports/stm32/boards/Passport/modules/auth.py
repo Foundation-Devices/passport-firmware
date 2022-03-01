@@ -85,7 +85,7 @@ class UserAuthorizedAction:
         # may be a user-abort waiting, but we want to see error msg; so clear it
         # ux_clear_keys(True)
 
-        return await ux_show_story(msg, title)
+        return await ux_show_story(msg, title, center_vertically=True, center=True)
 
 
 # Confirmation text for user when signing text messages.
