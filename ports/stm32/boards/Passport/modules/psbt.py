@@ -265,12 +265,7 @@ class psbtProxy:
             v = self.get(self.subpaths[pk])
             curr = list(unpack_from('<%dI' % (vl//4), v))
 
-            if len(curr) > 0 and curr[0] == 0:
-                curr[0] = my_xfp
-                self.warnings.append('Fixed Missing XFP',
-                    'Replaced missing XFP with this Passport\'s XFP.')
-
-            # update in place
+=            # update in place
             self.subpaths[pk] = curr
 
             if curr[0] == my_xfp or curr[0] == swab32(my_xfp):
