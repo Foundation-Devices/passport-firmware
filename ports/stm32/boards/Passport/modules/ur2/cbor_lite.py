@@ -238,7 +238,7 @@ class CBORDecoder:
 
         raise Exception("Bad additional value")
 
-    def dncodeUndefined(self, flags=Flag_None):
+    def decodeUndefined(self, flags=Flag_None):
         (tag, value, length) = self.decodeTagAndValue(flags)
         if tag != Tag_Major_semantic:
             raise Exception("Expected Tag_Major_semantic ({}), but found {}".format(

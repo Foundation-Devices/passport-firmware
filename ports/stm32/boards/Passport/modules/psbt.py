@@ -183,7 +183,7 @@ class psbtProxy:
             assert vs != None, 'eof'
 
             kt = key[0]
-            print('kt={}'.format(kt))
+            # print('kt={}'.format(kt))
 
             # print('self.no_keys={} 1'.format(self.no_keys))
             if kt in self.no_keys:
@@ -263,18 +263,17 @@ class psbtProxy:
 
             # promote to a list of ints
             v = self.get(self.subpaths[pk])
-            here = list(unpack_from('<%dI' % (vl//4), v))
+            curr = list(unpack_from('<%dI' % (vl//4), v))
 
-            if here[0] == 0:
-                here[0] = my_xfp
-                if not any(True for k,_ in warnings if 'XFP' in k):
-                    warnings.append(('Zero XFP',
-                            'Assuming XFP of zero should be replaced by correct XFP'))
+            if len(curr) > 0 and curr[0] == 0:
+                curr[0] = my_xfp
+                self.warnings.append('Fixed Missing XFP',
+                    'Replaced missing XFP with this Passport\'s XFP.')
 
             # update in place
-            self.subpaths[pk] = here
+            self.subpaths[pk] = curr
 
-            if here[0] == my_xfp or here[0] == swab32(my_xfp):
+            if curr[0] == my_xfp or curr[0] == swab32(my_xfp):
                 num_ours += 1
             else:
                 # Address that isn't based on my seed; might be another leg in a p2sh,
@@ -935,14 +934,14 @@ class psbtObject(psbtProxy):
         assert num_in > 0, "no ins?"
 
         self.num_inputs = num_in
-        print('self.num_inputs = {}'.format(self.num_inputs ))
+        # print('self.num_inputs = {}'.format(self.num_inputs ))
 
         # all the ins are in sequence starting at this position
         self.vin_start = _skip_n_objs(fd, num_in, 'CTxIn')
 
         # next is outputs
         self.num_outputs = deser_compact_size(fd)
-        print('self.num_outputs = {}'.format(self.num_outputs ))
+        # print('self.num_outputs = {}'.format(self.num_outputs ))
 
         self.vout_start = _skip_n_objs(fd, self.num_outputs, 'CTxOut')
 
@@ -1537,9 +1536,9 @@ class psbtObject(psbtProxy):
                 # The precious private key we need
                 pk = node.private_key()
 
-                #print("privkey %s" % b2a_hex(pk).decode('ascii'))
-                #print(" pubkey %s" % b2a_hex(which_key).decode('ascii'))
-                #print(" digest %s" % b2a_hex(digest).decode('ascii'))
+                # print("privkey %s" % b2a_hex(pk).decode('ascii'))
+                # print(" pubkey %s" % b2a_hex(which_key).decode('ascii'))
+                # print(" digest %s" % b2a_hex(digest).decode('ascii'))
 
                 # Do the ACTUAL signature ... finally!!!
                 result = trezorcrypto.secp256k1.sign(pk, digest)
@@ -1549,7 +1548,7 @@ class psbtObject(psbtProxy):
                 stash.blank_object(node)
                 del pk, node, pu, skp
 
-                #print("result %s" % b2a_hex(result).decode('ascii'))
+                # print("result %s" % b2a_hex(result).decode('ascii'))
 
                 # convert signature to DER format
                 assert len(result) == 65

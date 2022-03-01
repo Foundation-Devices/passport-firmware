@@ -17,16 +17,12 @@ import chains
 import stash
 import trezorcrypto
 import uio
-import ure
-import ux
-import version
 from psbt import FatalPSBTIssue, FraudulentChangeOutput, psbtObject
-from public_constants import (AF_CLASSIC, AFC_BECH32, AFC_SCRIPT, MAX_TXN_LEN,
+from public_constants import (AF_CLASSIC, AFC_SCRIPT, MAX_TXN_LEN,
                               MSG_SIGNING_MAX_LENGTH, STXN_FINALIZE,
-                              STXN_FLAGS_MASK, STXN_SIGNED, STXN_VISUALIZE,
                               SUPPORTED_ADDR_FORMATS)
 from sffile import SFFile
-from utils import HexWriter, cleanup_deriv_path, problem_file_line, xfp2str
+from utils import cleanup_deriv_path, problem_file_line, xfp2str
 from ux import (abort_and_goto, ux_show_story, ux_show_story_sequence)
 
 # Where in SPI flash the two transactions are (in and out)
@@ -245,7 +241,7 @@ async def sign_msg(text, subpath, addr_fmt):
         # print('signature: {} address: {} sig: {}'.format(signature, address, sig))
         
         signed_message = RFC_SIGNATURE_TEMPLATE.format(addr=address, msg=text, blockchain='BITCOIN', sig=sig)
-        print('QR when decoded will read:\n{}'.format(signed_message))
+        # print('QR when decoded will read:\n{}'.format(signed_message))
 
         encoder = CBOREncoder()
         encoder.encodeBytes(bytearray(signed_message))
@@ -264,7 +260,7 @@ async def sign_msg(text, subpath, addr_fmt):
     abort_and_goto(UserAuthorizedAction.active_request)
 
 
-def sign_txt_file(filename):
+async def sign_txt_file(filename):
     # sign a one-line text file found on a microSD card
     # - not yet clear how to do address types other than 'classic'
     from files import CardSlot, CardMissingError
@@ -301,7 +297,7 @@ def sign_txt_file(filename):
         await ux_show_story("Problem: %s\n\nMessage to be signed must be a single line of ASCII text." % exc)
         return
 
-    def done(signature, address):
+    async def done(signature, address):
         # complete. write out result
         from ubinascii import b2a_base64
         orig_path, basename = filename.rsplit('/', 1)
@@ -536,7 +532,6 @@ class ApproveTransaction(UserAuthorizedAction):
                 try:
                     del self.psbt
                     self.psbt = None
-                    del msg
                 except:
                     pass        # might be NameError since we don't know how far we got
                 gc.collect()
@@ -715,7 +710,7 @@ def sign_transaction(psbt_len, flags=0x0, psbt_sha=None):
     abort_and_goto(UserAuthorizedAction.active_request)
 
 
-def sign_psbt_file(filename):
+async def sign_psbt_file(filename):
     # sign a PSBT file found on a microSD card
     from files import CardSlot, CardMissingError
     from common import dis, system
@@ -840,7 +835,7 @@ def sign_psbt_file(filename):
                     # fall thru to try again
 
             # prompt them to input another card?
-            ch = await ux_show_story(prob+"Please insert an microSD card to receive the signed transaction.",
+            ch = await ux_show_story(prob + "Please insert a microSD card to receive the signed transaction.",
                                      title="Need Card")
             if ch == 'x':
                 return
@@ -961,8 +956,9 @@ async def sign_psbt_buf(psbt_buf):
         # Text format for UR1, but binary for UR2
         #     def __init__(self, title, qr_text, qr_type, qr_args=None, msg=None, left_btn='DONE', right_btn='RESIZE', is_cbor=False):
 
-        o = DisplayURCode('Signed Txn', signed_bytes if last_scanned_qr_type == QRType.UR2 else signed_hex, last_scanned_qr_type or QRType.UR2, {'prefix': last_scanned_ur_prefix }, is_cbor=False)
-        result = await o.interact_bare()
+        o = DisplayURCode('Signed Txn', signed_bytes if last_scanned_qr_type == QRType.UR2 else signed_hex,
+                          last_scanned_qr_type or QRType.UR2, {'prefix': last_scanned_ur_prefix }, is_cbor=False)
+        await o.interact_bare()
         UserAuthorizedAction.cleanup()
 
     UserAuthorizedAction.active_request = ApproveTransaction(psbt_len, approved_cb=done)
