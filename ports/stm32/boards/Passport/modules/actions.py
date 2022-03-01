@@ -12,21 +12,19 @@
 # Every function here is called directly by a menu item. They should all be async.
 #
 
-import pyb
 import version
 import gc
 from files import CardMissingError, CardSlot
-# import main
 from uasyncio import sleep_ms
 import common
 from common import settings, system, noise, dis
 from utils import (UXStateMachine, imported, pretty_short_delay, xfp2str, to_str,
-                   truncate_string_to_width, set_next_addr, get_accounts, run_chooser,
-                   make_account_name_num, is_valid_address, save_next_addr, needs_microsd, format_btc_address,
-                   is_all_zero, bytes_to_hex_str, split_to_lines, is_valid_btc_address, do_address_verify, run_chooser)
-from wallets.utils import get_export_mode, get_addr_type_from_address, get_deriv_path_from_addr_type_and_acct
-from ux import (the_ux, ux_confirm, ux_enter_pin,
-                ux_enter_text, ux_scan_qr_code, ux_shutdown,
+                   get_accounts, run_chooser, make_account_name_num, needs_microsd,
+                   is_all_zero, bytes_to_hex_str, split_to_lines, is_valid_btc_address,
+                   do_address_verify, run_chooser)
+from wallets.utils import (get_addr_type_from_deriv_path, get_addr_type_from_address,
+                           get_deriv_path_from_addr_type_and_acct)
+from ux import (the_ux, ux_confirm, ux_enter_text, ux_scan_qr_code, ux_shutdown,
                 ux_show_story, ux_show_story_sequence, ux_show_text_as_ur, ux_show_word_list)
 from se_commands import *
 from data_codecs.qr_type import QRType
@@ -704,18 +702,22 @@ async def handle_sign_message_format(data):
 
     if data != None:
         try:
-            # TODO split this on '/n'
-            msg_to_sign = data[:36]
-            deriv_path_to_sign = data[37:]
+            parts = data.split('\n')
+            if len(parts) != 2:
+                await ux_show_story('Invalid message format.', title='Error', right_btn='DONE')
+                return False
+            # print('parts={}'.format(parts))
+            msg_to_sign = parts[0]
+            deriv_path_to_sign = parts[1]
             # print('handle_sign_message_format signing msg: {} deriv_path: {}'.format(msg_to_sign, deriv_path_to_sign))
 
             dis.fullscreen('Analyzing...')
-            # TODO: determing addr_type instead of hard coded passing AF_CLASSIC
             system.show_busy_bar()
+            # TODO: determine addr_type dynamically instead of hard coded passing AF_CLASSIC
             await sign_msg(msg_to_sign, deriv_path_to_sign, AF_CLASSIC)
         except Exception as e:
-            result = await ux_show_story('Error signing message:\n\n{}'.format(e), title='Error', right_btn='RETRY')
-            return result == 'y'
+            await ux_show_story('Error signing message:\n\n{}'.format(e), title='Error', right_btn='DONE')
+            return False
         finally:
             system.hide_busy_bar()
 

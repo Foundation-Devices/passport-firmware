@@ -17,7 +17,7 @@ class SignMessageSampler(DataSampler):
     @classmethod
     def sample(cls, data):
         # print('SignMessageSampler: data={}'.format(data))
-        deriv_split = data.split(b'\n')
+        deriv_split = data.split('\n')
         # print('SignMessageSampler: split data={}'.format(deriv_split))
 
         try:
@@ -31,7 +31,9 @@ class SignMessageSampler(DataSampler):
         return False
 
     # Number of bytes required to successfully recognize this format
-    # The length of the message is 36 + '\n' + 12 (derivation path)
+    # Message can be any length 1 byte or more
+    # Plus one byte for \n
+    # Plus at least 5 bytes for a derivation path: e.g., m/44'
     @classmethod
     def min_sample_size(cls):
-        return 49
+        return 7
