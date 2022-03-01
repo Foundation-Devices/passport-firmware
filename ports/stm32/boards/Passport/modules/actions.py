@@ -702,7 +702,7 @@ async def handle_sign_message_format(data):
 
     if data != None:
         try:
-            parts = data.split('\n')
+            parts = data.split(b'\n')
             if len(parts) != 2:
                 await ux_show_story('Invalid message format.', title='Error', right_btn='DONE')
                 return False

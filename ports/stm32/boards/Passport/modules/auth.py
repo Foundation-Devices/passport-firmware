@@ -66,7 +66,7 @@ class UserAuthorizedAction:
         cls.active_request = None
         gc.collect()
 
-    async def failure(self, msg, exc=None, title='Failure'):
+    async def failure(self, msg, exc=None, title='Error'):
         self.failed = msg
         await self.done()
 

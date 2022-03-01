@@ -17,7 +17,7 @@ class SignMessageSampler(DataSampler):
     @classmethod
     def sample(cls, data):
         # print('SignMessageSampler: data={}'.format(data))
-        deriv_split = data.split('\n')
+        deriv_split = data.split(b'\n')
         # print('SignMessageSampler: split data={}'.format(deriv_split))
 
         try:
