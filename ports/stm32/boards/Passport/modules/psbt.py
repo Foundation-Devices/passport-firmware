@@ -265,7 +265,7 @@ class psbtProxy:
             v = self.get(self.subpaths[pk])
             curr = list(unpack_from('<%dI' % (vl//4), v))
 
-=            # update in place
+            # update in place
             self.subpaths[pk] = curr
 
             if curr[0] == my_xfp or curr[0] == swab32(my_xfp):
@@ -1036,7 +1036,7 @@ class psbtObject(psbtProxy):
                 has_mine += 1
 
         if not has_mine:
-            raise FatalPSBTIssue('My XFP not involved')
+            raise FatalPSBTIssue('Passport is unable to sign this transaction (XFP does not match).')
 
         candidates = MultisigWallet.find_candidates(xfp_paths)
 
