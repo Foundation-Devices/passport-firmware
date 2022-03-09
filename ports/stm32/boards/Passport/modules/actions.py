@@ -1182,7 +1182,7 @@ async def sign_tx_from_sd(*a):
     if not choices:
         await ux_show_story("""\
 Copy an unsigned PSBT transaction onto the microSD card and insert it into Passport.
-""", title=title)
+""", title=title, center=True, center_vertically=True)
         return
 
     if len(choices) == 1:

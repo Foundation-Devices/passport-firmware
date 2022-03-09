@@ -10,16 +10,16 @@
 # psbt.py - understand PSBT file format: verify and generate them
 #
 from ustruct import unpack_from, unpack, pack
-from ubinascii import hexlify as b2a_hex
-from utils import xfp2str, B2A, keypath_to_str, problem_file_line, swab32
+from utils import xfp2str, B2A, keypath_to_str, swab32
 import trezorcrypto, stash, gc, history, sys
-from uio import BytesIO
 from sffile import SizerFile
 from sram4 import psbt_tmp256
-from multisig import MultisigWallet, MAX_SIGNERS, disassemble_multisig, disassemble_multisig_mn
+from multisig import (MultisigWallet, MAX_SIGNERS, disassemble_multisig_mn,
+                      build_witness_script_from_subpaths)
+
 from exceptions import FatalPSBTIssue, FraudulentChangeOutput
-from serializations import ser_compact_size, deser_compact_size, hash160, hash256
-from serializations import CTxIn, CTxInWitness, CTxOut, SIGHASH_ALL, ser_uint256
+from serializations import ser_compact_size, deser_compact_size, hash160
+from serializations import CTxIn, CTxInWitness, CTxOut, SIGHASH_ALL
 from serializations import ser_sig_der, uint256_from_str, ser_push_data, uint256_from_str
 from serializations import ser_string
 from common import system
@@ -287,8 +287,9 @@ class psbtOutputProxy(psbtProxy):
     blank_flds = ('unknown', 'subpaths', 'redeem_script', 'witness_script',
                     'is_change', 'num_our_keys')
 
-    def __init__(self, fd, idx):
+    def __init__(self, fd, idx, psbt):
         super().__init__()
+        self.psbt = psbt
 
         # things we track
         #self.subpaths = None        # a dictionary if non-empty
@@ -386,6 +387,10 @@ class psbtOutputProxy(psbtProxy):
                 # But definately required, else we don't know what script we're sending to.
                 raise FatalPSBTIssue("Missing redeem/witness script for output #%d" % out_idx)
 
+            if redeem_script and not witness_script and len(self.subpaths) > 1:
+                # Build the multisig witness script and use that with further validation
+                witness_script = build_witness_script_from_subpaths(self.psbt.M, self.psbt.N, self.subpaths)
+
             if not is_segwit and redeem_script and \
                     len(redeem_script) == 22 and \
                     redeem_script[0] == 0 and redeem_script[1] == 20:
@@ -413,10 +418,10 @@ class psbtOutputProxy(psbtProxy):
                 # - pubkeys will be reconstructed from derived paths here
                 # - BIP45, BIP67 rules applied
                 # - p2sh-p2wsh needs witness script here, not redeem script value
-                # - if details provided in output section, must our match multisig wallet
+                # - if details provided in output section, must match our multisig wallet
                 try:
                     active_multisig.validate_script(witness_script or redeem_script,
-                                                            subpaths=self.subpaths)
+                                                    subpaths=self.subpaths)
                 except BaseException as exc:
                     raise FraudulentChangeOutput(out_idx,
                                 "P2WSH or P2SH change output script: %s" % exc)
@@ -436,13 +441,23 @@ class psbtOutputProxy(psbtProxy):
                     # p2sh-p2wsh case (because it had witness script)
                     expect_rs = b'\x00\x20' + trezorcrypto.sha256(witness_script).digest()
 
-                    if redeem_script and expect_rs != redeem_script:
-                        # iff they provide a redeeem script, then it needs to match
-                        # what we expect it to be
-                        raise FraudulentChangeOutput(out_idx,
-                                        "P2SH-P2WSH redeem script provided, and doesn't match")
+                    # See if this is a Casa-style P2SH redeem script
+                    if len(redeem_script) == 23 and redeem_script[0] == 0xA9 and redeem_script[1] == 0x14:
+                        expect_pkh = hash160(expect_rs)
+                        trimmed_rs = redeem_script[2:-1]
+                        if expect_pkh != trimmed_rs:
+                            # iff they provide a redeeem script, then it needs to match
+                            # what we expect it to be
+                            raise FraudulentChangeOutput(out_idx,
+                                            "P2SH-P2WSH redeem script provided, and doesn't match (1)")
+                    else:
+                        if redeem_script and expect_rs != redeem_script:
+                            # iff they provide a redeeem script, then it needs to match
+                            # what we expect it to be
+                            raise FraudulentChangeOutput(out_idx,
+                                            "P2SH-P2WSH redeem script provided, and doesn't match (2)")
 
-                    expect_pkh = hash160(expect_rs)
+                        expect_pkh = hash160(expect_rs)
                 else:
                     # old BIP16 style; looks like payment addr
                     expect_pkh = hash160(redeem_script)
@@ -715,6 +730,8 @@ class psbtInputProxy(psbtProxy):
 
             #print("redeem: %s" % b2a_hex(redeem_script))
             M, N = disassemble_multisig_mn(redeem_script)
+            psbt.M = M
+            psbt.N = N
             xfp_paths = list(self.subpaths.values())
             xfp_paths.sort()
 
@@ -1354,7 +1371,7 @@ class psbtObject(psbtProxy):
         rv.parse_txn()
 
         rv.inputs = [psbtInputProxy(fd, idx) for idx in range(rv.num_inputs)]
-        rv.outputs = [psbtOutputProxy(fd, idx) for idx in range(rv.num_outputs)]
+        rv.outputs = [psbtOutputProxy(fd, idx, rv) for idx in range(rv.num_outputs)]
 
         return rv
 

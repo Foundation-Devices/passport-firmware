@@ -117,6 +117,22 @@ def make_redeem_script(M, nodes, subkey_idx):
 
     return b''.join(pubkeys)
 
+def build_witness_script_from_subpaths(M, N, subpaths):
+    from utils import bytes_to_hex_str
+    parts = []
+    i = 0
+    for xpub, _ in subpaths.items():
+        parts.append(b'\x21' + xpub)
+        i += 1
+
+    parts.sort()
+
+    parts.insert(0, bytes([80 + M]))
+    parts.append(bytes([80 + N, OP_CHECKMULTISIG]))
+    
+    result = b''.join(parts)
+    return result
+
 class MultisigWallet:
     # Capture the info we need to store long-term in order to participate in a
     # multisig wallet as a co-signer.
@@ -568,8 +584,18 @@ class MultisigWallet:
         used = set()
         ch = self.chain
 
-        M, N, pubkeys = disassemble_multisig(redeem_script)
-        assert M==self.M and N == self.N, 'wrong M/N in script'
+        if redeem_script[-1] == OP_CHECKMULTISIG:
+            M, N, pubkeys = disassemble_multisig(redeem_script)
+            assert M==self.M and N == self.N, 'wrong M/N in script'
+        else:
+            if len(subpaths) == 0:
+                return subpath_help
+
+            # If subpaths are given, check them
+            assert len(subpaths)==self.N, 'Number of subpaths {} doesn\'t match script N={}'.format(len(subpaths), N)
+            pubkeys = []
+            for xpub, _ in subpaths.items():
+                pubkeys.append(xpub)
 
         for pk_order, pubkey in enumerate(pubkeys):
             check_these = []
@@ -822,7 +848,12 @@ class MultisigWallet:
         # print('xpubs={}'.format(xpubs))
 
         # assert node.private_key() == None       # 'no privkeys plz'
-        assert chain.ctype == expect_chain      # 'wrong chain'
+        # Check that they are on the right chain
+        if chain.ctype != expect_chain:
+            from_net = 'Mainnet' if expect_chain == 'BTC' else 'Testnet'
+            to_net = 'Mainnet' if chain.ctype == 'BTC' else 'Testnet'
+            raise FatalPSBTIssue('Attempting to sign a {} transaction on {}.'.format(
+                                from_net, to_net))
 
         depth = node.depth()
 
@@ -1004,6 +1035,7 @@ class MultisigWallet:
         expect_chain = chains.current_chain().ctype
         xpubs = []
         has_mine = 0
+        addr_fmt = None
 
         for k, v in xpubs_list:
             xfp, *path = ustruct.unpack_from('<%dI' % (len(k)//4), k, 0)
