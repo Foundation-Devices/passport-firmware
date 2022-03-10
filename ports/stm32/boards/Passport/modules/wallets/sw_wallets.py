@@ -15,12 +15,14 @@ from .electrum import ElectrumWallet
 # from .fullynoded import FullyNodedWallet
 # from .gordian import GordianWallet
 # from .lily import LilyWallet
+from .nunchuk import NunchukWallet
 from .simple_bitcoin_wallet import SimpleBitcoinWallet
 from .sparrow import SparrowWallet
 from .specter import SpecterWallet
 from .wasabi import WasabiWallet
 
-# Array of all supported software wallets and their attributes -- used to build wallet menus and drive their behavior
+# Array of all supported software wallets and their attributes.
+# Used to build wallet menus and drive their behavior.
 supported_software_wallets = [
     BitcoinCoreWallet,
     BlueWallet,
@@ -32,6 +34,7 @@ supported_software_wallets = [
     # FullyNodedWallet,
     # GordianWallet,
     # LilyWallet,
+    NunchukWallet,
     SimpleBitcoinWallet,
     SparrowWallet,
     SpecterWallet,

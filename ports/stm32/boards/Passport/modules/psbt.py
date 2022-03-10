@@ -163,6 +163,8 @@ class psbtProxy:
 
     def __init__(self):
         self.fd = None
+        self.M = 1
+        self.N = 1
         #self.unknown = {}
 
     def __getattr__(self, nm):
@@ -384,7 +386,7 @@ class psbtOutputProxy(psbtProxy):
 
             if not redeem_script and not witness_script:
                 # Perhaps an omission, so let's not call fraud on it
-                # But definately required, else we don't know what script we're sending to.
+                # But definitely required, else we don't know what script we're sending to.
                 raise FatalPSBTIssue("Missing redeem/witness script for output #%d" % out_idx)
 
             if redeem_script and not witness_script and len(self.subpaths) > 1:
@@ -730,6 +732,7 @@ class psbtInputProxy(psbtProxy):
 
             #print("redeem: %s" % b2a_hex(redeem_script))
             M, N = disassemble_multisig_mn(redeem_script)
+            print('Setting M and N: {} of {}'.format(M, N))
             psbt.M = M
             psbt.N = N
             xfp_paths = list(self.subpaths.values())
@@ -1087,10 +1090,13 @@ class psbtObject(psbtProxy):
             # print('proposed={}, need_approval={}'.format(proposed, need_approval))
 
             if need_approval:
+                # Hide while interacting with user
+                system.hide_busy_bar()
                 # do a complex UX sequence, which lets them save new wallet
                 ch = await proposed.confirm_import()
                 if ch != 'y':
                     raise FatalPSBTIssue("Refused to import new wallet")
+                system.show_busy_bar()
 
             self.active_multisig = proposed
         else:
@@ -1318,7 +1324,7 @@ class psbtObject(psbtProxy):
         if no_keys:
             # This is seen when you re-sign same signed file by accident (multisig)
             # - case of len(no_keys)==num_inputs is handled by consider_keys
-            self.warnings.append(('Already Signed', 'Passport has already signed this transaction. Other signatures are still required.'))
+            raise FatalPSBTIssue('Passport has already signed this transaction. Other signatures are still required.')
 
         if self.presigned_inputs:
             # this isn't really even an issue for some complex usage cases

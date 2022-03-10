@@ -13,7 +13,7 @@ import stash, chains, ustruct, ure, uio, sys
 import trezorcrypto
 import tcc
 from ubinascii import hexlify as b2a_hex
-from utils import xfp2str, str2xfp, cleanup_deriv_path, keypath_to_str, str_to_keypath
+from utils import bytes_to_hex_str, xfp2str, str2xfp, cleanup_deriv_path, keypath_to_str, str_to_keypath
 from ux import ux_show_story, ux_confirm, ux_enter_text
 from files import CardSlot, CardMissingError
 from public_constants import AF_P2SH, AF_P2WSH_P2SH, AF_P2WSH, AFC_SCRIPT, MAX_PATH_DEPTH
@@ -59,9 +59,11 @@ def disassemble_multisig(redeem_script):
 
     M, N = disassemble_multisig_mn(redeem_script)
     assert 1 <= M <= N <= MAX_SIGNERS, 'M/N range'
-    assert len(redeem_script) == 1 + (N * 34) + 1 + 1, 'bad len'
+    # assert len(redeem_script) == 1 + (N * 34) + 1 + 1, 'bad len'
 
     # generator function
+    from utils import bytes_to_hex_str
+    print('redeem_script=\n{}'.format(bytes_to_hex_str(redeem_script, 16)))
     dis = disassemble(redeem_script)
 
     # expect M value first
@@ -72,6 +74,7 @@ def disassemble_multisig(redeem_script):
     pubkeys = []
     for idx in range(N):
         data, opcode = next(dis)
+        print('idx={} opcode={} len(data)={}'.format(idx, opcode, len(data)))
         assert opcode == None and len(data) == 33, 'data'
         assert data[0] == 0x02 or data[0] == 0x03, 'Y val'
         pubkeys.append(data)
@@ -80,11 +83,13 @@ def disassemble_multisig(redeem_script):
 
     # next is N value
     ex_N, opcode = next(dis)
-    assert ex_N == N and opcode == None
+    print('N={}'.format(N))
+
+    assert ex_N == N and opcode == None, 'Wrong N: ex_N={} N={}'.format(ex_N, N)
 
     # finally, the opcode: CHECKMULTISIG
     data, opcode = next(dis)
-    assert opcode == OP_CHECKMULTISIG
+    assert opcode == OP_CHECKMULTISIG, 'Not OP_CHECKMULTISIG'
 
     # must have reached end of script at this point
     try:
@@ -1010,7 +1015,7 @@ class MultisigWallet:
 
 
 
-    @classmethod
+    @classmethod    
     def import_from_psbt(cls, M, N, xpubs_list):
         # given the raw data for PSBT global header, offer the user
         # the details, and/or bypass that all and just trust the data.
@@ -1172,7 +1177,7 @@ Press 1 to see extended public keys.'''.format(M=M, N=N, name=self.name, exp=exp
 
                 assert self.storage_idx == -1
                 await self.commit()
-                await fullscreen("Saved")
+                dis.fullscreen('Saved')
                 await sleep_ms(1000)
             break
 

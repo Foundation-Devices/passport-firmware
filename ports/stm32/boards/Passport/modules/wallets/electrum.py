@@ -81,7 +81,7 @@ def create_electrum_export(sw_wallet=None, addr_type=None, acct_num=0, multisig=
 #    },
 #    "wallet_type": "standard"}
 #
-def create_electrum_watch_only_export(sw_wallet=None, addr_type=None, acct_num=0, multisig=False, legacy=False):
+def create_electrum_watch_only_export(sw_wallet=None, addr_type=None, acct_num=0, multisig=False, legacy=False, export_mode=None):
     from common import settings
 
     mode = get_bip_num_from_addr_type(addr_type, multisig)

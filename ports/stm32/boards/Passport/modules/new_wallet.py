@@ -577,6 +577,7 @@ class NewWalletUX(UXStateMachine):
                     # Only perform multisig import if wallet does not prevent it
                     if self.is_skip_multisig_import_enabled() == False:
                         self.choose_multisig_import_mode()
+                        continue
 
                 # Only perform address validation if wallet does not prevent it
                 if self.is_skip_address_verification_enabled():
@@ -651,6 +652,7 @@ class NewWalletUX(UXStateMachine):
                     # Only perform multisig import if wallet does not prevent it
                     if self.is_skip_multisig_import_enabled() == False:
                         self.choose_multisig_import_mode()
+                        continue
 
                 # Only perform address verification if wallet does not prevent it
                 if self.is_skip_address_verification_enabled():
@@ -707,7 +709,21 @@ class NewWalletUX(UXStateMachine):
                     # Save the progress so that we can resume later
                     self.save_new_wallet_progress()
 
-                    self.goto_address_verification_method()
+                    if self.is_skip_address_verification_enabled():
+                        if self.is_force_multisig_policy_enabled():
+                            result = await ux_show_story('For compatibility with {}, Passport will set your Multisig Policy to Skip Verification.\n'.format(self.sw_wallet['label']),
+                            center=True,
+                            center_vertically=True)
+                            if result == 'x':
+                                if not self.goto_prev():
+                                    return
+                            else:
+                                settings.set('multisig_policy', TRUST_PSBT)
+                                self.goto(self.CONFIRMATION)
+                        else:
+                            self.goto(self.CONFIRMATION)
+                    else:
+                        self.goto_address_verification_method()
                     break
 
             elif self.state == self.IMPORT_MULTISIG_CONFIG_FROM_MICROSD:
