@@ -1,0 +1,44 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch (firmware)",
+            "cwd": "${workspaceRoot}",
+            "executable": "${workspaceRoot}/ports/stm32/build-Passport/firmware.elf",
+            "request": "launch",
+            "type": "cortex-debug",
+            "servertype": "openocd",
+            "configFiles": ["${workspaceRoot}/.vscode/openocd.cfg"],
+            "gdbPath": "gdb-multiarch",
+            "device": "STM32H753",
+        },
+        {
+            "name": "Attach (firmware)",
+            "cwd": "${workspaceRoot}",
+            "executable": "${workspaceRoot}/ports/stm32/build-Passport/firmware.elf",
+            "request": "attach",
+            "type": "cortex-debug",
+            "servertype": "openocd",
+            "configFiles": ["${workspaceRoot}/.vscode/openocd.cfg"],
+            "postAttachCommands": [
+                "monitor halt"
+            ],
+            "gdbPath": "gdb-multiarch",
+            "device": "STM32H753",
+        },
+        {
+            "name": "Attach (bootloader)",
+            "cwd": "${workspaceRoot}",
+            "executable": "${workspaceRoot}/ports/stm32/boards/Passport/bootloader/arm/debug/bootloader.elf",
+            "request": "attach",
+            "type": "cortex-debug",
+            "servertype": "openocd",
+            "configFiles": ["${workspaceRoot}/.vscode/openocd.cfg"],
+            "postAttachCommands": [
+                "monitor halt"
+            ],
+            "gdbPath": "gdb-multiarch",
+            "device": "STM32H753",
+        }
+    ]
+}
