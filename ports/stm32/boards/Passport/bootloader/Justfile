@@ -4,7 +4,7 @@
 
 # Launch OCD, run a command and then exit
 run-ocd-command command:
-    cd ../../../; sudo /usr/local/bin/openocd -f stlink.cfg -c "adapter speed 1000; transport select hla_swd" -f stm32h7x.cfg -c "init; reset halt; {{command}}" -c "exit"
+    cd ../../../; sudo /usr/local/bin/openocd -f interface/stlink.cfg -c "adapter speed 1000; transport select hla_swd" -f target/stm32h7x.cfg -c "init; reset halt; {{command}}" -c "exit"
 
 
 # Build the bootloader (debug, release, locked or production)

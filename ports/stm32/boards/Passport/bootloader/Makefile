@@ -108,7 +108,7 @@ CFLAGS += -ffunction-sections -fdata-sections
 CFLAGS += -mtune=cortex-m7 -mcpu=cortex-m7 -DSTM32H753xx
 CFLAGS += -I. -I$(PASSPORT_PATH)/include -I$(PASSPORT_PATH)/common/micro-ecc
 CFLAGS += -DPASSPORT_BOOTLOADER
-CFLAGS += -DUSE_CRYPTO
+# CFLAGS += -DUSE_CRYPTO
 ifeq ($(findstring production,$(MAKECMDGOALS)),production)
 CFLAGS += -DPRODUCTION_BUILD
 endif

@@ -560,13 +560,13 @@ int main(void)
 #endif
 
     // Show a warning message if non-Foundation firmware is loaded on the device
-    if (is_user_signed_firmware_installed() == SEC_TRUE) {
-        if (ui_show_message("Firmware Warning", "\nCustom, non-Foundation firmware is loaded on this Passport.\n\nOK to continue?", "NO", "YES", true)){
-            // Continue booting
-        } else {
-            display_clean_shutdown();
-        }
-    }
+    //if (is_user_signed_firmware_installed() == SEC_TRUE) {
+    //    if (ui_show_message("Firmware Warning", "\nCustom, non-Foundation firmware is loaded on this Passport.\n\nOK to continue?", "NO", "YES", true)){
+    //        // Continue booting
+    //    } else {
+    //        display_clean_shutdown();
+    //    }
+    //}
 
     // From here we'll boot to Micropython: see stm32_main() in /ports/stm32/main.c
 }
