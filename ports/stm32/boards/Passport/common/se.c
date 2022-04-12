@@ -105,6 +105,10 @@ static char *error_to_str(uint8_t error)
 }
 #endif /* PASSPORT_BOOTLOADER */
 
+#define SE_BAUDRATE 230400U
+
+void se_setup_usart(uint32_t baudrate);
+
 uint8_t se_show_error(void)
 {
     uint8_t error = last_error;
@@ -518,6 +522,11 @@ void se_idle(void)
 
 int se_wake(void)
 {
+    // Set the slower baud rate for the WAKE command
+    // as per reference implementation
+    // to honor the tWLO timing parameter.
+    se_setup_usart(SE_BAUDRATE / 2);
+
     // send zero (all low), delay 2.5ms
     _send_byte(0x00);
 
@@ -526,6 +535,8 @@ int se_wake(void)
 #else
     delay_us(1250);
 #endif
+
+    se_setup_usart(SE_BAUDRATE);
 
     return 0;
 }
@@ -973,9 +984,10 @@ void se_dump_stats(void)
         tmp = 0;
 }
 
-#define SE_BAUDRATE 230400U
-
-void se_setup(void)
+/**
+ * Sets up the USART and its speed for the secure element's Single Wire Interface (SWI).
+ */
+void se_setup_usart(uint32_t baudrate)
 {
    /*
     * MY_UART is pointer to USART_Typedef struct
@@ -985,7 +997,7 @@ void se_setup(void)
     uint32_t uart_clock_prescaler = 0;
 
     /* Calculate the baud rate divisor */
-    uartdiv = (uint16_t)(UART_DIV_SAMPLING16(HAL_RCC_GetPCLK1Freq(), SE_BAUDRATE, uart_clock_prescaler));
+    uartdiv = (uint16_t)(UART_DIV_SAMPLING16(HAL_RCC_GetPCLK1Freq(), baudrate, uart_clock_prescaler));
 
 #ifdef DEV_STATS
     memset(&stats, 0, sizeof(stats));
@@ -1037,6 +1049,10 @@ void se_setup(void)
 
     // finally enable UART
     MY_UART->CR1 |= USART_CR1_UE;
+}
+
+void se_setup(void) {
+    se_setup_usart(SE_BAUDRATE);
 }
 
 // Just read a one-way counter.
