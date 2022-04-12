@@ -530,11 +530,7 @@ int se_wake(void)
     // send zero (all low), delay 2.5ms
     _send_byte(0x00);
 
-#ifdef PASSPORT_BOOTLOADER
     delay_us(2500);
-#else
-    delay_us(1250);
-#endif
 
     se_setup_usart(SE_BAUDRATE);
 
