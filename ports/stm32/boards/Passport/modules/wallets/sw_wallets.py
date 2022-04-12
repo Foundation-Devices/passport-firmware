@@ -20,7 +20,6 @@ from .simple_bitcoin_wallet import SimpleBitcoinWallet
 from .sparrow import SparrowWallet
 from .specter import SpecterWallet
 from .wasabi import WasabiWallet
-from .envoy import EnvoyWallet
 
 # Array of all supported software wallets and their attributes.
 # Used to build wallet menus and drive their behavior.
@@ -32,7 +31,6 @@ supported_software_wallets = [
     CasaWallet,
     # DuxReserveWallet,
     ElectrumWallet,
-    # EnvoyWallet,
     # FullyNodedWallet,
     # GordianWallet,
     # LilyWallet,

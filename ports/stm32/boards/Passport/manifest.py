@@ -33,4 +33,4 @@ freeze('$(MPY_DIR)/ports/stm32/boards/Passport/modules',
         'wallets/multisig_json.py', 'wallets/multisig_import.py', 'wallets/generic_json_wallet.py', 'wallets/sparrow.py',
         'wallets/bitcoin_core.py', 'wallets/wasabi.py', 'wallets/btcpay.py', 'wallets/gordian.py', 'wallets/lily.py',
         'wallets/fullynoded.py', 'wallets/dux_reserve.py', 'wallets/specter.py', 'wallets/casa.py', 'wallets/vault.py',
-        'wallets/caravan.py', 'wallets/simple_bitcoin_wallet.py', 'wallets/nunchuk.py', 'wallets/envoy.py'))
+        'wallets/caravan.py', 'wallets/simple_bitcoin_wallet.py', 'wallets/nunchuk.py'))

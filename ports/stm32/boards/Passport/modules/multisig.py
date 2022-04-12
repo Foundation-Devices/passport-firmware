@@ -59,7 +59,7 @@ def disassemble_multisig(redeem_script):
 
     M, N = disassemble_multisig_mn(redeem_script)
     assert 1 <= M <= N <= MAX_SIGNERS, 'M/N range'
-    # assert len(redeem_script) == 1 + (N * 34) + 1 + 1, 'bad len'
+    assert len(redeem_script) == 1 + (N * 34) + 1 + 1, 'bad len'
 
     # generator function
     from utils import bytes_to_hex_str
@@ -827,10 +827,6 @@ class MultisigWallet:
         # print('my_xfp={}'.format(my_xfp))
         # print('xpubs={}'.format(xpubs))
 
-        # TODO: When called from validate_psbt_xpubs(), expect_chain is the chain of the
-        #       existing multisig wallet, not the chain that the device is currently using.
-        #       This is used when checking the TX against the multisig config.
-        #  
         # assert node.private_key() == None       # 'no privkeys plz'
         # Check that they are on the right chain
         if txn_chain.ctype != expect_chain:

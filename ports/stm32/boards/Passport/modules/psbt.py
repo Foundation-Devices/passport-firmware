@@ -162,8 +162,6 @@ class psbtProxy:
 
     def __init__(self):
         self.fd = None
-        self.M = 1
-        self.N = 1
         #self.unknown = {}
 
     def __getattr__(self, nm):
