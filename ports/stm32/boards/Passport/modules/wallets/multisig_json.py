@@ -19,7 +19,7 @@ from common import settings
 from public_constants import AF_P2SH, AF_P2WSH, AF_P2WSH_P2SH
 
 
-def create_multisig_json_wallet(sw_wallet=None, addr_type=None, acct_num=0, multisig=False, legacy=False):
+def create_multisig_json_wallet(sw_wallet=None, addr_type=None, acct_num=0, multisig=False, legacy=False, export_mode='qr'):
     fp = uio.StringIO()
     chain = chains.current_chain()
 

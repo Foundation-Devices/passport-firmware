@@ -299,7 +299,7 @@ static void MPU_Config(void)
     HAL_MPU_Enable(MPU_PRIVILEGED_DEFAULT);
 }
 
-static void version(void)
+void version(void)
 {
     passport_firmware_header_t *fwhdr = (passport_firmware_header_t *)FW_HDR;
     char version[22] = {0};
@@ -444,6 +444,7 @@ int main(void)
 
     random_boot_delay();
 
+
     // Check for first-boot condition
     if (flash_is_programmed() == SEC_FALSE) {
         secresult result = flash_first_boot();
@@ -482,6 +483,7 @@ int main(void)
         }
     }
 
+
     // Increment the boot counter
     uint32_t counter_result;
     if (se_add_counter(&counter_result, 1, 1) != 0) {
@@ -499,28 +501,28 @@ int main(void)
     }
 
     // Validate the internal firmware
-    secresult result = verify_current_firmware(true);
-    switch (result) {
-        case SEC_TRUE:
-            // All good!
-            break;
+    // secresult result = verify_current_firmware(true);
+    // switch (result) {
+    //     case SEC_TRUE:
+    //         // All good!
+    //         break;
 
-        case ERR_INVALID_FIRMWARE_HEADER:
-            ui_show_fatal_error("Invalid firmware header found.\n\nThis Passport is now permanently disabled.");
-            break;
+    //     case ERR_INVALID_FIRMWARE_HEADER:
+    //         ui_show_fatal_error("Invalid firmware header found.\n\nThis Passport is now permanently disabled.");
+    //         break;
 
-        case ERR_INVALID_FIRMWARE_SIGNATURE:
-            ui_show_fatal_error("The installed firmware was not signed by a valid key.\n\nThis Passport is now permanently disabled.");
-            break;
+    //     case ERR_INVALID_FIRMWARE_SIGNATURE:
+    //         ui_show_fatal_error("The installed firmware was not signed by a valid key.\n\nThis Passport is now permanently disabled.");
+    //         break;
 
-        case ERR_FIRMWARE_HASH_DOES_NOT_MATCH_SE:
-            ui_show_fatal_error("The installed firmware hash does not match that expected by the Secure Element.\n\nThis Passport is now permanently disabled.");
-            break;
+    //     case ERR_FIRMWARE_HASH_DOES_NOT_MATCH_SE:
+    //         ui_show_fatal_error("The installed firmware hash does not match that expected by the Secure Element.\n\nThis Passport is now permanently disabled.");
+    //         break;
 
-        default:
-            ui_show_fatal_error("Unexpected error when verifying current firmware.");
-            break;
-    }
+    //     default:
+    //         ui_show_fatal_error("Unexpected error when verifying current firmware.");
+    //         break;
+    // }
 
     random_boot_delay();
 
@@ -560,13 +562,13 @@ int main(void)
 #endif
 
     // Show a warning message if non-Foundation firmware is loaded on the device
-    if (is_user_signed_firmware_installed() == SEC_TRUE) {
-        if (ui_show_message("Firmware Warning", "\nCustom, non-Foundation firmware is loaded on this Passport.\n\nOK to continue?", "NO", "YES", true)){
-            // Continue booting
-        } else {
-            display_clean_shutdown();
-        }
-    }
+    // if (is_user_signed_firmware_installed() == SEC_TRUE) {
+    //     if (ui_show_message("Firmware Warning", "\nCustom, non-Foundation firmware is loaded on this Passport.\n\nOK to continue?", "NO", "YES", true)){
+    //         // Continue booting
+    //     } else {
+    //         display_clean_shutdown();
+    //     }
+    // }
 
     // From here we'll boot to Micropython: see stm32_main() in /ports/stm32/main.c
 }

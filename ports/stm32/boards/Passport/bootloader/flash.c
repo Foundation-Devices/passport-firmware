@@ -46,9 +46,9 @@ static inline secresult is_se_programmed(void)
     uint8_t config[128] = {0};
 
     rc = se_config_read(config);
-    if (rc < 0)
+    if (rc < 0) {
         LOCKUP_FOREVER(); /* Can't talk to the SE */
-
+    }
     if ((config[86] != 0x55) && (config[87] != 0x55))
         return SEC_TRUE;
     return SEC_FALSE;

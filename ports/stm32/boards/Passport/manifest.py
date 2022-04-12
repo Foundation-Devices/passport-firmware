@@ -27,10 +27,10 @@ freeze('$(MPY_DIR)/ports/stm32/boards/Passport/modules',
        ('data_codecs/__init__.py', 'data_codecs/data_format.py', 'data_codecs/data_decoder.py', 'data_codecs/data_encoder.py',
         'data_codecs/data_sampler.py', 'data_codecs/qr_factory.py', 'data_codecs/qr_codec.py', 'data_codecs/ur1_codec.py', 'data_codecs/ur2_codec.py',
         'data_codecs/multisig_config_sampler.py', 'data_codecs/psbt_txn_sampler.py', 'data_codecs/seed_sampler.py',
-        'data_codecs/address_sampler.py', 'data_codecs/http_sampler.py', 'data_codecs/qr_type.py'))
+        'data_codecs/address_sampler.py', 'data_codecs/http_sampler.py', 'data_codecs/qr_type.py', 'data_codecs/sign_message_sampler.py'))
 freeze('$(MPY_DIR)/ports/stm32/boards/Passport/modules',
        ('wallets/sw_wallets.py', 'wallets/bluewallet.py', 'wallets/electrum.py', 'wallets/constants.py', 'wallets/utils.py',
         'wallets/multisig_json.py', 'wallets/multisig_import.py', 'wallets/generic_json_wallet.py', 'wallets/sparrow.py',
         'wallets/bitcoin_core.py', 'wallets/wasabi.py', 'wallets/btcpay.py', 'wallets/gordian.py', 'wallets/lily.py',
         'wallets/fullynoded.py', 'wallets/dux_reserve.py', 'wallets/specter.py', 'wallets/casa.py', 'wallets/vault.py',
-        'wallets/caravan.py', 'wallets/simple_bitcoin_wallet.py'))
+        'wallets/caravan.py', 'wallets/simple_bitcoin_wallet.py', 'wallets/nunchuk.py', 'wallets/envoy.py'))

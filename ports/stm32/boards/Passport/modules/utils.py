@@ -391,8 +391,12 @@ def randint(a, b):
     result = a + (num % (b-a+1))
     return result
 
-def bytes_to_hex_str(s):
-    return str(b2a_hex(s), 'ascii')
+def bytes_to_hex_str(s, wrap_to_len=None):
+    s = str(b2a_hex(s), 'ascii')
+    if wrap_to_len is not None:
+        parts = [s[i:i+wrap_to_len] for i in range(0, len(s), wrap_to_len)]
+        s = '\n'.join(parts)
+    return s
 
 # Pass a string pattern like 'foo-{}.txt' and the {} will be replaced by a random 4 bytes hex number
 def random_filename(card, pattern):

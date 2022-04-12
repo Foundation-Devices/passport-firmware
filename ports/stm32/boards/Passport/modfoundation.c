@@ -895,10 +895,8 @@ QR_find_qr_codes(mp_obj_t self)
     // printf("Data: %s\n", payload);
 
     vstr_t vstr;
-    int code_len = strlen((const char*)data.payload);
-
-    vstr_init(&vstr, code_len + 1);
-    vstr_add_strn(&vstr, (const char*)data.payload, code_len); // Can append to vstr if necessary
+    vstr_init(&vstr, data.payload_len + 1);
+    vstr_add_strn(&vstr, (const char*)data.payload, data.payload_len); // Can append to vstr if necessary
 
     return mp_obj_new_str_from_vstr(&mp_type_str, &vstr);
 }
