@@ -80,14 +80,14 @@ class UR1Encoder(DataEncoder):
         return self.qr_sizes[index]
 
     # Encode the given data
-    def encode(self, data, is_binary=False, max_fragment_len=500):
+    def encode(self, data, is_cbor=False, max_fragment_len=500):
         from ubinascii import hexlify
 
         # Convert from
         if isinstance(data, str):
             data = data.encode('utf8')
 
-        if not is_binary:
+        if not is_cbor:
             data = hexlify(data)
             # print('UR1: hex data={}'.format(data))
             data = data.decode('utf8')

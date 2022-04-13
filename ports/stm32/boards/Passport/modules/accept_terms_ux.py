@@ -51,7 +51,7 @@ Open the setup guide by scanning the QR code on the following screen.""",
             elif self.state == self.SHOW_URL_QR:
                 # Show QR code
                 url = 'https://foundationdevices.com/setup'
-                result = await ux_show_text_as_ur(title='Setup Guide', qr_text=url, qr_type=QRType.QR, left_btn='BACK', right_btn='NEXT')
+                result = await ux_show_text_as_ur(title='Setup Guide', qr_text=url, qr_type=QRType.QR, left_btn='BACK', right_btn='NEXT', is_cbor=False)
                 if result == 'x':
                     self.goto_prev()
                 else:

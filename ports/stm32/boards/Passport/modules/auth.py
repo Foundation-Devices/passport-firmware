@@ -17,16 +17,12 @@ import chains
 import stash
 import trezorcrypto
 import uio
-import ure
-import ux
-import version
 from psbt import FatalPSBTIssue, FraudulentChangeOutput, psbtObject
-from public_constants import (AF_CLASSIC, AFC_BECH32, AFC_SCRIPT, MAX_TXN_LEN,
+from public_constants import (AF_CLASSIC, AFC_SCRIPT, MAX_TXN_LEN,
                               MSG_SIGNING_MAX_LENGTH, STXN_FINALIZE,
-                              STXN_FLAGS_MASK, STXN_SIGNED, STXN_VISUALIZE,
                               SUPPORTED_ADDR_FORMATS)
 from sffile import SFFile
-from utils import HexWriter, cleanup_deriv_path, problem_file_line, xfp2str
+from utils import cleanup_deriv_path, problem_file_line, xfp2str
 from ux import (abort_and_goto, ux_show_story, ux_show_story_sequence)
 
 # Where in SPI flash the two transactions are (in and out)
@@ -70,7 +66,7 @@ class UserAuthorizedAction:
         cls.active_request = None
         gc.collect()
 
-    async def failure(self, msg, exc=None, title='Failure'):
+    async def failure(self, msg, exc=None, title='Error'):
         self.failed = msg
         await self.done()
 
@@ -89,7 +85,7 @@ class UserAuthorizedAction:
         # may be a user-abort waiting, but we want to see error msg; so clear it
         # ux_clear_keys(True)
 
-        return await ux_show_story(msg, title)
+        return await ux_show_story(msg, title, center_vertically=True, center=True)
 
 
 # Confirmation text for user when signing text messages.
@@ -139,11 +135,12 @@ def sign_message_digest(digest, subpath, prompt):
 
 
 class ApproveMessageSign(UserAuthorizedAction):
-    def __init__(self, text, subpath, addr_fmt, approved_cb=None):
+    def __init__(self, text, subpath, addr_fmt, approved_cb=None, sign_type='File'):
         super().__init__()
         self.text = text
         self.subpath = subpath
         self.approved_cb = approved_cb
+        self.sign_type = sign_type
 
         from common import dis, system
         dis.fullscreen('Wait...')
@@ -160,7 +157,7 @@ class ApproveMessageSign(UserAuthorizedAction):
 
         story = MSG_SIG_TEMPLATE.format(
             msg=self.text, addr=self.address, subpath=self.subpath)
-        ch = await ux_show_story(story, title='Sign File', right_btn='SIGN')
+        ch = await ux_show_story(story, title='Sign ' + self.sign_type, right_btn='SIGN')
 
         if ch != 'y':
             # they don't want to!
@@ -210,8 +207,9 @@ class ApproveMessageSign(UserAuthorizedAction):
         # looks ok
         return
 
+async def sign_msg(text, subpath, addr_fmt):
+    UserAuthorizedAction.cleanup()
 
-def sign_msg(text, subpath, addr_fmt):
     # Convert to strings
     try:
         text = str(text, 'ascii')
@@ -229,15 +227,40 @@ def sign_msg(text, subpath, addr_fmt):
     # Do some verification before we even show to the local user
     ApproveMessageSign.validate(text)
 
+    async def sign_msg_done(signature, address):
+        # complete. write out UR message to QR
+        from common import system, last_scanned_qr_type, last_scanned_ur_prefix
+        from ubinascii import b2a_base64
+        from ur2.cbor_lite import CBOREncoder
+        from ux import DisplayURCode
+        from data_codecs.qr_type import QRType
+
+        system.hide_busy_bar()
+        
+        sig = b2a_base64(signature).decode('ascii').strip()
+        # print('signature: {} address: {} sig: {}'.format(signature, address, sig))
+        
+        signed_message = RFC_SIGNATURE_TEMPLATE.format(addr=address, msg=text, blockchain='BITCOIN', sig=sig)
+        # print('QR when decoded will read:\n{}'.format(signed_message))
+
+        encoder = CBOREncoder()
+        encoder.encodeBytes(bytearray(signed_message))
+        signed_bytes = encoder.get_bytes()
+
+        o = DisplayURCode('Signed Message', signed_bytes, last_scanned_qr_type or QRType.UR2, {'prefix': last_scanned_ur_prefix }, is_cbor=True)
+        result = await o.interact_bare()
+        UserAuthorizedAction.cleanup()
+
     # UserAuthorizedAction.check_busy()
     UserAuthorizedAction.active_request = ApproveMessageSign(
-        text, subpath, addr_fmt)
+        text, subpath, addr_fmt, approved_cb=sign_msg_done, sign_type='Message')
 
-    # kill any menu stack, and put our thing at the top
+    # Kill any menu stack, and put our thing at the top - whatever async chain started off this signing process will
+    # now resume and complete, and then the following action will become active.
     abort_and_goto(UserAuthorizedAction.active_request)
 
 
-def sign_txt_file(filename):
+async def sign_txt_file(filename):
     # sign a one-line text file found on a microSD card
     # - not yet clear how to do address types other than 'classic'
     from files import CardSlot, CardMissingError
@@ -274,7 +297,7 @@ def sign_txt_file(filename):
         await ux_show_story("Problem: %s\n\nMessage to be signed must be a single line of ASCII text." % exc)
         return
 
-    def done(signature, address):
+    async def done(signature, address):
         # complete. write out result
         from ubinascii import b2a_base64
         orig_path, basename = filename.rsplit('/', 1)
@@ -332,7 +355,7 @@ def sign_txt_file(filename):
 
     # UserAuthorizedAction.check_busy()
     UserAuthorizedAction.active_request = ApproveMessageSign(
-        text, subpath, AF_CLASSIC, approved_cb=done)
+        text, subpath, AF_CLASSIC, approved_cb=done, sign_type='File')
 
     # do not kill the menu stack!
     from ux import the_ux
@@ -461,10 +484,12 @@ class ApproveTransaction(UserAuthorizedAction):
                 outputs = uio.StringIO()
                 outputs.write('Amount:')
 
+                has_change = False
                 first = True
                 for idx, tx_out in self.psbt.output_iter():
                     outp = self.psbt.outputs[idx]
                     if outp.is_change:
+                        has_change = True
                         continue
 
                     if first:
@@ -480,9 +505,13 @@ class ApproveTransaction(UserAuthorizedAction):
 
                 # print('total_out={} total_in={} change={}'.format=(self.psbt.total_value_out, self.psbt.total_value_in, self.psbt.total_value_in - self.psbt.total_value_out))
                 pages = [
-                    {'title': 'Sign Txn', 'msg': outputs.getvalue(), 'center': True, 'center_vertically': True},
-                    {'title': 'Sign Txn', 'msg': self.render_change_text(), 'center': True, 'center_vertically': True},
+                    {'title': 'Sign Txn', 'msg': outputs.getvalue(), 'center': True, 'center_vertically': True}
                 ]
+
+                if has_change != False:
+                    pages.append(
+                        {'title': 'Sign Txn', 'msg': self.render_change_text(), 'center': True, 'center_vertically': True}
+                    )
 
                 warnings = self.render_warnings()
                 # print('warnings = "{}"'.format(warnings))
@@ -503,7 +532,6 @@ class ApproveTransaction(UserAuthorizedAction):
                 try:
                     del self.psbt
                     self.psbt = None
-                    del msg
                 except:
                     pass        # might be NameError since we don't know how far we got
                 gc.collect()
@@ -682,7 +710,7 @@ def sign_transaction(psbt_len, flags=0x0, psbt_sha=None):
     abort_and_goto(UserAuthorizedAction.active_request)
 
 
-def sign_psbt_file(filename):
+async def sign_psbt_file(filename):
     # sign a PSBT file found on a microSD card
     from files import CardSlot, CardMissingError, securely_blank_file
     from common import dis, system
@@ -809,7 +837,7 @@ def sign_psbt_file(filename):
                     # fall thru to try again
 
             # prompt them to input another card?
-            ch = await ux_show_story(prob+"Please insert an microSD card to receive the signed transaction.",
+            ch = await ux_show_story(prob + "Please insert a microSD card to receive the signed transaction.",
                                      title="Need Card")
             if ch == 'x':
                 return
@@ -928,10 +956,11 @@ async def sign_psbt_buf(psbt_buf):
         # print('last_scanned_qr_type={}'.format(last_scanned_qr_type))
 
         # Text format for UR1, but binary for UR2
-        #     def __init__(self, title, qr_text, qr_type, qr_args=None, msg=None, left_btn='DONE', right_btn='RESIZE', is_binary=False):
+        #     def __init__(self, title, qr_text, qr_type, qr_args=None, msg=None, left_btn='DONE', right_btn='RESIZE', is_cbor=False):
 
-        o = DisplayURCode('Signed Txn', signed_bytes if last_scanned_qr_type == QRType.UR2 else signed_hex, last_scanned_qr_type or QRType.UR2, {'prefix': last_scanned_ur_prefix }, is_binary=True)
-        result = await o.interact_bare()
+        o = DisplayURCode('Signed Txn', signed_bytes if last_scanned_qr_type == QRType.UR2 else signed_hex,
+                          last_scanned_qr_type or QRType.UR2, {'prefix': last_scanned_ur_prefix }, is_cbor=False)
+        await o.interact_bare()
         UserAuthorizedAction.cleanup()
 
     UserAuthorizedAction.active_request = ApproveTransaction(psbt_len, approved_cb=done)

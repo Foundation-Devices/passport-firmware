@@ -13,6 +13,8 @@ MEMORY
     FLASH_TEXT (rx) : ORIGIN = 0x08040000, LENGTH = 1664K   /* sectors 6*128 + 7*128 (last 128K reserve for nvstore) */
     DTCM (xrw)      : ORIGIN = 0x20000000, LENGTH = 128K    /* Used for storage cache */
     RAM (xrw)       : ORIGIN = 0x24000000, LENGTH = 512K    /* AXI SRAM */
+    RAM_D2 (rw) : ORIGIN = 0x30000000, LENGTH = 288K /* D2 SRAM (128K + 128 + 32K) */
+
     /* SRAM4 is 64k of SRAM used for:
         - filesystem cache (2k at zero) (not yet implemented)
         - top 8k reserved for bootloader/call gate (not yet implemented)

@@ -10,16 +10,15 @@
 # psbt.py - understand PSBT file format: verify and generate them
 #
 from ustruct import unpack_from, unpack, pack
-from ubinascii import hexlify as b2a_hex
-from utils import xfp2str, B2A, keypath_to_str, problem_file_line, swab32
+from utils import xfp2str, B2A, keypath_to_str, swab32
 import trezorcrypto, stash, gc, history, sys
-from uio import BytesIO
 from sffile import SizerFile
 from sram4 import psbt_tmp256
-from multisig import MultisigWallet, MAX_SIGNERS, disassemble_multisig, disassemble_multisig_mn
+from multisig import MultisigWallet, MAX_SIGNERS, disassemble_multisig_mn 
+
 from exceptions import FatalPSBTIssue, FraudulentChangeOutput
-from serializations import ser_compact_size, deser_compact_size, hash160, hash256
-from serializations import CTxIn, CTxInWitness, CTxOut, SIGHASH_ALL, ser_uint256
+from serializations import ser_compact_size, deser_compact_size, hash160
+from serializations import CTxIn, CTxInWitness, CTxOut, SIGHASH_ALL
 from serializations import ser_sig_der, uint256_from_str, ser_push_data, uint256_from_str
 from serializations import ser_string
 from common import system
@@ -263,12 +262,12 @@ class psbtProxy:
 
             # promote to a list of ints
             v = self.get(self.subpaths[pk])
-            here = list(unpack_from('<%dI' % (vl//4), v))
+            curr = list(unpack_from('<%dI' % (vl//4), v))
 
             # update in place
-            self.subpaths[pk] = here
+            self.subpaths[pk] = curr
 
-            if here[0] == my_xfp or here[0] == swab32(my_xfp):
+            if curr[0] == my_xfp or curr[0] == swab32(my_xfp):
                 num_ours += 1
             else:
                 # Address that isn't based on my seed; might be another leg in a p2sh,
@@ -344,7 +343,6 @@ class psbtOutputProxy(psbtProxy):
         # - full key derivation and validation is done during signing, and critical.
         # - we raise fraud alarms, since these are not innocent errors
         #
-
         num_ours = self.parse_subpaths(my_xfp)
 
         if num_ours == 0:
@@ -384,7 +382,7 @@ class psbtOutputProxy(psbtProxy):
 
             if not redeem_script and not witness_script:
                 # Perhaps an omission, so let's not call fraud on it
-                # But definately required, else we don't know what script we're sending to.
+                # But definitely required, else we don't know what script we're sending to.
                 raise FatalPSBTIssue("Missing redeem/witness script for output #%d" % out_idx)
 
             if not is_segwit and redeem_script and \
@@ -414,10 +412,10 @@ class psbtOutputProxy(psbtProxy):
                 # - pubkeys will be reconstructed from derived paths here
                 # - BIP45, BIP67 rules applied
                 # - p2sh-p2wsh needs witness script here, not redeem script value
-                # - if details provided in output section, must our match multisig wallet
+                # - if details provided in output section, must match our multisig wallet
                 try:
                     active_multisig.validate_script(witness_script or redeem_script,
-                                                            subpaths=self.subpaths)
+                                                    subpaths=self.subpaths)
                 except BaseException as exc:
                     raise FraudulentChangeOutput(out_idx,
                                 "P2WSH or P2SH change output script: %s" % exc)
@@ -441,7 +439,7 @@ class psbtOutputProxy(psbtProxy):
                         # iff they provide a redeeem script, then it needs to match
                         # what we expect it to be
                         raise FraudulentChangeOutput(out_idx,
-                                        "P2SH-P2WSH redeem script provided, and doesn't match")
+                                        "P2SH-P2WSH redeem script provided, but doesn't match.")
 
                     expect_pkh = hash160(expect_rs)
                 else:
@@ -917,7 +915,6 @@ class psbtObject(psbtProxy):
         # see serializations.py:CTransaction.deserialize()
         # and BIP-144 ... we expect witness serialization, but
         # don't force that
-
         self.txn_version, marker, flags = unpack("<iBB", fd.read(6))
         self.had_witness = (marker == 0 and flags != 0x0)
 
@@ -1038,7 +1035,7 @@ class psbtObject(psbtProxy):
                 has_mine += 1
 
         if not has_mine:
-            raise FatalPSBTIssue('My XFP not involved')
+            raise FatalPSBTIssue('Passport is unable to sign this transaction (XFP does not match).')
 
         candidates = MultisigWallet.find_candidates(xfp_paths)
 
@@ -1072,10 +1069,13 @@ class psbtObject(psbtProxy):
             # print('proposed={}, need_approval={}'.format(proposed, need_approval))
 
             if need_approval:
+                # Hide while interacting with user
+                system.hide_busy_bar()
                 # do a complex UX sequence, which lets them save new wallet
                 ch = await proposed.confirm_import()
                 if ch != 'y':
                     raise FatalPSBTIssue("Refused to import new wallet")
+                system.show_busy_bar()
 
             self.active_multisig = proposed
         else:
@@ -1303,7 +1303,7 @@ class psbtObject(psbtProxy):
         if no_keys:
             # This is seen when you re-sign same signed file by accident (multisig)
             # - case of len(no_keys)==num_inputs is handled by consider_keys
-            self.warnings.append(('Already Signed', 'Passport has already signed this transaction. Other signatures are still required.'))
+            raise FatalPSBTIssue('Passport has already signed this transaction. Other signatures are still required.')
 
         if self.presigned_inputs:
             # this isn't really even an issue for some complex usage cases
@@ -1533,9 +1533,9 @@ class psbtObject(psbtProxy):
                 # The precious private key we need
                 pk = node.private_key()
 
-                #print("privkey %s" % b2a_hex(pk).decode('ascii'))
-                #print(" pubkey %s" % b2a_hex(which_key).decode('ascii'))
-                #print(" digest %s" % b2a_hex(digest).decode('ascii'))
+                # print("privkey %s" % b2a_hex(pk).decode('ascii'))
+                # print(" pubkey %s" % b2a_hex(which_key).decode('ascii'))
+                # print(" digest %s" % b2a_hex(digest).decode('ascii'))
 
                 # Do the ACTUAL signature ... finally!!!
                 result = trezorcrypto.secp256k1.sign(pk, digest)
@@ -1545,7 +1545,7 @@ class psbtObject(psbtProxy):
                 stash.blank_object(node)
                 del pk, node, pu, skp
 
-                #print("result %s" % b2a_hex(result).decode('ascii'))
+                # print("result %s" % b2a_hex(result).decode('ascii'))
 
                 # convert signature to DER format
                 assert len(result) == 65
