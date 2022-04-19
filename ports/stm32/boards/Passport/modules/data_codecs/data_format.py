@@ -11,8 +11,9 @@ from .psbt_txn_sampler import PsbtTxnSampler
 from .seed_sampler import SeedSampler
 from .address_sampler import AddressSampler
 from .http_sampler import HttpSampler
+from .sign_message_sampler import SignMessageSampler
 
-from actions import handle_psbt_data_format, handle_import_multisig_config, handle_seed_data_format #, handle_validate_address
+from actions import handle_psbt_data_format, handle_import_multisig_config, handle_seed_data_format, handle_sign_message_format #, handle_validate_address
 from ie import handle_http
 
 class QRType:
@@ -26,6 +27,7 @@ samplers = [
     { 'sampler': MultisigConfigSampler, 'flow': handle_import_multisig_config },
     { 'sampler': SeedSampler, 'flow': handle_seed_data_format },
     { 'sampler': HttpSampler, 'flow': handle_http },
+    { 'sampler': SignMessageSampler, 'flow': handle_sign_message_format },
     # { 'sampler': AddressSampler, 'flow': handle_validate_address },
 ]
 

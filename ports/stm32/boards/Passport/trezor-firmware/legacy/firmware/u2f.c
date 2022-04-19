@@ -240,7 +240,7 @@ void u2fhid_read_start(const U2FHID_FRAME *f) {
         break;
     }
 
-    // wait for next commmand/ button press
+    // wait for next command/button press
     reader->cmd = 0;
     reader->seq = 255;
     while (dialog_timeout > 0 && reader->cmd == 0) {
@@ -604,8 +604,11 @@ void u2f_register(const APDU *a) {
       return;
     }
 
-    ecdsa_get_public_key65(node->curve->params, node->private_key,
-                           (uint8_t *)&resp->pubKey);
+    if (ecdsa_get_public_key65(node->curve->params, node->private_key,
+                               (uint8_t *)&resp->pubKey) != 0) {
+      send_u2f_error(U2F_SW_WRONG_DATA);
+      return;
+    }
 
     memcpy(resp->keyHandleCertSig + resp->keyHandleLen, U2F_ATT_CERT,
            sizeof(U2F_ATT_CERT));
@@ -644,7 +647,7 @@ void u2f_register(const APDU *a) {
     return;
   }
 
-  // Didnt expect to get here
+  // Didn't expect to get here
   dialog_timeout = 0;
 }
 

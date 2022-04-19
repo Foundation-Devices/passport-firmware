@@ -19,7 +19,7 @@ from .multisig_import import read_multisig_config_from_qr, read_multisig_config_
 from public_constants import AF_CLASSIC, AF_P2WPKH, AF_P2WPKH_P2SH
 from .utils import get_bip_num_from_addr_type
 
-def create_electrum_export(sw_wallet=None, addr_type=None, acct_num=0, multisig=False, legacy=False):
+def create_electrum_export(sw_wallet=None, addr_type=None, acct_num=0, multisig=False, legacy=False, export_mode='qr'):
     # Generate line-by-line JSON details about wallet.
     #
     # Much reverse engineering of Electrum here. It's a complex legacy file format.
@@ -81,7 +81,7 @@ def create_electrum_export(sw_wallet=None, addr_type=None, acct_num=0, multisig=
 #    },
 #    "wallet_type": "standard"}
 #
-def create_electrum_watch_only_export(sw_wallet=None, addr_type=None, acct_num=0, multisig=False, legacy=False):
+def create_electrum_watch_only_export(sw_wallet=None, addr_type=None, acct_num=0, multisig=False, legacy=False, export_mode=None):
     from common import settings
 
     mode = get_bip_num_from_addr_type(addr_type, multisig)

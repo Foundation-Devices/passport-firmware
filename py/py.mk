@@ -21,6 +21,10 @@ QSTR_GLOBAL_REQUIREMENTS += $(HEADER_BUILD)/mpversion.h
 # some code is performance bottleneck and compiled with other optimization options
 CSUPEROPT = -O3
 
+# secp256k1
+SECP256K1_PATH = ports/stm32/boards/Passport/trezor-firmware/vendor/secp256k1-zkp
+SECP256K1_DIR = $(TOP)/$(SECP256K1_PATH)
+
 # External modules written in C.
 ifneq ($(USER_C_MODULES),)
 # pre-define USERMOD variables as expanded so that variables are immediate
@@ -222,7 +226,11 @@ endif
 
 # Sources that may contain qstrings
 SRC_QSTR_IGNORE = py/nlr%
-SRC_QSTR += $(SRC_MOD) $(filter-out $(SRC_QSTR_IGNORE),$(PY_CORE_O_BASENAME:.o=.c)) $(PY_EXTMOD_O_BASENAME:.o=.c)
+SRC_MOD_QSTR_IGNORE = boards/Passport/trezor-firmware/vendor/secp256k1-zkp/src/secp256k1.c
+SRC_EXTMOD_QSTR_IGNORE =
+SRC_QSTR += $(filter-out $(SRC_MOD_QSTR_IGNORE),$(SRC_MOD)) \
+            $(filter-out $(SRC_QSTR_IGNORE),$(PY_CORE_O_BASENAME:.o=.c)) \
+			$(filter-out $(SRC_EXTMOD_QSTR_IGNORE),$(PY_EXTMOD_O_BASENAME:.o=.c))
 
 # Anything that depends on FORCE will be considered out-of-date
 FORCE:

@@ -2,50 +2,48 @@ from trezor import wire
 from trezor.crypto import rlp
 from trezor.crypto.curve import secp256k1
 from trezor.crypto.hashlib import sha3_256
-from trezor.messages.EthereumSignTx import EthereumSignTx
-from trezor.messages.EthereumTxAck import EthereumTxAck
-from trezor.messages.EthereumTxRequest import EthereumTxRequest
+from trezor.messages import EthereumSignTx, EthereumTxAck, EthereumTxRequest
 from trezor.utils import HashWriter
 
 from apps.common import paths
-from apps.ethereum import CURVE, address, tokens
-from apps.ethereum.address import validate_full_path
-from apps.ethereum.keychain import with_keychain_from_chain_id
-from apps.ethereum.layout import (
+
+from . import tokens
+from .helpers import bytes_from_address
+from .keychain import with_keychain_from_chain_id
+from .layout import (
     require_confirm_data,
     require_confirm_fee,
     require_confirm_tx,
+    require_confirm_unknown_token,
 )
 
-# maximum supported chain id
-MAX_CHAIN_ID = 2147483629
+if False:
+    from typing import Tuple
+
+    from apps.common.keychain import Keychain
+
+    from .keychain import EthereumSignTxAny
+
+
+# Maximum chain_id which returns the full signature_v (which must fit into an uint32).
+# chain_ids larger than this will only return one bit and the caller must recalculate
+# the full value: v = 2 * chain_id + 35 + v_bit
+MAX_CHAIN_ID = (0xFFFF_FFFF - 36) // 2
 
 
 @with_keychain_from_chain_id
-async def sign_tx(ctx, msg, keychain):
-    msg = sanitize(msg)
+async def sign_tx(
+    ctx: wire.Context, msg: EthereumSignTx, keychain: Keychain
+) -> EthereumTxRequest:
     check(msg)
-    await paths.validate_path(ctx, validate_full_path, keychain, msg.address_n, CURVE)
+    await paths.validate_path(ctx, keychain, msg.address_n)
+
+    # Handle ERC20s
+    token, address_bytes, recipient, value = await handle_erc20(ctx, msg)
 
     data_total = msg.data_length
 
-    # detect ERC - 20 token
-    token = None
-    address_bytes = recipient = address.bytes_from_address(msg.to)
-    value = int.from_bytes(msg.value, "big")
-    if (
-        len(msg.to) in (40, 42)
-        and len(msg.value) == 0
-        and data_total == 68
-        and len(msg.data_initial_chunk) == 68
-        and msg.data_initial_chunk[:16]
-        == b"\xa9\x05\x9c\xbb\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-    ):
-        token = tokens.token_by_chain_address(msg.chain_id, address_bytes)
-        recipient = msg.data_initial_chunk[16:36]
-        value = int.from_bytes(msg.data_initial_chunk[36:68], "big")
-
-    await require_confirm_tx(ctx, recipient, value, msg.chain_id, token, msg.tx_type)
+    await require_confirm_tx(ctx, recipient, value, msg.chain_id, token)
     if token is None and msg.data_length > 0:
         await require_confirm_data(ctx, msg.data_initial_chunk, data_total)
 
@@ -56,7 +54,6 @@ async def sign_tx(ctx, msg, keychain):
         int.from_bytes(msg.gas_limit, "big"),
         msg.chain_id,
         token,
-        msg.tx_type,
     )
 
     data = bytearray()
@@ -66,19 +63,19 @@ async def sign_tx(ctx, msg, keychain):
     total_length = get_total_length(msg, data_total)
 
     sha = HashWriter(sha3_256(keccak=True))
-    sha.extend(rlp.encode_length(total_length, True))  # total length
+    rlp.write_header(sha, total_length, rlp.LIST_HEADER_BYTE)
 
     if msg.tx_type is not None:
-        sha.extend(rlp.encode(msg.tx_type))
+        rlp.write(sha, msg.tx_type)
 
     for field in (msg.nonce, msg.gas_price, msg.gas_limit, address_bytes, msg.value):
-        sha.extend(rlp.encode(field))
+        rlp.write(sha, field)
 
     if data_left == 0:
-        sha.extend(rlp.encode(data))
+        rlp.write(sha, data)
     else:
-        sha.extend(rlp.encode_length(data_total, False))
-        sha.extend(rlp.encode(data, False))
+        rlp.write_header(sha, data_total, rlp.STRING_HEADER_BYTE, data)
+        sha.extend(data)
 
     while data_left > 0:
         resp = await send_request_chunk(ctx, data_left)
@@ -86,10 +83,9 @@ async def sign_tx(ctx, msg, keychain):
         sha.extend(resp.data_chunk)
 
     # eip 155 replay protection
-    if msg.chain_id:
-        sha.extend(rlp.encode(msg.chain_id))
-        sha.extend(rlp.encode(0))
-        sha.extend(rlp.encode(0))
+    rlp.write(sha, msg.chain_id)
+    rlp.write(sha, 0)
+    rlp.write(sha, 0)
 
     digest = sha.get_digest()
     result = sign_digest(msg, keychain, digest)
@@ -97,36 +93,56 @@ async def sign_tx(ctx, msg, keychain):
     return result
 
 
+async def handle_erc20(
+    ctx: wire.Context, msg: EthereumSignTxAny
+) -> Tuple[tokens.TokenInfo | None, bytes, bytes, int]:
+    token = None
+    address_bytes = recipient = bytes_from_address(msg.to)
+    value = int.from_bytes(msg.value, "big")
+    if (
+        len(msg.to) in (40, 42)
+        and len(msg.value) == 0
+        and msg.data_length == 68
+        and len(msg.data_initial_chunk) == 68
+        and msg.data_initial_chunk[:16]
+        == b"\xa9\x05\x9c\xbb\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+    ):
+        token = tokens.token_by_chain_address(msg.chain_id, address_bytes)
+        recipient = msg.data_initial_chunk[16:36]
+        value = int.from_bytes(msg.data_initial_chunk[36:68], "big")
+
+        if token is tokens.UNKNOWN_TOKEN:
+            await require_confirm_unknown_token(ctx, address_bytes)
+
+    return token, address_bytes, recipient, value
+
+
 def get_total_length(msg: EthereumSignTx, data_total: int) -> int:
     length = 0
     if msg.tx_type is not None:
-        length += rlp.field_length(1, [msg.tx_type])
+        length += rlp.length(msg.tx_type)
 
-    length += rlp.field_length(len(msg.nonce), msg.nonce[:1])
-    length += rlp.field_length(len(msg.gas_price), msg.gas_price)
-    length += rlp.field_length(len(msg.gas_limit), msg.gas_limit)
-    to = address.bytes_from_address(msg.to)
-    length += rlp.field_length(len(to), to)
-    length += rlp.field_length(len(msg.value), msg.value)
+    fields: Tuple[rlp.RLPItem, ...] = (
+        msg.nonce,
+        msg.gas_price,
+        msg.gas_limit,
+        bytes_from_address(msg.to),
+        msg.value,
+        msg.chain_id,
+        0,
+        0,
+    )
 
-    if msg.chain_id:  # forks replay protection
-        if msg.chain_id < 0x100:
-            l = 1
-        elif msg.chain_id < 0x10000:
-            l = 2
-        elif msg.chain_id < 0x1000000:
-            l = 3
-        else:
-            l = 4
-        length += rlp.field_length(l, [msg.chain_id])
-        length += rlp.field_length(0, 0)
-        length += rlp.field_length(0, 0)
+    for field in fields:
+        length += rlp.length(field)
 
-    length += rlp.field_length(data_total, msg.data_initial_chunk)
+    length += rlp.header_length(data_total, msg.data_initial_chunk)
+    length += data_total
+
     return length
 
 
-async def send_request_chunk(ctx, data_left: int):
+async def send_request_chunk(ctx: wire.Context, data_left: int) -> EthereumTxAck:
     # TODO: layoutProgress ?
     req = EthereumTxRequest()
     if data_left <= 1024:
@@ -137,7 +153,9 @@ async def send_request_chunk(ctx, data_left: int):
     return await ctx.call(req, EthereumTxAck)
 
 
-def sign_digest(msg: EthereumSignTx, keychain, digest):
+def sign_digest(
+    msg: EthereumSignTx, keychain: Keychain, digest: bytes
+) -> EthereumTxRequest:
     node = keychain.derive(msg.address_n)
     signature = secp256k1.sign(
         node.private_key(), digest, False, secp256k1.CANONICAL_SIG_ETHEREUM
@@ -147,7 +165,7 @@ def sign_digest(msg: EthereumSignTx, keychain, digest):
     req.signature_v = signature[0]
     if msg.chain_id > MAX_CHAIN_ID:
         req.signature_v -= 27
-    elif msg.chain_id:
+    else:
         req.signature_v += 2 * msg.chain_id + 8
 
     req.signature_r = signature[1:33]
@@ -156,59 +174,33 @@ def sign_digest(msg: EthereumSignTx, keychain, digest):
     return req
 
 
-def check(msg: EthereumSignTx):
+def check(msg: EthereumSignTx) -> None:
     if msg.tx_type not in [1, 6, None]:
         raise wire.DataError("tx_type out of bounds")
 
-    if msg.chain_id < 0:
-        raise wire.DataError("chain_id out of bounds")
+    if len(msg.gas_price) + len(msg.gas_limit) > 30:
+        raise wire.DataError("Fee overflow")
 
+    check_common_fields(msg)
+
+
+def check_common_fields(msg: EthereumSignTxAny) -> None:
     if msg.data_length > 0:
         if not msg.data_initial_chunk:
             raise wire.DataError("Data length provided, but no initial chunk")
         # Our encoding only supports transactions up to 2^24 bytes. To
         # prevent exceeding the limit we use a stricter limit on data length.
-        if msg.data_length > 16000000:
+        if msg.data_length > 16_000_000:
             raise wire.DataError("Data length exceeds limit")
         if len(msg.data_initial_chunk) > msg.data_length:
             raise wire.DataError("Invalid size of initial chunk")
 
-    # safety checks
-    if not check_gas(msg) or not check_to(msg):
-        raise wire.DataError("Safety check failed")
+    if len(msg.to) not in (0, 40, 42):
+        raise wire.DataError("Invalid recipient address")
 
+    if not msg.to and msg.data_length == 0:
+        # sending transaction to address 0 (contract creation) without a data field
+        raise wire.DataError("Contract creation without data")
 
-def check_gas(msg: EthereumSignTx) -> bool:
-    if msg.gas_price is None or msg.gas_limit is None:
-        return False
-    if len(msg.gas_price) + len(msg.gas_limit) > 30:
-        # sanity check that fee doesn't overflow
-        return False
-    return True
-
-
-def check_to(msg: EthereumTxRequest) -> bool:
-    if msg.to == "":
-        if msg.data_length == 0:
-            # sending transaction to address 0 (contract creation) without a data field
-            return False
-    else:
-        if len(msg.to) not in (40, 42):
-            return False
-    return True
-
-
-def sanitize(msg):
-    if msg.value is None:
-        msg.value = b""
-    if msg.data_initial_chunk is None:
-        msg.data_initial_chunk = b""
-    if msg.data_length is None:
-        msg.data_length = 0
-    if msg.to is None:
-        msg.to = ""
-    if msg.nonce is None:
-        msg.nonce = b""
-    if msg.chain_id is None:
-        msg.chain_id = 0
-    return msg
+    if msg.chain_id == 0:
+        raise wire.DataError("Chain ID out of bounds")

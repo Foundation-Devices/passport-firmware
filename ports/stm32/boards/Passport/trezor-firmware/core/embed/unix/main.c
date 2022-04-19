@@ -38,11 +38,13 @@
 #include <unistd.h>
 
 #include "extmod/misc.h"
+#include "extmod/vfs_posix.h"
 #include "genhdr/mpversion.h"
 #include "input.h"
 #include "py/builtin.h"
 #include "py/compile.h"
 #include "py/gc.h"
+#include "py/mperrno.h"
 #include "py/mphal.h"
 #include "py/mpthread.h"
 #include "py/repl.h"
@@ -132,24 +134,15 @@ STATIC int execute_from_lexer(int source_kind, const void *source,
 
     mp_parse_tree_t parse_tree = mp_parse(lex, input_kind);
 
-#if defined(MICROPY_UNIX_COVERAGE)
-    // allow to print the parse tree in the coverage build
-    if (mp_verbose_flag >= 3) {
-      printf("----------------\n");
-      mp_parse_node_print(parse_tree.root, 0);
-      printf("----------------\n");
-    }
-#endif
-
     mp_obj_t module_fun = mp_compile(&parse_tree, source_name, is_repl);
 
     if (!compile_only) {
       // execute it
       mp_call_function_0(module_fun);
       // check for pending exception
-      if (MP_STATE_VM(mp_pending_exception) != MP_OBJ_NULL) {
-        mp_obj_t obj = MP_STATE_VM(mp_pending_exception);
-        MP_STATE_VM(mp_pending_exception) = MP_OBJ_NULL;
+      if (MP_STATE_MAIN_THREAD(mp_pending_exception) != MP_OBJ_NULL) {
+        mp_obj_t obj = MP_STATE_MAIN_THREAD(mp_pending_exception);
+        MP_STATE_MAIN_THREAD(mp_pending_exception) = MP_OBJ_NULL;
         nlr_raise(obj);
       }
     }
@@ -166,7 +159,7 @@ STATIC int execute_from_lexer(int source_kind, const void *source,
 }
 
 #if MICROPY_USE_READLINE == 1
-#include "lib/mp-readline/readline.h"
+#include "shared/readline/readline.h"
 #else
 STATIC char *strjoin(const char *s1, int sep_char, const char *s2) {
   int l1 = strlen(s1);
@@ -387,7 +380,7 @@ STATIC void pre_process_options(int argc, char **argv) {
             goto invalid_arg;
           }
           if (word_adjust) {
-            heap_size = heap_size * BYTES_PER_WORD / 4;
+            heap_size = heap_size * MP_BYTES_PER_OBJ_WORD / 4;
           }
           // If requested size too small, we'll crash anyway
           if (heap_size < 700) {
@@ -467,23 +460,6 @@ reimport:
   return 0;
 }
 
-MP_NOINLINE int main_(int argc, char **argv);
-
-int main(int argc, char **argv) {
-  collect_hw_entropy();
-
-#if MICROPY_PY_THREAD
-  mp_thread_init();
-#endif
-  // We should capture stack top ASAP after start, and it should be
-  // captured guaranteedly before any other stack variables are allocated.
-  // For this, actual main (renamed main_) should not be inlined into
-  // this function. main_() itself may have other functions inlined (with
-  // their own stack variables), that's why we need this main/main_ split.
-  mp_stack_ctrl_init();
-  return main_(argc, argv);
-}
-
 MP_NOINLINE int main_(int argc, char **argv) {
 #ifdef SIGPIPE
   // Do not raise SIGPIPE, instead return EPIPE. Otherwise, e.g. writing
@@ -499,7 +475,7 @@ MP_NOINLINE int main_(int argc, char **argv) {
   signal(SIGPIPE, SIG_IGN);
 #endif
 
-  mp_stack_set_limit(600000 * (BYTES_PER_WORD / 4));
+  mp_stack_set_limit(600000 * (sizeof(void *) / 4));
 
   pre_process_options(argc, argv);
 
@@ -561,14 +537,6 @@ MP_NOINLINE int main_(int argc, char **argv) {
   }
 
   mp_obj_list_init(MP_OBJ_TO_PTR(mp_sys_argv), 0);
-
-#if defined(MICROPY_UNIX_COVERAGE)
-  {
-    MP_DECLARE_CONST_FUN_OBJ_0(extra_coverage_obj);
-    mp_store_global(QSTR_FROM_STR_STATIC("extra_coverage"),
-                    MP_OBJ_FROM_PTR(&extra_coverage_obj));
-  }
-#endif
 
   // Here is some example code to create a class and instance of that class.
   // First is the Python, then the C code.
@@ -706,6 +674,8 @@ MP_NOINLINE int main_(int argc, char **argv) {
   return ret & 0xff;
 }
 
+#if !MICROPY_VFS
+
 #ifdef TREZOR_EMULATOR_FROZEN
 uint mp_import_stat(const char *path) { return MP_IMPORT_STAT_NO_EXIST; }
 #else
@@ -720,6 +690,29 @@ uint mp_import_stat(const char *path) {
   }
   return MP_IMPORT_STAT_NO_EXIST;
 }
+#endif
+
+#if MICROPY_PY_IO
+// Factory function for I/O stream classes, only needed if generic VFS subsystem
+// isn't used. Note: buffering and encoding are currently ignored.
+mp_obj_t mp_builtin_open(size_t n_args, const mp_obj_t *pos_args,
+                         mp_map_t *kwargs) {
+  enum { ARG_file, ARG_mode };
+  STATIC const mp_arg_t allowed_args[] = {
+      {MP_QSTR_file, MP_ARG_OBJ | MP_ARG_REQUIRED, {.u_rom_obj = MP_ROM_NONE}},
+      {MP_QSTR_mode, MP_ARG_OBJ, {.u_obj = MP_OBJ_NEW_QSTR(MP_QSTR_r)}},
+      {MP_QSTR_buffering, MP_ARG_INT, {.u_int = -1}},
+      {MP_QSTR_encoding, MP_ARG_OBJ, {.u_rom_obj = MP_ROM_NONE}},
+  };
+  mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
+  mp_arg_parse_all(n_args, pos_args, kwargs, MP_ARRAY_SIZE(allowed_args),
+                   allowed_args, args);
+  return mp_vfs_posix_file_open(&mp_type_textio, args[ARG_file].u_obj,
+                                args[ARG_mode].u_obj);
+}
+MP_DEFINE_CONST_FUN_OBJ_KW(mp_builtin_open_obj, 1, mp_builtin_open);
+#endif
+
 #endif
 
 void nlr_jump_fail(void *val) {

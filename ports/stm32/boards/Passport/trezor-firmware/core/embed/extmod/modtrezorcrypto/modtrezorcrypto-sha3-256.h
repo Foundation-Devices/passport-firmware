@@ -38,7 +38,11 @@ typedef struct _mp_obj_Sha3_256_t {
 
 STATIC mp_obj_t mod_trezorcrypto_Sha3_256_update(mp_obj_t self, mp_obj_t data);
 
-/// def __init__(self, data: bytes = None, keccak: bool = False) -> None:
+/// def __init__(
+///     self,
+///     data: bytes | None = None,
+///     keccak: bool = False,
+/// ) -> None:
 ///     """
 ///     Creates a hash context object.
 ///     """
@@ -90,16 +94,17 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_2(mod_trezorcrypto_Sha3_256_update_obj,
 ///     """
 STATIC mp_obj_t mod_trezorcrypto_Sha3_256_digest(mp_obj_t self) {
   mp_obj_Sha3_256_t *o = MP_OBJ_TO_PTR(self);
-  uint8_t out[SHA3_256_DIGEST_LENGTH] = {0};
+  vstr_t hash = {0};
+  vstr_init_len(&hash, SHA3_256_DIGEST_LENGTH);
   SHA3_CTX ctx = {0};
   memcpy(&ctx, &(o->ctx), sizeof(SHA3_CTX));
   if (o->keccak) {
-    keccak_Final(&ctx, out);
+    keccak_Final(&ctx, (uint8_t *)hash.buf);
   } else {
-    sha3_Final(&ctx, out);
+    sha3_Final(&ctx, (uint8_t *)hash.buf);
   }
   memzero(&ctx, sizeof(SHA3_CTX));
-  return mp_obj_new_bytes(out, sizeof(out));
+  return mp_obj_new_str_from_vstr(&mp_type_bytes, &hash);
 }
 STATIC MP_DEFINE_CONST_FUN_OBJ_1(mod_trezorcrypto_Sha3_256_digest_obj,
                                  mod_trezorcrypto_Sha3_256_digest);

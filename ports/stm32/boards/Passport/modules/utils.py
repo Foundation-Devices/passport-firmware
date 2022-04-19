@@ -391,8 +391,12 @@ def randint(a, b):
     result = a + (num % (b-a+1))
     return result
 
-def bytes_to_hex_str(s):
-    return str(b2a_hex(s), 'ascii')
+def bytes_to_hex_str(s, wrap_to_len=None):
+    s = str(b2a_hex(s), 'ascii')
+    if wrap_to_len is not None:
+        parts = [s[i:i+wrap_to_len] for i in range(0, len(s), wrap_to_len)]
+        s = '\n'.join(parts)
+    return s
 
 # Pass a string pattern like 'foo-{}.txt' and the {} will be replaced by a random 4 bytes hex number
 def random_filename(card, pattern):
@@ -743,7 +747,7 @@ This is a {} address at index {}.'''.format(address, 'change' if is_change == 1 
         return True
     else:
         system.turbo(False)
-        return 
+        return False
 
 
 def is_new_wallet_in_progress():
@@ -871,10 +875,8 @@ async def needs_microsd():
 def format_btc_address(address, addr_type):
     from public_constants import AF_P2WPKH
 
-    if addr_type == AF_P2WPKH:
-        width = 14
-    else:
-        width = 16
+    # The max number of characters on a single line
+    width = 14
 
     return split_to_lines(address, width)
 
@@ -903,5 +905,19 @@ def split_by_char_size(msg, font):
             # ok if empty string, just a blank line
             lines.append(ln)
     return lines
+
+def partition_evenly_by_max_size(total, max_part_size):
+  num_total_parts = (total + max_part_size - 1) // max_part_size
+  min_size = int(total / num_total_parts)
+  num_big_parts = total % num_total_parts
+  parts = []
+
+  for i in range(0, num_big_parts):
+    parts.append(min_size + 1)
+    
+  for i in range(num_big_parts, num_total_parts):
+    parts.append(min_size)
+
+  return parts
 
 # EOF

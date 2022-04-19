@@ -4,7 +4,7 @@
 #include <string.h>
 
 #ifdef _WIN32
-#include <Windows.h>
+#include <windows.h>
 #endif
 
 #ifdef __unix__
@@ -25,7 +25,9 @@
 
 // Newlib
 #if defined(__NEWLIB__)
-#define HAVE_EXPLICIT_BZERO 1
+// TODO: __NEWLIB__ is defined but explicit_bzero is not found, maybe we
+// aren't linking at all to newlib.
+//#define HAVE_EXPLICIT_BZERO 1
 #endif
 
 // FreeBSD version 11.0 or later.
@@ -42,11 +44,6 @@
 #if defined(__NetBSD__) && __NetBSD_Version__ >= 702000000
 #define HAVE_EXPLICIT_MEMSET 1
 #endif
-
-#undef HAVE_MEMSET_S // KENC
-#undef HAVE_EXPLICIT_BZERO  // KENC
-#undef HAVE_EXPLICIT_MEMSET  // KENC
-
 
 // Adapted from
 // https://github.com/jedisct1/libsodium/blob/1647f0d53ae0e370378a9195477e3df0a792408f/src/libsodium/sodium/utils.c#L102-L130

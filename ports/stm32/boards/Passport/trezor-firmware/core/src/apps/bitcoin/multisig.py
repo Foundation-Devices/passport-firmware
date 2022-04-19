@@ -1,14 +1,12 @@
 from trezor import wire
 from trezor.crypto import bip32
 from trezor.crypto.hashlib import sha256
-from trezor.messages.HDNodeType import HDNodeType
-from trezor.messages.MultisigRedeemScriptType import MultisigRedeemScriptType
+from trezor.messages import HDNodeType, MultisigRedeemScriptType
 from trezor.utils import HashWriter
 
-from .writers import write_bytes_fixed, write_uint32
+from apps.common import paths
 
-if False:
-    from typing import List
+from .writers import write_bytes_fixed, write_uint32
 
 
 def multisig_fingerprint(multisig: MultisigRedeemScriptType) -> bytes:
@@ -42,7 +40,16 @@ def multisig_fingerprint(multisig: MultisigRedeemScriptType) -> bytes:
     return h.get_digest()
 
 
+def validate_multisig(multisig: MultisigRedeemScriptType) -> None:
+    if any(paths.is_hardened(n) for n in multisig.address_n):
+        raise wire.DataError("Cannot perform hardened derivation from XPUB")
+    for hd in multisig.pubkeys:
+        if any(paths.is_hardened(n) for n in hd.address_n):
+            raise wire.DataError("Cannot perform hardened derivation from XPUB")
+
+
 def multisig_pubkey_index(multisig: MultisigRedeemScriptType, pubkey: bytes) -> int:
+    validate_multisig(multisig)
     if multisig.nodes:
         for i, hd_node in enumerate(multisig.nodes):
             if multisig_get_pubkey(hd_node, multisig.address_n) == pubkey:
@@ -54,7 +61,7 @@ def multisig_pubkey_index(multisig: MultisigRedeemScriptType, pubkey: bytes) -> 
     raise wire.DataError("Pubkey not found in multisig script")
 
 
-def multisig_get_pubkey(n: HDNodeType, p: list) -> bytes:
+def multisig_get_pubkey(n: HDNodeType, p: paths.Bip32Path) -> bytes:
     node = bip32.HDNode(
         depth=n.depth,
         fingerprint=n.fingerprint,
@@ -67,7 +74,8 @@ def multisig_get_pubkey(n: HDNodeType, p: list) -> bytes:
     return node.public_key()
 
 
-def multisig_get_pubkeys(multisig: MultisigRedeemScriptType) -> List[bytes]:
+def multisig_get_pubkeys(multisig: MultisigRedeemScriptType) -> list[bytes]:
+    validate_multisig(multisig)
     if multisig.nodes:
         return [multisig_get_pubkey(hd, multisig.address_n) for hd in multisig.nodes]
     else:

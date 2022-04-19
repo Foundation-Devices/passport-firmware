@@ -64,6 +64,7 @@
 // provided by port
 
 void display_init(void);
+void display_init_seq(void);
 void display_refresh(void);
 const char *display_save(const char *prefix);
 void display_clear_save(void);
@@ -112,5 +113,9 @@ void display_offset(int set_xy[2], int *get_x, int *get_y);
 int display_orientation(int degrees);
 int display_backlight(int val);
 void display_fade(int start, int end, int delay);
+
+// helper for locating a substring in buffer with utf-8 string
+void display_utf8_substr(const char *buf_start, size_t buf_len, int char_off,
+                         int char_len, const char **out_start, int *out_len);
 
 #endif

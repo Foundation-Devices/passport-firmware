@@ -299,7 +299,7 @@ static void MPU_Config(void)
     HAL_MPU_Enable(MPU_PRIVILEGED_DEFAULT);
 }
 
-static void version(void)
+void version(void)
 {
     passport_firmware_header_t *fwhdr = (passport_firmware_header_t *)FW_HDR;
     char version[22] = {0};
@@ -444,6 +444,7 @@ int main(void)
 
     random_boot_delay();
 
+
     // Check for first-boot condition
     if (flash_is_programmed() == SEC_FALSE) {
         secresult result = flash_first_boot();
@@ -481,6 +482,7 @@ int main(void)
                 break;
         }
     }
+
 
     // Increment the boot counter
     uint32_t counter_result;

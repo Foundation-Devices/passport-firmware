@@ -45,6 +45,7 @@
 #define MICROPY_MALLOC_USES_ALLOCATED_SIZE (1)
 #define MICROPY_MEM_STATS           (1)
 #define MICROPY_ENABLE_PYSTACK      (1)
+#define MICROPY_LOADED_MODULES_DICT_SIZE (160)
 
 // emitters
 #define MICROPY_PERSISTENT_CODE_LOAD (0)
@@ -82,6 +83,7 @@
 #define MICROPY_STREAMS_NON_BLOCK   (1)
 #define MICROPY_MODULE_WEAK_LINKS   (1)
 #define MICROPY_CAN_OVERRIDE_BUILTINS (0)
+#define MICROPY_VFS_POSIX_FILE      (1)
 #define MICROPY_USE_INTERNAL_ERRNO  (0)
 #define MICROPY_ENABLE_SCHEDULER    (0)
 #define MICROPY_SCHEDULER_DEPTH     (0)
@@ -98,6 +100,7 @@
 #define MICROPY_PY_BUILTINS_MEMORYVIEW (1)
 #define MICROPY_PY_BUILTINS_FROZENSET (0)
 #define MICROPY_PY_BUILTINS_SLICE_ATTRS (1)
+#define MICROPY_PY_BUILTINS_SLICE_INDICES (0)
 #define MICROPY_PY_BUILTINS_ROUND_INT (0)
 #define MICROPY_PY_REVERSE_SPECIAL_METHODS (0)
 #define MICROPY_PY_ALL_SPECIAL_METHODS (0)
@@ -128,10 +131,11 @@
 #define MICROPY_PY_SYS_PLATFORM     "trezor-emulator"
 #define MICROPY_PY_UERRNO           (0)
 #define MICROPY_PY_THREAD           (0)
+#define MICROPY_PY_FSTRINGS         (1)
 
 // extended modules
 #define MICROPY_PY_UCTYPES          (1)
-#define MICROPY_PY_UZLIB            (1)
+#define MICROPY_PY_UZLIB            (0)
 #define MICROPY_PY_UJSON            (0)
 #define MICROPY_PY_URE              (0)
 #define MICROPY_PY_URE_SUB          (0)
@@ -141,7 +145,7 @@
 #define MICROPY_PY_UHASHLIB_SHA1    (0)
 #define MICROPY_PY_UCRYPTOLIB       (0)
 #define MICROPY_PY_UBINASCII        (1)
-#define MICROPY_PY_UBINASCII_CRC32  (1)
+#define MICROPY_PY_UBINASCII_CRC32  (0)
 #define MICROPY_PY_URANDOM          (0)
 #define MICROPY_PY_URANDOM_EXTRA_FUNCS (0)
 #define MICROPY_PY_USELECT          (0)
@@ -163,6 +167,10 @@
 // check stdout a chance to pass, etc.
 #define MICROPY_DEBUG_PRINTER       (&mp_stderr_print)
 #define MICROPY_ASYNC_KBD_INTR      (1)
+
+#define mp_type_fileio mp_type_vfs_posix_fileio
+#define mp_type_textio mp_type_vfs_posix_textio
+
 // Define to MICROPY_ERROR_REPORTING_DETAILED to get function, etc.
 // names in exception messages (may require more RAM).
 #define MICROPY_ERROR_REPORTING     (MICROPY_ERROR_REPORTING_DETAILED)
@@ -171,6 +179,11 @@
 #define MICROPY_PY_STR_BYTES_CMP_WARN (1)
 
 extern const struct _mp_print_t mp_stderr_print;
+
+#if !(defined(MICROPY_GCREGS_SETJMP) || defined(__x86_64__) || defined(__i386__) || defined(__thumb2__) || defined(__thumb__) || defined(__arm__))
+// Fall back to setjmp() implementation for discovery of GC pointers in registers.
+#define MICROPY_GCREGS_SETJMP (1)
+#endif
 
 // coverage support
 #define MICROPY_PY_SYS_ATEXIT       (1)
@@ -188,6 +201,8 @@ extern const struct _mp_print_t mp_stderr_print;
 #define MICROPY_PY_TREZORIO         (1)
 #define MICROPY_PY_TREZORUI         (1)
 #define MICROPY_PY_TREZORUTILS      (1)
+#define MICROPY_PY_TREZORPROTO      (1)
+#define MICROPY_PY_TREZORUI2        (1)
 
 #define MP_STATE_PORT MP_STATE_VM
 
@@ -195,13 +210,9 @@ extern const struct _mp_print_t mp_stderr_print;
 
 // extra built in modules to add to the list of known ones
 extern const struct _mp_obj_module_t mp_module_os;
-// on unix, we use time, not utime
-extern const struct _mp_obj_module_t mp_module_time;
 
 #define MICROPY_PORT_BUILTIN_MODULES \
-    { MP_ROM_QSTR(MP_QSTR_uos), MP_ROM_PTR(&mp_module_os) }, \
-    { MP_ROM_QSTR(MP_QSTR_utime), MP_ROM_PTR(&mp_module_time) },
-
+    { MP_ROM_QSTR(MP_QSTR_uos), MP_ROM_PTR(&mp_module_os) },
 
 
 // For size_t and ssize_t
@@ -220,7 +231,12 @@ typedef unsigned int mp_uint_t; // must be pointer size
 #endif
 #endif
 
-#define MICROPY_EVENT_POLL_HOOK mp_hal_delay_ms(1);
+#define MICROPY_EVENT_POLL_HOOK \
+    do { \
+        extern void mp_handle_pending(bool); \
+        mp_handle_pending(true); \
+        mp_hal_delay_us(500); \
+    } while (0);
 
 // Cannot include <sys/types.h>, as it may lead to symbol name clashes
 #if _FILE_OFFSET_BITS == 64 && !defined(__LP64__)
@@ -240,12 +256,6 @@ void mp_unix_mark_exec(void);
 #define MICROPY_FORCE_PLAT_ALLOC_EXEC (1)
 #endif
 
-#if MICROPY_PY_OS_DUPTERM
-#define MP_PLAT_PRINT_STRN(str, len) mp_hal_stdout_tx_strn_cooked(str, len)
-#else
-#define MP_PLAT_PRINT_STRN(str, len) do { ssize_t ret = write(1, str, len); (void)ret; } while (0)
-#endif
-
 #ifdef __linux__
 // Can access physical memory using /dev/mem
 #define MICROPY_PLAT_DEV_MEM  (1)
@@ -258,6 +268,7 @@ void mp_unix_mark_exec(void);
 #define MICROPY_PORT_ROOT_POINTERS \
     const char *readline_hist[50]; \
     void *mmap_region_head; \
+    mp_obj_t trezorconfig_ui_wait_callback; \
 
 // We need to provide a declaration/definition of alloca()
 // unless support for it is disabled.

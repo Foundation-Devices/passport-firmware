@@ -1,8 +1,9 @@
-from storage import device
+import sys
+
 from trezor import wire
 from trezor.crypto import bip32
 
-from . import HARDENED, paths
+from . import paths, safety_checks
 from .seed import Slip21Node, get_seed
 
 if False:
@@ -10,15 +11,12 @@ if False:
         Any,
         Awaitable,
         Callable,
-        Dict,
-        List,
-        Optional,
-        Sequence,
+        Iterable,
         TypeVar,
     )
     from typing_extensions import Protocol
 
-    from protobuf import MessageType
+    from trezor.protobuf import MessageType
 
     T = TypeVar("T")
 
@@ -51,8 +49,8 @@ FORBIDDEN_KEY_PATH = wire.DataError("Forbidden key path")
 class LRUCache:
     def __init__(self, size: int) -> None:
         self.size = size
-        self.cache_keys = []  # type: List[Any]
-        self.cache = {}  # type: Dict[Any, Deletable]
+        self.cache_keys: list[Any] = []
+        self.cache: dict[Any, Deletable] = {}
 
     def insert(self, key: Any, value: Deletable) -> None:
         if key in self.cache_keys:
@@ -86,15 +84,16 @@ class Keychain:
         self,
         seed: bytes,
         curve: str,
-        namespaces: Sequence[paths.Bip32Path],
-        slip21_namespaces: Sequence[paths.Slip21Path] = (),
+        schemas: Iterable[paths.PathSchemaType],
+        slip21_namespaces: Iterable[paths.Slip21Path] = (),
     ) -> None:
         self.seed = seed
         self.curve = curve
-        self.namespaces = namespaces
-        self.slip21_namespaces = slip21_namespaces
+        self.schemas = tuple(schemas)
+        self.slip21_namespaces = tuple(slip21_namespaces)
 
         self._cache = LRUCache(10)
+        self._root_fingerprint: int | None = None
 
     def __del__(self) -> None:
         self._cache.__del__()
@@ -105,19 +104,25 @@ class Keychain:
         if "ed25519" in self.curve and not paths.path_is_hardened(path):
             raise wire.DataError("Non-hardened paths unsupported on Ed25519")
 
-        if device.unsafe_prompts_allowed():
+        if not safety_checks.is_strict():
             return
 
-        if any(ns == path[: len(ns)] for ns in self.namespaces):
+        if self.is_in_keychain(path):
             return
 
         raise FORBIDDEN_KEY_PATH
 
+    def is_in_keychain(self, path: paths.Bip32Path) -> bool:
+        return any(schema.match(path) for schema in self.schemas)
+
     def _derive_with_cache(
-        self, prefix_len: int, path: paths.PathType, new_root: Callable[[], NodeType],
+        self,
+        prefix_len: int,
+        path: paths.PathType,
+        new_root: Callable[[], NodeType],
     ) -> NodeType:
         cached_prefix = tuple(path[:prefix_len])
-        cached_root = self._cache.get(cached_prefix)  # type: Optional[NodeType]
+        cached_root: NodeType | None = self._cache.get(cached_prefix)
         if cached_root is None:
             cached_root = new_root()
             cached_root.derive_path(cached_prefix)
@@ -126,6 +131,17 @@ class Keychain:
         node = cached_root.clone()
         node.derive_path(path[prefix_len:])
         return node
+
+    def root_fingerprint(self) -> int:
+        if self._root_fingerprint is None:
+            # derive m/0' to obtain root_fingerprint
+            n = self._derive_with_cache(
+                prefix_len=0,
+                path=[0 | paths.HARDENED],
+                new_root=lambda: bip32.from_seed(self.seed, self.curve),
+            )
+            self._root_fingerprint = n.fingerprint()
+        return self._root_fingerprint
 
     def derive(self, path: paths.Bip32Path) -> bip32.HDNode:
         self.verify_path(path)
@@ -136,13 +152,15 @@ class Keychain:
         )
 
     def derive_slip21(self, path: paths.Slip21Path) -> Slip21Node:
-        if not device.unsafe_prompts_allowed() and not any(
+        if safety_checks.is_strict() and not any(
             ns == path[: len(ns)] for ns in self.slip21_namespaces
         ):
             raise FORBIDDEN_KEY_PATH
 
         return self._derive_with_cache(
-            prefix_len=1, path=path, new_root=lambda: Slip21Node(seed=self.seed),
+            prefix_len=1,
+            path=path,
+            new_root=lambda: Slip21Node(seed=self.seed),
         )
 
     def __enter__(self) -> "Keychain":
@@ -155,27 +173,54 @@ class Keychain:
 async def get_keychain(
     ctx: wire.Context,
     curve: str,
-    namespaces: Sequence[paths.Bip32Path],
-    slip21_namespaces: Sequence[paths.Slip21Path] = (),
+    schemas: Iterable[paths.PathSchemaType],
+    slip21_namespaces: Iterable[paths.Slip21Path] = (),
 ) -> Keychain:
     seed = await get_seed(ctx)
-    keychain = Keychain(seed, curve, namespaces, slip21_namespaces)
+    keychain = Keychain(seed, curve, schemas, slip21_namespaces)
     return keychain
 
 
 def with_slip44_keychain(
-    slip44: int, curve: str = "secp256k1", allow_testnet: bool = False
+    *patterns: str,
+    slip44_id: int,
+    curve: str = "secp256k1",
+    allow_testnet: bool = True,
 ) -> Callable[[HandlerWithKeychain[MsgIn, MsgOut]], Handler[MsgIn, MsgOut]]:
-    namespaces = [[44 | HARDENED, slip44 | HARDENED]]
+    if not patterns:
+        raise ValueError  # specify a pattern
+
     if allow_testnet:
-        namespaces.append([44 | HARDENED, 1 | HARDENED])
+        slip44_ids: int | tuple[int, int] = (slip44_id, 1)
+    else:
+        slip44_ids = slip44_id
+
+    schemas = []
+    for pattern in patterns:
+        schemas.append(paths.PathSchema.parse(pattern=pattern, slip44_id=slip44_ids))
+    schemas = [s.copy() for s in schemas]
 
     def decorator(func: HandlerWithKeychain[MsgIn, MsgOut]) -> Handler[MsgIn, MsgOut]:
         async def wrapper(ctx: wire.Context, msg: MsgIn) -> MsgOut:
-            keychain = await get_keychain(ctx, curve, namespaces)
+            keychain = await get_keychain(ctx, curve, schemas)
             with keychain:
                 return await func(ctx, msg, keychain)
 
         return wrapper
 
     return decorator
+
+
+def auto_keychain(
+    modname: str, allow_testnet: bool = True
+) -> Callable[[HandlerWithKeychain[MsgIn, MsgOut]], Handler[MsgIn, MsgOut]]:
+    rdot = modname.rfind(".")
+    parent_modname = modname[:rdot]
+    parent_module = sys.modules[parent_modname]
+
+    pattern = getattr(parent_module, "PATTERN")
+    curve = getattr(parent_module, "CURVE")
+    slip44_id = getattr(parent_module, "SLIP44_ID")
+    return with_slip44_keychain(
+        pattern, slip44_id=slip44_id, curve=curve, allow_testnet=allow_testnet
+    )

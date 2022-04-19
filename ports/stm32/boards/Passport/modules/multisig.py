@@ -13,7 +13,7 @@ import stash, chains, ustruct, ure, uio, sys
 import trezorcrypto
 import tcc
 from ubinascii import hexlify as b2a_hex
-from utils import xfp2str, str2xfp, cleanup_deriv_path, keypath_to_str, str_to_keypath
+from utils import bytes_to_hex_str, xfp2str, str2xfp, cleanup_deriv_path, keypath_to_str, str_to_keypath
 from ux import ux_show_story, ux_confirm, ux_enter_text
 from files import CardSlot, CardMissingError
 from public_constants import AF_P2SH, AF_P2WSH_P2SH, AF_P2WSH, AFC_SCRIPT, MAX_PATH_DEPTH
@@ -62,6 +62,8 @@ def disassemble_multisig(redeem_script):
     assert len(redeem_script) == 1 + (N * 34) + 1 + 1, 'bad len'
 
     # generator function
+    from utils import bytes_to_hex_str
+    # print('redeem_script=\n{}'.format(bytes_to_hex_str(redeem_script, 16)))
     dis = disassemble(redeem_script)
 
     # expect M value first
@@ -72,6 +74,7 @@ def disassemble_multisig(redeem_script):
     pubkeys = []
     for idx in range(N):
         data, opcode = next(dis)
+        # print('idx={} opcode={} len(data)={}'.format(idx, opcode, len(data)))
         assert opcode == None and len(data) == 33, 'data'
         assert data[0] == 0x02 or data[0] == 0x03, 'Y val'
         pubkeys.append(data)
@@ -80,11 +83,13 @@ def disassemble_multisig(redeem_script):
 
     # next is N value
     ex_N, opcode = next(dis)
-    assert ex_N == N and opcode == None
+    # print('N={}'.format(N))
+
+    assert ex_N == N and opcode == None, 'Wrong N: ex_N={} N={}'.format(ex_N, N)
 
     # finally, the opcode: CHECKMULTISIG
     data, opcode = next(dis)
-    assert opcode == OP_CHECKMULTISIG
+    assert opcode == OP_CHECKMULTISIG, 'Not OP_CHECKMULTISIG'
 
     # must have reached end of script at this point
     try:
@@ -809,7 +814,7 @@ class MultisigWallet:
 
         try:
             # Note: addr fmt detected here via SLIP-132 isn't useful
-            node, chain, _ = import_xpub(xpub)
+            node, txn_chain, _ = import_xpub(xpub)
         except:
             raise AssertionError('unable to parse xpub')
 
@@ -818,11 +823,17 @@ class MultisigWallet:
         # print('xfp={}'.format(xfp))
         # print('xpub={}'.format(xpub))
         # print('expect_chain={}'.format(expect_chain))
+        # print('txn_chain.ctype={}'.format(txn_chain.ctype))
         # print('my_xfp={}'.format(my_xfp))
         # print('xpubs={}'.format(xpubs))
 
         # assert node.private_key() == None       # 'no privkeys plz'
-        assert chain.ctype == expect_chain      # 'wrong chain'
+        # Check that they are on the right chain
+        if txn_chain.ctype != expect_chain:
+            device_chain_name = 'Mainnet' if expect_chain == 'BTC' else 'Testnet'
+            txn_chain_name = 'Mainnet' if txn_chain.ctype == 'BTC' else 'Testnet'
+            raise FatalPSBTIssue('Attempting to sign a {} transaction on {}.'.format(
+                                txn_chain_name, device_chain_name))
 
         depth = node.depth()
 
@@ -866,7 +877,7 @@ class MultisigWallet:
 
         # serialize xpub w/ BIP32 standard now.
         # - this has effect of stripping SLIP-132 confusion away
-        xpubs.append((xfp, deriv, chain.serialize_public(node, AF_P2SH)))
+        xpubs.append((xfp, deriv, txn_chain.serialize_public(node, AF_P2SH)))
 
         return (xfp == my_xfp)
 
@@ -979,7 +990,7 @@ class MultisigWallet:
 
 
 
-    @classmethod
+    @classmethod    
     def import_from_psbt(cls, M, N, xpubs_list):
         # given the raw data for PSBT global header, offer the user
         # the details, and/or bypass that all and just trust the data.
@@ -1004,6 +1015,7 @@ class MultisigWallet:
         expect_chain = chains.current_chain().ctype
         xpubs = []
         has_mine = 0
+        addr_fmt = None
 
         for k, v in xpubs_list:
             xfp, *path = ustruct.unpack_from('<%dI' % (len(k)//4), k, 0)
@@ -1140,7 +1152,7 @@ Press 1 to see extended public keys.'''.format(M=M, N=N, name=self.name, exp=exp
 
                 assert self.storage_idx == -1
                 await self.commit()
-                await fullscreen("Saved")
+                dis.fullscreen('Saved')
                 await sleep_ms(1000)
             break
 

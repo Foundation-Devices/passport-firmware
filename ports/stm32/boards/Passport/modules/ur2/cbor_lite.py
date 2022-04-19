@@ -123,6 +123,9 @@ class CBOREncoder:
         encoded_size = 1 + length
         return encoded_size
 
+    def encodeUndefined(self, value):
+        return self.encodeTagAndValue(Tag_Major_semantic, value)
+
     def encodeUnsigned(self, value):
         return self.encodeTagAndValue(Tag_Major_unsignedInteger, value)
 
@@ -234,6 +237,13 @@ class CBORDecoder:
             return (tag, value, self.pos)
 
         raise Exception("Bad additional value")
+
+    def decodeUndefined(self, flags=Flag_None):
+        (tag, value, length) = self.decodeTagAndValue(flags)
+        if tag != Tag_Major_semantic:
+            raise Exception("Expected Tag_Major_semantic ({}), but found {}".format(
+                Tag_Major_semantic, tag))
+        return (value, length)
 
     def decodeUnsigned(self, flags=Flag_None):
         (tag, value, length) = self.decodeTagAndValue(flags)
