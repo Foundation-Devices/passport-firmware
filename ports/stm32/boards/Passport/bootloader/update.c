@@ -303,7 +303,7 @@ void update_firmware(void)
     /* Verify firmware header in SPI flash and bail if it fails */
     if (!verify_header(&spihdr))
     {
-        if (ui_show_message("Update Error", "The firmware update you chose has an invalid header and will not be installed.", "SHUTDOWN", "OK", true)){
+        if (ui_show_message("Update Error", "The firmware update you chose has an invalid header and will not be installed.", "SHUT DOWN", "OK", true)){
             goto out;
         } else {
             display_clean_shutdown();
@@ -324,7 +324,7 @@ void update_firmware(void)
         if ((spihdr.signature.pubkey1 != FW_USER_KEY && internalhdr->signature.pubkey1 != FW_USER_KEY) &&
             (spihdr.info.timestamp < internalhdr->info.timestamp))
         {
-            if (ui_show_message("Update Error", "This firmware update is older than the current firmware and will not be installed.", "SHUTDOWN", "OK", true))
+            if (ui_show_message("Update Error", "This firmware update is older than the current firmware and will not be installed.", "SHUT DOWN", "OK", true))
                 goto out;
             else
                 display_clean_shutdown();
@@ -340,7 +340,7 @@ void update_firmware(void)
         /* Verify the signature and bail if it fails */
         if (verify_signature(&spihdr, spi_fw_hash, sizeof(spi_fw_hash)) == SEC_FALSE)
         {
-            if (ui_show_message("Update Error", "The firmware update does not appear to be properly signed and will not be installed.\n\nThis can also occur if you lost power during a firmware update.", "SHUTDOWN", "OK", true))
+            if (ui_show_message("Update Error", "The firmware update does not appear to be properly signed and will not be installed.\n\nThis can also occur if you lost power during a firmware update.", "SHUT DOWN", "OK", true))
                 goto out;
             else
                 display_clean_shutdown();
@@ -366,7 +366,7 @@ void update_firmware(void)
 
         rc = se_program_board_hash(current_board_hash, new_board_hash, sizeof(new_board_hash));
         if (rc < 0) {
-            if (ui_show_message("Update Error", "Unable to update the firmware hash in the Secure Element. Update will continue, but may not be successful.", "SHUTDOWN", "OK", true)){
+            if (ui_show_message("Update Error", "Unable to update the firmware hash in the Secure Element. Update will continue, but may not be successful.", "SHUT DOWN", "OK", true)){
                 // Nothing to do
             } else {
                 display_clean_shutdown();
@@ -381,7 +381,7 @@ void update_firmware(void)
     rc = do_update(FW_HEADER_SIZE + spihdr.info.fwlength);
     if (rc < 0)
     {
-        if (ui_show_message("Update Error", "Failed to install the firmware update.", "SHUTDOWN", "RESTART", true))
+        if (ui_show_message("Update Error", "Failed to install the firmware update.", "SHUT DOWN", "RESTART", true))
             passport_reset();
         else
             // TODO: Should we have an option here to clear the SPI flash and restart (we could run a verify_current_firmware() first to make sure it's safe to boot there

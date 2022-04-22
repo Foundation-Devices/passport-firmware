@@ -329,7 +329,7 @@ static void show_more_info(void)
                 strcat(message, "\n\nBuild Date:\n");
                 strcat(message, build_date);
 
-                if (ui_show_message("Bootloader Info", message, "SHUTDOWN", "NEXT", true)){
+                if (ui_show_message("Bootloader Info", message, "SHUT DOWN", "NEXT", true)){
                     page++;
                 } else {
                     display_clean_shutdown();

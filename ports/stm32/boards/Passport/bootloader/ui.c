@@ -219,7 +219,7 @@ void ui_show_fatal_error(char* error) {
     while (true) {
         if (show_error) {
             // Show the error
-            if (ui_show_message("Fatal Error", error, "CONTACT", "SHUTDOWN", true)) {
+            if (ui_show_message("Fatal Error", error, "CONTACT", "SHUT DOWN", true)) {
                 display_clean_shutdown();
             } else {
                 show_error = false;
@@ -227,7 +227,7 @@ void ui_show_fatal_error(char* error) {
         } else {
             // Show Contact Info
             if (ui_show_message("Contact", "\nContact us at:\n\nhello@foundationdevices.com",
-                "BACK", "SHUTDOWN", true)) {
+                "BACK", "SHUT DOWN", true)) {
                 display_clean_shutdown();
             } else {
                 show_error = true;
@@ -239,5 +239,5 @@ void ui_show_fatal_error(char* error) {
 void ui_show_hex_buffer(char* title, uint8_t* data, uint32_t length) {
     char buf[512];
     bytes_to_hex_str(data, length, buf, 8, '\n');
-    ui_show_message(title, buf, "SHUTDOWN", "CONTINUE", true);
+    ui_show_message(title, buf, "SHUT DOWN", "CONTINUE", true);
 }

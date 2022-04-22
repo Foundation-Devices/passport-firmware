@@ -1829,7 +1829,7 @@ async def ux_enter_pin(title, heading='Enter PIN', left_btn='BACK', right_btn='E
 
 async def ux_shutdown():
     from common import system
-    confirm = await ux_confirm("Are you sure you want to shutdown?", center=True, center_vertically=True)
+    confirm = await ux_confirm("Are you sure you want to shut down?", center=True, center_vertically=True)
     if confirm:
         # print('SHUTTING DOWN!')
         system.shutdown()

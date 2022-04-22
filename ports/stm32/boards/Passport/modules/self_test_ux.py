@@ -117,7 +117,7 @@ class SelfTestUX(UXStateMachine):
                         self.goto(self.TESTS_COMPLETE)
 
             elif self.state == self.TESTS_COMPLETE:
-                    result = await ux_show_story('All tests complete!', title='Complete', right_btn='SHUTDOWN', center=True, center_vertically=True)
+                    result = await ux_show_story('All tests complete!', title='Complete', right_btn='SHUT DOWN', center=True, center_vertically=True)
                     if result == 'x':
                         self.goto_prev()
                     else:

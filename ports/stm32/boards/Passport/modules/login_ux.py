@@ -46,7 +46,7 @@ class LoginUX(UXStateMachine):
         while True:
             # print('show: state={}'.format(self.state))
             if self.state == self.ENTER_PIN:
-                self.pin = await ux_enter_pin(title='Login', heading='Enter PIN', left_btn='SHUTDOWN')
+                self.pin = await ux_enter_pin(title='Login', heading='Enter PIN', left_btn='SHUT DOWN')
                 if self.pin != None:
                     self.goto(self.CHECK_PIN)
                 else:
@@ -91,7 +91,7 @@ class LoginUX(UXStateMachine):
                 result = await ux_show_story(
                     'You have {} attempts remaining{}'.format(pa.attempts_left, msg_brick_warning),
                     title="Wrong PIN",
-                    left_btn='SHUTDOWN',
+                    left_btn='SHUT DOWN',
                     right_btn='RETRY',
                     center_vertically=True,
                     center=True)
@@ -107,7 +107,7 @@ class LoginUX(UXStateMachine):
 
 Restore a microSD backup or seed phrase onto a new Passport to recover your funds.''' % pa.num_fails
 
-                result = await ux_show_story(msg, title='Error', left_btn='SHUTDOWN', right_btn='RESTART')
+                result = await ux_show_story(msg, title='Error', left_btn='SHUT DOWN', right_btn='RESTART')
                 if result == 'x':
                     await ux_shutdown()
                 else:
@@ -169,7 +169,7 @@ class EnterInitialPinUX(UXStateMachine):
         while True:
             if self.state == self.ENTER_PIN:
                 heading = '{} PIN'.format('Confirm' if self.is_confirming() else 'Enter')
-                self.pins[self.round] = await ux_enter_pin(title='Set PIN', heading=heading, left_btn='SHUTDOWN', hide_attempt_counter=True, is_new_pin=True)
+                self.pins[self.round] = await ux_enter_pin(title='Set PIN', heading=heading, left_btn='SHUT DOWN', hide_attempt_counter=True, is_new_pin=True)
                 if self.pins[self.round] == None:
                     await ux_shutdown()
                     continue
@@ -180,7 +180,7 @@ class EnterInitialPinUX(UXStateMachine):
                         # print('Entered and confirmed PIN is {}'.format(self.pin))
                         return
                     else:
-                        result = await ux_show_story('PINs do not match. Please try again.', title="PIN Mismatch", left_btn="SHUTDOWN", right_btn="RETRY", center=True, center_vertically=True)
+                        result = await ux_show_story('PINs do not match. Please try again.', title="PIN Mismatch", left_btn="SHUT DOWN", right_btn="RETRY", center=True, center_vertically=True)
                         if result == 'y':
                             # Reset to initial state so PIN needs to be entered and confirmed again
                             # since we don't know if they messed up the first entry or the second one.
@@ -250,7 +250,7 @@ class ChangePinUX(UXStateMachine):
                     if self.pins_match():
                         self.goto(self.CHANGE_PIN)
                     else:
-                        result = await ux_show_story('PINs do not match. Please try again.', title="PIN Mismatch", left_btn="SHUTDOWN", right_btn="RETRY", center=True, center_vertically=True)
+                        result = await ux_show_story('PINs do not match. Please try again.', title="PIN Mismatch", left_btn="SHUT DOWN", right_btn="RETRY", center=True, center_vertically=True)
                         if result == 'y':
                             # Reset to initial state so PIN needs to be entered and confirmed again
                             # since we don't know if they messed up the first entry or the second one.
