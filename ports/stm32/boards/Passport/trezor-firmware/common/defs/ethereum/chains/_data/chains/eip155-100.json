@@ -3,9 +3,9 @@
   "chain": "XDAI",
   "network": "mainnet",
   "rpc": [
-    "https://rpc.xdaichain.com",
+    "https://rpc.gnosischain.com/",
     "https://xdai.poanetwork.dev",
-    "wss://rpc.xdaichain.com/wss",
+    "wss://rpc.gnosischain.com/wss",
     "wss://xdai.poanetwork.dev/wss",
     "http://xdai.poanetwork.dev",
     "https://dai.poa.network",
