@@ -12,9 +12,9 @@ from .ur2_codec import UR2Encoder, UR2Decoder, UR2Sampler
 from .qr_type import QRType
 
 qrs = [
-    { 'type': QRType.UR2, 'encoder': UR2Encoder, 'decoder': UR2Decoder, 'sampler': UR2Sampler},
-    { 'type': QRType.UR1, 'encoder': UR1Encoder, 'decoder': UR1Decoder, 'sampler': UR1Sampler},
-    { 'type': QRType.QR,  'encoder': QREncoder,  'decoder': QRDecoder,  'sampler': QRSampler},
+    {'name': 'UR2', 'type': QRType.UR2, 'encoder': UR2Encoder, 'decoder': UR2Decoder, 'sampler': UR2Sampler},
+    {'name': 'UR1',  'type': QRType.UR1, 'encoder': UR1Encoder, 'decoder': UR1Decoder, 'sampler': UR1Sampler},
+    {'name': 'QR',  'type': QRType.QR,  'encoder': QREncoder,  'decoder': QRDecoder,  'sampler': QRSampler},
 ]
 
 def make_qr_encoder(qr_type, args):
@@ -33,6 +33,7 @@ def make_qr_decoder(qr_type):
 def get_qr_type_for_data(data):
     for entry in qrs:
         if entry['sampler'].sample(data) == True:
+            # print('Selecting QR decoder type: {}'.format(entry['name']))
             return entry['type']
     return None
 

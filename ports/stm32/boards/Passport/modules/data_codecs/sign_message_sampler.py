@@ -23,7 +23,8 @@ class SignMessageSampler(DataSampler):
         try:
             deriv = cleanup_deriv_path(deriv_split[1])
         except BaseException as exc:
-            print('Invalid derivation path string. Error: {}'.format(exc))
+            deriv = None
+            # print('Invalid derivation path string. Error: {}'.format(exc))
 
         if deriv != None:
             return True

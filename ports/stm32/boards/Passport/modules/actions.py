@@ -1494,6 +1494,10 @@ async def sample_stories(menu, label, item):
         # Do some action at the end
         pass
 
+async def reset_validation(*a):
+    from common import settings
+    settings.remove('validated_ok')
+
 # TODO: Go back and reimplement this as a state machine like LoginUX
 async def validate_passport_hw(*a):
     from pincodes import PinAttempt

@@ -12,6 +12,7 @@ from .casa import CasaWallet
 # from .caravan import CaravanWallet
 # from .dux_reserve import DuxReserveWallet
 from .electrum import ElectrumWallet
+from .envoy import EnvoyWallet
 # from .fullynoded import FullyNodedWallet
 # from .gordian import GordianWallet
 # from .lily import LilyWallet
@@ -24,6 +25,7 @@ from .wasabi import WasabiWallet
 # Array of all supported software wallets and their attributes.
 # Used to build wallet menus and drive their behavior.
 supported_software_wallets = [
+    EnvoyWallet,
     BitcoinCoreWallet,
     BlueWallet,
     BtcPayWallet,

@@ -23,16 +23,17 @@ class QRType:
 
 
 samplers = [
-    { 'sampler': PsbtTxnSampler, 'flow': handle_psbt_data_format },
-    { 'sampler': MultisigConfigSampler, 'flow': handle_import_multisig_config },
-    { 'sampler': SeedSampler, 'flow': handle_seed_data_format },
-    { 'sampler': HttpSampler, 'flow': handle_http },
-    { 'sampler': SignMessageSampler, 'flow': handle_sign_message_format },
+    {'name': 'PsbtTxnSampler', 'sampler': PsbtTxnSampler, 'flow': handle_psbt_data_format },
+    {'name': 'MultisigConfigSampler', 'sampler': MultisigConfigSampler, 'flow': handle_import_multisig_config },
+    {'name': 'SeedSampler', 'sampler': SeedSampler, 'flow': handle_seed_data_format },
+    {'name': 'HttpSampler', 'sampler': HttpSampler, 'flow': handle_http },
+    {'name': 'SignMessageSampler', 'sampler': SignMessageSampler, 'flow': handle_sign_message_format },
     # { 'sampler': AddressSampler, 'flow': handle_validate_address },
 ]
 
 def get_flow_for_data(data, expected=None):
     for entry in samplers:
         if entry['sampler'].sample(data) == True:
+            # print('Selecting flow: {}'.format(entry['name']))
             return entry['flow']
     return None
