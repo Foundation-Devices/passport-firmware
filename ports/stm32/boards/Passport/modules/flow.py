@@ -195,9 +195,9 @@ MainMenu = [
     MenuItem('Sign with QR Code', f=magic_scan, arg='Scan QR Code'),
     MenuItem('Sign with microSD', f=sign_tx_from_sd),
     MenuItem('Verify Address', f=verify_address, arg='Verify Address'),
-    # Show Resume or Pair Wallet menu depending on status
-    MenuItem('Resume Pair Wallet', f=pair_new_wallet, predicate=is_new_wallet_in_progress),
-    MenuItem('Pair Wallet', f=pair_new_wallet, predicate=lambda: not is_new_wallet_in_progress(), arg='Pair Wallet'),
+    # Show Resume or Connect Wallet menu depending on status
+    MenuItem('Resume Connect', f=pair_new_wallet, predicate=is_new_wallet_in_progress),
+    MenuItem('Connect Wallet', f=pair_new_wallet, predicate=lambda: not is_new_wallet_in_progress(), arg='Connect Wallet'),
     MenuItem('Settings', menu=SettingsMenu, menu_title='Settings'),
 ]
 

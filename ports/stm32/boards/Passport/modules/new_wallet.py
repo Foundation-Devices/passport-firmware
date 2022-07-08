@@ -446,7 +446,7 @@ class NewWalletUX(UXStateMachine):
                 # Choose a wallet from the available list
                 self.sw_wallet = None
 
-                await run_chooser(self.sw_wallet_chooser, 'Pair Wallet', show_checks=False)
+                await run_chooser(self.sw_wallet_chooser, 'Connect Wallet', show_checks=False)
                 if self.sw_wallet == None:
                     if not self.goto_prev():
                         return
@@ -540,7 +540,7 @@ class NewWalletUX(UXStateMachine):
                     msg = self.get_custom_text('pairing_microsd', 'Next, Passport will save a {} file to your microSD card to use with {}.'.format(ext, self.sw_wallet['label']))
 
                 # Show pairing help text to the user
-                result = await ux_show_story(msg, title='Pairing', scroll_label='MORE', center=True, center_vertically=True)
+                result = await ux_show_story(msg, title='Connect', scroll_label='MORE', center=True, center_vertically=True)
                 if result == 'x':
                     if not self.goto_prev():
                         return
@@ -765,7 +765,7 @@ class NewWalletUX(UXStateMachine):
                     break
 
             elif self.state == self.SCAN_RX_ADDRESS_VERIFICATION_INTRO:
-                msg = self.get_custom_text('scan_receive_addr', '''Next, let's check that the wallet was paired successfully.
+                msg = self.get_custom_text('scan_receive_addr', '''Next, let's check that the wallet connected successfully.
 
 Generate a new receive address in {} and scan the QR code on the next page.'''.format(self.sw_wallet['label']))
                 result = await ux_show_story(msg, title='Verify Address', scroll_label="MORE", center=True, center_vertically=True)
@@ -822,7 +822,7 @@ Generate a new receive address in {} and scan the QR code on the next page.'''.f
                 # else loop around and scan again
 
             elif self.state == self.SHOW_RX_ADDRESSES_VERIFICATION_INTRO:
-                msg = self.get_custom_text('show_receive_addr', '''Next, let's check that {name} was paired successfully.
+                msg = self.get_custom_text('show_receive_addr', '''Next, let's check that {name} connected successfully.
 
 {name} should display a list of addresses associated with this wallet.
 
@@ -865,8 +865,8 @@ Compare them with the addresses shown on the next screen to make sure they match
                     from export import offer_backup
                     await offer_backup()
 
-                dis.fullscreen('Pairing Complete')
-                await sleep_ms(1000)
+                dis.fullscreen('Connection Complete')
+                await sleep_ms(2000)
 
                 return
 
