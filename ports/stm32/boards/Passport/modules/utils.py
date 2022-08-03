@@ -450,16 +450,14 @@ async def show_top_menu():
 
 # TODO: For now this just checks the front bytes, but it could ensure the whole thing is valid
 def is_valid_address(address):
-    # Valid addresses: 1 , 3 , bc1, tb1, m, n, 2
-    address = address.lower()
-    return  (len(address) > 3) and \
-            ((address[0] == '1') or \
-            (address[0] == '2') or \
-            (address[0] == '3') or \
-            (address[0] == 'm') or \
-            (address[0] == 'n') or \
-            (address[0] == 'b' and address[1] == 'c' and address[2] == '1') or \
-            (address[0] == 't' and address[1] == 'b' and address[2] == '1'))
+    import chains
+    chain = chains.current_chain()
+    if chain.ctype == 'BTC':
+        return (len(address) > 3) and (address[0] == '1' or address[0] == '3' or
+                                       (address[0] == 'b' and address[1] == 'c' and address[2] == '1'))
+    else:
+        return (len(address) > 3) and (address[0] == 'm' or address[0] == 'n' or address[0] == '2' or
+                                       (address[0] == 't' and address[1] == 'b' and address[2] == '1'))
 
 
 # Return array of bytewords where each byte in buf maps to a word
@@ -714,6 +712,11 @@ async def is_valid_btc_address(address):
     # Strip prefix if present
     if address[0:8].lower() == 'bitcoin:':
         address = address[8:]
+
+    # We need to lowercase BECH32 addresses, but not legacy
+    lower_address = address.lower()
+    if lower_address.startswith('bc1') or lower_address.startswith('tb1'):
+        address = lower_address
 
     if not is_valid_address(address):
         await ux_show_story('That is not a valid Bitcoin address.', title='Error', left_btn='BACK',
