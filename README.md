@@ -4,7 +4,8 @@ Passport is an ultra-secure, open source hardware wallet for Bitcoin that offers
 
 Get yours at [foundationdevices.com](https://foundationdevices.com) and [follow @FOUNDATIONdvcs on Twitter](https://twitter.com/FOUNDATIONdvcs) to keep up with the latest updates and security alerts.
 
-<img src="https://user-images.githubusercontent.com/62639971/100824536-2ed61a00-340b-11eb-9283-46174164bc84.jpg" width="800"/>
+<img src="https://github.com/Foundation-Devices/passport-firmware/assets/114431859/4e557e5b-51bc-428e-a2a2-deb6cc3e9102.jpg" width="800"/>
+
 
 ## Project Structure
 
